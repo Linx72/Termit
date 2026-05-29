@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Termit - Open Source Coding Agent</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #0f1115;
+        color: #e6eaf2;
+      }
+      .container {
+        max-width: 980px;
+        margin: 30px auto;
+        padding: 24px;
+        background: #161b22;
+        border-radius: 12px;
+      }
+      textarea, select, input, button {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 8px;
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #2a3342;
+        background: #0f141d;
+        color: #e6eaf2;
+      }
+      input[type="checkbox"] {
+        width: auto;
+        margin-right: 8px;
+      }
+      button {
+        cursor: pointer;
+        background: #1f6feb;
+        border: 0;
+        font-weight: 600;
+      }
+      pre {
+        white-space: pre-wrap;
+        background: #0b1017;
+        border: 1px solid #2a3342;
+        border-radius: 8px;
+        padding: 14px;
+      }
+      .meta {
+        color: #9fb0c7;
+        font-size: 13px;
+        margin-bottom: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Termit</h1>
+      <div class="meta">Open-source coding orchestrator MVP</div>
+
+      <label for="taskType">Task type</label>
+      <select id="taskType">
+        <option value="coding">coding</option>
+        <option value="review">review</option>
+        <option value="debug">debug</option>
+        <option value="explain">explain</option>
+        <option value="general">general</option>
+      </select>
+
+      <label for="model">Model (optional override)</label>
+      <select id="model">
+        <option value="">auto (router decides)</option>
+        {% for model in models %}
+        <option value="{{ model }}">{{ model }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="sessionId">Session ID (optional)</label>
+      <input id="sessionId" placeholder="auto-create when memory is enabled" />
+
+      <label>
+        <input id="useMemory" type="checkbox" checked />
+        Use session memory
+      </label>
+
+      <label for="prompt">Prompt</label>
+      <textarea id="prompt" rows="7" placeholder="Describe coding task..."></textarea>
+
+      <button id="sendBtn">Run</button>
+      <button id="streamBtn">Run stream</button>
+      <button id="clearSessionBtn">Clear session memory</button>
+      <label for="exportFormat">Export format</label>
+      <select id="exportFormat">
+        <option value="markdown">markdown</option>
+        <option value="txt">txt</option>
+        <option value="json">json</option>
+      </select>
+      <button id="exportSessionBtn">Export session</button>
+      <button id="downloadExportBtn">Download export</button>
+      <button id="checkProvidersBtn">Check providers</button>
+
+      <h3>Response</h3>
+      <div id="responseMeta" class="meta"></div>
+      <pre id="responseBox"></pre>
+    </div>
+
+    <script>
+      const sendBtn = document.getElementById("sendBtn");
+      const streamBtn = document.getElementById("streamBtn");
+      const promptEl = document.getElementById("prompt");
+      const taskTypeEl = document.getElementById("taskType");
+      const modelEl = document.getElementById("model");
+      const sessionIdEl = document.getElementById("sessionId");
+      const useMemoryEl = document.getElementById("useMemory");
+      const responseBox = document.getElementById("responseBox");
+      const responseMeta = document.getElementById("responseMeta");
+      const clearSessionBtn = document.getElementById("clearSessionBtn");
+      const exportFormatEl = document.getElementById("exportFormat");
+      const exportSessionBtn = document.getElementById("exportSessionBtn");
+      const downloadExportBtn = document.getElementById("downloadExportBtn");
+      const checkProvidersBtn = document.getElementById("checkProvidersBtn");
+
+      function buildPayload() {
+        return {
+          message: promptEl.value.trim(),
+          task_type: taskTypeEl.value,
+          model: modelEl.value || null,
+          session_id: sessionIdEl.value.trim() || null,
+          use_memory: useMemoryEl.checked,
+          temperature: 0.2,
+          max_tokens: 1200,
+          history: [],
+        };
+      }
+
+      function setMetaFromResponse(data, prefix = "") {
+        const attempts = (data.attempted_models || []).join(" -> ");
+        responseMeta.textContent =
+          `${prefix}provider=${data.provider}, model=${data.model}, task=${data.task_type}, ` +
+          `session=${data.session_id || "none"}, history=${data.history_size}, attempts=${attempts}`;
+      }
+
+      async function runRequest(mode) {
+        const payload = buildPayload();
+        if (!payload.message) {
+          responseBox.textContent = "Please provide a prompt.";
+          return;
+        }
+
+        responseMeta.textContent = mode === "stream" ? "Streaming..." : "Running...";
+        responseBox.textContent = "";
+
+        if (mode !== "stream") {
+          try {
+            const resp = await fetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+              responseMeta.textContent = "Error";
+              responseBox.textContent = JSON.stringify(data, null, 2);
+              return;
+            }
+            if (data.session_id && !sessionIdEl.value.trim()) {
+              sessionIdEl.value = data.session_id;
+            }
+            setMetaFromResponse(data);
+            responseBox.textContent = data.response;
+          } catch (error) {
+            responseMeta.textContent = "Network error";
+            responseBox.textContent = String(error);
+          }
+          return;
+        }
+
+        try {
+          const resp = await fetch("/api/chat/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (!resp.ok || !resp.body) {
+            const text = await resp.text();
+            responseMeta.textContent = "Error";
+            responseBox.textContent = text;
+            return;
+          }
+
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let streamText = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const events = buffer.split("\n\n");
+            buffer = events.pop() || "";
+
+            for (const rawEvent of events) {
+              const lines = rawEvent.split("\n");
+              const eventName = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
+              const dataLine = lines.find((line) => line.startsWith("data:"))?.slice(5).trim();
+              if (!eventName || !dataLine) continue;
+
+              try {
+                const data = JSON.parse(dataLine);
+                if (eventName === "meta") {
+                  if (data.session_id && !sessionIdEl.value.trim()) {
+                    sessionIdEl.value = data.session_id;
+                  }
+                  const attempts = data.attempted_models || "n/a";
+                  responseMeta.textContent =
+                    `stream provider=${data.provider}, model=${data.model}, ` +
+                    `session=${data.session_id || "none"}, history=${data.history_size}, attempts=${attempts}`;
+                } else if (eventName === "token") {
+                  streamText += data.text || "";
+                  responseBox.textContent = streamText;
+                } else if (eventName === "error") {
+                  responseMeta.textContent = "Stream error";
+                  responseBox.textContent = JSON.stringify(data, null, 2);
+                } else if (eventName === "done") {
+                  responseMeta.textContent = `${responseMeta.textContent} (done)`;
+                }
+              } catch (e) {
+                responseMeta.textContent = "Stream parse error";
+                responseBox.textContent = String(e);
+              }
+            }
+          }
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      }
+
+      sendBtn.addEventListener("click", async () => {
+        await runRequest("normal");
+      });
+
+      streamBtn.addEventListener("click", async () => {
+        await runRequest("stream");
+      });
+
+      clearSessionBtn.addEventListener("click", async () => {
+        const sessionId = sessionIdEl.value.trim();
+        if (!sessionId) {
+          responseMeta.textContent = "No session ID to clear";
+          return;
+        }
+        try {
+          const resp = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+            method: "DELETE",
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `session ${sessionId} cleared=${data.cleared}`;
+          responseBox.textContent = "";
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      exportSessionBtn.addEventListener("click", async () => {
+        const sessionId = sessionIdEl.value.trim();
+        if (!sessionId) {
+          responseMeta.textContent = "No session ID to export";
+          return;
+        }
+        responseMeta.textContent = "Exporting session...";
+        responseBox.textContent = "";
+        try {
+          const format = exportFormatEl.value;
+          const resp = await fetch(
+            `/api/sessions/${encodeURIComponent(sessionId)}/export?format=${encodeURIComponent(format)}`
+          );
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `session=${data.session_id}, format=${data.format}, messages=${data.message_count}`;
+          responseBox.textContent = data.content;
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      downloadExportBtn.addEventListener("click", async () => {
+        const sessionId = sessionIdEl.value.trim();
+        if (!sessionId) {
+          responseMeta.textContent = "No session ID to export";
+          return;
+        }
+        responseMeta.textContent = "Preparing download...";
+        responseBox.textContent = "";
+        try {
+          const format = exportFormatEl.value;
+          const resp = await fetch(
+            `/api/sessions/${encodeURIComponent(sessionId)}/export?format=${encodeURIComponent(format)}`
+          );
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          const mime =
+            data.format === "json" ? "application/json" : "text/plain;charset=utf-8";
+          const extension =
+            data.format === "markdown" ? "md" : data.format === "txt" ? "txt" : "json";
+          const blob = new Blob([data.content], { type: mime });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `session-${data.session_id}.${extension}`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          responseMeta.textContent = `downloaded session=${data.session_id}, format=${data.format}, messages=${data.message_count}`;
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      checkProvidersBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Checking provider health...";
+        responseBox.textContent = "";
+        try {
+          const resp = await fetch("/api/providers/status");
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = "Provider health";
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+    </script>
+  </body>
+</html>
