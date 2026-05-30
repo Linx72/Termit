@@ -1,3 +1,4 @@
+import json
 from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -41,8 +42,7 @@ async def chat_stream(
             async for chunk in service.chat_stream(payload):
                 yield chunk
         except ProviderError as exc:
-            safe_error = str(exc).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-            yield f'event: error\ndata: {{"detail":"{safe_error}"}}\n\n'
+            yield f"event: error\ndata: {json.dumps({'detail': str(exc)}, ensure_ascii=True)}\n\n"
             yield "event: done\ndata: {}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

@@ -2,12 +2,17 @@ import unittest
 
 from app.domain.schemas import TaskCreateRequest, TaskMode, TaskType
 from app.services.task_service import TaskService
+from app.services.task_store import InMemoryTaskStore
 from app.services.tooling_service import ToolingService
 
 
 class TaskServiceTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.service = TaskService(ToolingService(root_path="."), max_attempts=2)
+        self.service = TaskService(
+            ToolingService(root_path="."),
+            InMemoryTaskStore(),
+            max_attempts=2,
+        )
 
     def test_transient_error_retries_and_completes(self) -> None:
         created = self.service.create_task(

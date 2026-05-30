@@ -1,0 +1,17 @@
+# Termit reverse proxy (TLS via Caddy automatic HTTPS when DOMAIN is set).
+# For local HTTP-only testing, use :8080 block below.
+
+{
+	email {$ACME_EMAIL:internal@localhost}
+}
+
+:8080 {
+	encode gzip zstd
+	reverse_proxy termit:8765
+}
+
+# Production HTTPS (set DOMAIN env, e.g. termit.example.com)
+{$DOMAIN} {
+	encode gzip zstd
+	reverse_proxy termit:8765
+}

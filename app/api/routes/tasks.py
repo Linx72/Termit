@@ -5,12 +5,22 @@ from app.domain.schemas import (
     TaskCreateRequest,
     TaskCreateResponse,
     TaskEvent,
+    TaskListResponse,
     TaskStatusResponse,
 )
 from app.services.task_service import TaskNotFoundError, TaskService
 from app.state import get_task_service
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+
+@router.get("", response_model=TaskListResponse)
+async def list_tasks(
+    limit: int = 50,
+    service: TaskService = Depends(get_task_service),
+) -> TaskListResponse:
+    tasks = service.list_tasks(limit=limit)
+    return TaskListResponse(tasks=tasks, total=len(tasks))
 
 
 @router.post("", response_model=TaskCreateResponse)

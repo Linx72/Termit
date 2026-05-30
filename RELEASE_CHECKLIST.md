@@ -12,6 +12,12 @@
 
 ## 2) Runtime and config
 
+- If auth enabled, verify:
+  - missing key -> `401`
+  - invalid key -> `401`
+  - quota exceeded -> `429`
+  - `GET /api/usage` with valid key
+
 - Confirm `.env` values:
   - `TERMIT_PORT`
   - `TERMIT_MEMORY_BACKEND`

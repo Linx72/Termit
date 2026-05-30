@@ -22,6 +22,18 @@ def build_settings() -> Settings:
         memory_backend="memory",
         memory_sqlite_path="./test_memory.db",
         memory_max_messages=40,
+        auth_enabled=False,
+        api_keys={},
+        quota_sqlite_path="./test_quota.db",
+        default_daily_quota=1000,
+        default_api_role="operator",
+        feedback_file_path="./data/feedback.jsonl",
+        circuit_failure_threshold=3,
+        circuit_cooldown_seconds=60,
+        eval_scenarios_path="./data/eval_scenarios.json",
+        task_backend="memory",
+        task_sqlite_path="./test_tasks.db",
+        agent_registry_file_path="./data/agents.test.json",
     )
 
 
@@ -47,6 +59,40 @@ class ModelRouterTests(unittest.TestCase):
         )
         router = ModelRouter(settings)
         self.assertEqual(router.candidate_models(TaskType.general), ["ollama:general"])
+
+    def test_high_complexity_general_prefers_analysis_models(self) -> None:
+        router = ModelRouter(build_settings())
+        models = router.candidate_models(
+            TaskType.general,
+            message="Need architecture and security migration plan across services",
+            history=[],
+        )
+        self.assertEqual(
+            models,
+            [
+                "ollama:analysis",
+                "ollama:general",
+                "openai_compat:analysis",
+                "openai_compat:general",
+            ],
+        )
+
+    def test_high_complexity_detected_for_russian_markers(self) -> None:
+        router = ModelRouter(build_settings())
+        models = router.candidate_models(
+            TaskType.general,
+            message="Нужен архитектурный рефактор и план по безопасности",
+            history=[],
+        )
+        self.assertEqual(
+            models,
+            [
+                "ollama:analysis",
+                "ollama:general",
+                "openai_compat:analysis",
+                "openai_compat:general",
+            ],
+        )
 
 
 if __name__ == "__main__":

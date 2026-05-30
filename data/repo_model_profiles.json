@@ -1,0 +1,26 @@
+[
+  {
+    "profile_id": "termit-core",
+    "title": "Termit core backend",
+    "path_prefix": "app/",
+    "task_type": "coding",
+    "preferred_model": "ollama:deepseek-coder",
+    "description": "Primary Python orchestrator codebase."
+  },
+  {
+    "profile_id": "termit-tests",
+    "title": "Termit test suite",
+    "path_prefix": "tests/",
+    "task_type": "debug",
+    "preferred_model": "ollama:qwen2.5-coder",
+    "description": "Unit and integration tests."
+  },
+  {
+    "profile_id": "termit-docs",
+    "title": "Termit docs",
+    "path_prefix": "",
+    "task_type": "review",
+    "preferred_model": "openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct",
+    "description": "Documentation and planning artifacts."
+  }
+]

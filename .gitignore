@@ -3,3 +3,13 @@ __pycache__/
 *.pyc
 .env
 *.db
+*.db-journal
+
+# Runtime artifacts under data/ (keep seed JSON tracked)
+data/*
+!data/eval_scenarios.json
+!data/repo_model_profiles.json
+!data/routing_benchmarks.json
+!data/finetune/
+data/finetune/*
+!data/finetune/.gitkeep

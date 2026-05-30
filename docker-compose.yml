@@ -1,0 +1,53 @@
+services:
+  termit:
+    build: .
+    expose:
+      - "8765"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - termit-sqlite:/app
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - termit
+    ports:
+      - "8080:8080"
+      - "443:443"
+      - "80:80"
+    environment:
+      DOMAIN: ${TERMIT_PUBLIC_DOMAIN:-}
+      ACME_EMAIL: ${TERMIT_ACME_EMAIL:-ops@example.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+  # Optional: Ollama on the same host
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   expose:
+  #     - "11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+
+volumes:
+  termit-sqlite:
+  caddy-data:
+  caddy-config:
+  # ollama-data:

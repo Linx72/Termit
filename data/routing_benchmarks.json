@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-30",
+  "scores": {
+    "ollama:deepseek-coder": {
+      "coding": 0.93,
+      "debug": 0.88,
+      "review": 0.82,
+      "explain": 0.8,
+      "general": 0.84
+    },
+    "ollama:qwen2.5-coder": {
+      "coding": 0.9,
+      "debug": 0.91,
+      "review": 0.86,
+      "explain": 0.87,
+      "general": 0.85
+    },
+    "openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct": {
+      "coding": 0.95,
+      "debug": 0.9,
+      "review": 0.92,
+      "explain": 0.9,
+      "general": 0.88
+    },
+    "openai_compat:deepseek-ai/deepseek-coder-33b-instruct": {
+      "coding": 0.94,
+      "debug": 0.89,
+      "review": 0.85,
+      "explain": 0.84,
+      "general": 0.86
+    }
+  }
+}

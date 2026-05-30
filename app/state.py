@@ -1,14 +1,37 @@
 from functools import lru_cache
 
 from app.core.config import get_settings
+from app.services.agent_registry_store import AgentRegistryStore
+from app.services.agent_service import AgentService
+from app.services.agent_run_store import InMemoryAgentRunStore
+from app.services.local_runtime_service import LocalRuntimeService
 from app.services.chat_service import ChatService
+from app.services.code_retrieval_service import CodeRetrievalService
+from app.services.context_compaction import ContextCompactor
+from app.services.browser_workflow_service import BrowserWorkflowService
 from app.services.memory_store import MemoryBackend, MemoryStore
+from app.services.metrics_snapshot_store import MetricsSnapshotStore
 from app.services.model_router import ModelRouter
+from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
+from app.services.routing_policy_service import RoutingPolicyService
+from app.services.ops_service import OpsService
+from app.services.team_workspace_service import TeamWorkspaceService
 from app.services.providers.base import BaseProvider
 from app.services.providers.ollama_provider import OllamaProvider
 from app.services.providers.openai_compat_provider import OpenAICompatProvider
 from app.services.sqlite_memory_store import SQLiteMemoryStore
+from app.services.sqlite_agent_run_store import SQLiteAgentRunStore
+from app.services.eval_report_store import EvalReportStore
+from app.services.eval_service import EvalService
+from app.services.finetune_service import FinetuneService
+from app.services.feedback_store import FeedbackStore
+from app.services.sqlite_task_store import SQLiteTaskStore
 from app.services.task_service import TaskService
+from app.services.task_store import InMemoryTaskStore
+from app.services.provider_circuit_breaker import ProviderCircuitBreaker
+from app.services.quota_store import QuotaStore
+from app.services.response_cache_store import ResponseCacheStore
+from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingService
 
 
@@ -22,7 +45,7 @@ def _build_chat_service() -> ChatService:
             settings.openai_compat_api_key,
         ),
     }
-    router = ModelRouter(settings)
+    router = ModelRouter(settings, routing_policy=_build_routing_policy_service())
     memory_store: MemoryBackend
     if settings.memory_backend == "sqlite":
         memory_store = SQLiteMemoryStore(
@@ -31,11 +54,73 @@ def _build_chat_service() -> ChatService:
         )
     else:
         memory_store = MemoryStore(max_messages_per_session=settings.memory_max_messages)
-    return ChatService(router, providers, memory_store)
+    circuit_breaker = ProviderCircuitBreaker(
+        failure_threshold=settings.circuit_failure_threshold,
+        cooldown_seconds=settings.circuit_cooldown_seconds,
+    )
+    response_cache = None
+    if settings.response_cache_ttl_seconds > 0:
+        response_cache = ResponseCacheStore(
+            backend=settings.response_cache_backend,
+            sqlite_path=settings.response_cache_sqlite_path,
+        )
+    telemetry = _build_telemetry_store()
+    compactor = ContextCompactor(
+        max_messages=settings.context_max_messages,
+        max_chars=settings.context_max_chars,
+        summary_max_chars=settings.context_summary_max_chars,
+    )
+    return ChatService(
+        router,
+        providers,
+        memory_store,
+        circuit_breaker,
+        cache_ttl_seconds=settings.response_cache_ttl_seconds,
+        response_cache=response_cache,
+        telemetry=telemetry,
+        context_compactor=compactor,
+        code_retrieval=_build_code_retrieval_service(),
+        retrieval_enabled=settings.retrieval_enabled,
+        provider_retry_attempts=settings.provider_retry_attempts,
+        provider_retry_backoff_ms=settings.provider_retry_backoff_ms,
+    )
 
 
 def get_chat_service() -> ChatService:
     return _build_chat_service()
+
+
+@lru_cache
+def _build_agent_registry_store() -> AgentRegistryStore:
+    settings = get_settings()
+    return AgentRegistryStore(file_path=settings.agent_registry_file_path)
+
+
+@lru_cache
+def _build_agent_service() -> AgentService:
+    settings = get_settings()
+    if settings.agent_run_backend == "sqlite":
+        run_store = SQLiteAgentRunStore(db_path=settings.agent_run_sqlite_path)
+    else:
+        run_store = InMemoryAgentRunStore()
+    return AgentService(
+        chat_service=_build_chat_service(),
+        registry=_build_agent_registry_store(),
+        run_store=run_store,
+        tooling=_build_tooling_service(),
+        browser_workflow=_build_browser_workflow_service(),
+        max_concurrency=settings.agent_max_concurrency,
+        max_queue_size=settings.agent_max_queue_size,
+        run_max_attempts=settings.agent_run_max_attempts,
+        run_retry_backoff_ms=settings.agent_run_retry_backoff_ms,
+        max_events_per_run=settings.agent_run_max_events_per_run,
+        max_response_chars=settings.agent_run_max_response_chars,
+        retention_days=settings.agent_run_retention_days,
+    )
+
+
+def get_agent_service() -> AgentService:
+    return _build_agent_service()
 
 
 @lru_cache
@@ -49,8 +134,177 @@ def get_tooling_service() -> ToolingService:
 
 @lru_cache
 def _build_task_service() -> TaskService:
-    return TaskService(_build_tooling_service())
+    settings = get_settings()
+    tooling = _build_tooling_service()
+    if settings.task_backend == "sqlite":
+        store = SQLiteTaskStore(db_path=settings.task_sqlite_path)
+    else:
+        store = InMemoryTaskStore()
+    return TaskService(tooling, store, telemetry=_build_telemetry_store())
 
 
 def get_task_service() -> TaskService:
     return _build_task_service()
+
+
+@lru_cache
+def _build_browser_workflow_service() -> BrowserWorkflowService:
+    return BrowserWorkflowService()
+
+
+def get_browser_workflow_service() -> BrowserWorkflowService:
+    return _build_browser_workflow_service()
+
+
+@lru_cache
+def _build_quota_store() -> QuotaStore:
+    settings = get_settings()
+    return QuotaStore(db_path=settings.quota_sqlite_path)
+
+
+def get_quota_store() -> QuotaStore:
+    return _build_quota_store()
+
+
+@lru_cache
+def _build_feedback_store() -> FeedbackStore:
+    settings = get_settings()
+    return FeedbackStore(file_path=settings.feedback_file_path)
+
+
+def get_feedback_store() -> FeedbackStore:
+    return _build_feedback_store()
+
+
+@lru_cache
+def _build_eval_service() -> EvalService:
+    settings = get_settings()
+    return EvalService(
+        scenarios_path=settings.eval_scenarios_path,
+        task_service=_build_task_service(),
+        tooling_service=_build_tooling_service(),
+        browser_service=_build_browser_workflow_service(),
+        telemetry=_build_telemetry_store(),
+        report_store=EvalReportStore(file_path=settings.eval_report_file_path),
+    )
+
+
+def get_eval_service() -> EvalService:
+    return _build_eval_service()
+
+
+@lru_cache
+def _build_telemetry_store() -> TelemetryStore:
+    settings = get_settings()
+    return TelemetryStore(max_latency_points=settings.telemetry_max_latency_points)
+
+
+def get_telemetry_store() -> TelemetryStore:
+    return _build_telemetry_store()
+
+
+@lru_cache
+def _build_metrics_snapshot_store() -> MetricsSnapshotStore:
+    settings = get_settings()
+    return MetricsSnapshotStore(
+        file_path=settings.metrics_snapshot_file_path,
+        degrade_empty_response_rate=settings.degrade_empty_response_rate,
+        degrade_fallback_rate=settings.degrade_fallback_rate,
+    )
+
+
+def get_metrics_snapshot_store() -> MetricsSnapshotStore:
+    return _build_metrics_snapshot_store()
+
+
+@lru_cache
+def _build_local_runtime_service() -> LocalRuntimeService:
+    settings = get_settings()
+    return LocalRuntimeService(
+        ollama_base_url=settings.ollama_base_url,
+        openai_compat_base_url=settings.openai_compat_base_url,
+    )
+
+
+def get_local_runtime_service() -> LocalRuntimeService:
+    return _build_local_runtime_service()
+
+
+@lru_cache
+def _build_code_retrieval_service() -> CodeRetrievalService:
+    settings = get_settings()
+    return CodeRetrievalService(
+        root_path=settings.retrieval_root_path,
+        chunk_max_chars=settings.retrieval_chunk_max_chars,
+        max_file_bytes=settings.retrieval_max_file_bytes,
+    )
+
+
+def get_code_retrieval_service() -> CodeRetrievalService:
+    return _build_code_retrieval_service()
+
+
+@lru_cache
+def _build_ops_service() -> OpsService:
+    settings = get_settings()
+    quota_store = None
+    if settings.auth_enabled and settings.api_keys:
+        quota_store = _build_quota_store()
+    return OpsService(settings=settings, quota_store=quota_store, tooling=_build_tooling_service())
+
+
+def get_ops_service() -> OpsService:
+    return _build_ops_service()
+
+
+@lru_cache
+def _build_team_workspace_service() -> TeamWorkspaceService:
+    settings = get_settings()
+    return TeamWorkspaceService(settings=settings, quota_store=_build_quota_store())
+
+
+def get_team_workspace_service() -> TeamWorkspaceService:
+    return _build_team_workspace_service()
+
+
+@lru_cache
+def _build_multi_agent_orchestrator() -> MultiAgentOrchestrator:
+    return MultiAgentOrchestrator(
+        task_service=_build_task_service(),
+        chat_service=_build_chat_service(),
+    )
+
+
+def get_multi_agent_orchestrator() -> MultiAgentOrchestrator:
+    return _build_multi_agent_orchestrator()
+
+
+@lru_cache
+def _build_routing_policy_service() -> RoutingPolicyService:
+    settings = get_settings()
+    return RoutingPolicyService(
+        repo_profiles_path=settings.repo_model_profiles_path,
+        benchmarks_path=settings.routing_benchmarks_path,
+    )
+
+
+def get_routing_policy_service() -> RoutingPolicyService:
+    return _build_routing_policy_service()
+
+
+@lru_cache
+def _build_finetune_service() -> FinetuneService:
+    settings = get_settings()
+    return FinetuneService(
+        datasets_dir=settings.finetune_datasets_dir,
+        jobs_path=settings.finetune_jobs_path,
+        adapters_path=settings.finetune_adapters_path,
+        feedback_file_path=settings.feedback_file_path,
+        task_sqlite_path=settings.task_sqlite_path,
+        agent_run_sqlite_path=settings.agent_run_sqlite_path,
+        repo_profiles_path=settings.repo_model_profiles_path,
+    )
+
+
+def get_finetune_service() -> FinetuneService:
+    return _build_finetune_service()

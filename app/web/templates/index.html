@@ -51,12 +51,41 @@
         font-size: 13px;
         margin-bottom: 12px;
       }
+      .health-badge {
+        display: none;
+        margin-bottom: 12px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        border: 1px solid #2a3342;
+      }
+      .health-badge.ok {
+        display: block;
+        background: #0f1b15;
+        border-color: #1f7a45;
+        color: #8ee4b2;
+      }
+      .health-badge.warning {
+        display: block;
+        background: #2a230f;
+        border-color: #9d7c2f;
+        color: #ffd88a;
+      }
+      .health-badge.degraded {
+        display: block;
+        background: #2a1212;
+        border-color: #b84949;
+        color: #ffb0b0;
+      }
     </style>
   </head>
   <body>
     <div class="container">
       <h1>Termit</h1>
       <div class="meta">Open-source coding orchestrator MVP</div>
+
+      <label for="apiKey">API key (optional, saved locally)</label>
+      <input id="apiKey" type="password" placeholder="Used when TERMIT_AUTH_ENABLED=true" />
 
       <label for="taskType">Task type</label>
       <select id="taskType">
@@ -82,6 +111,19 @@
         <input id="useMemory" type="checkbox" checked />
         Use session memory
       </label>
+      <label>
+        <input id="useRetrieval" type="checkbox" />
+        Use codebase retrieval
+      </label>
+      <label for="retrievalPrefix">Retrieval path prefix (optional)</label>
+      <input id="retrievalPrefix" placeholder="app/services/" />
+      <label for="repoProfile">Repo profile (optional)</label>
+      <input id="repoProfile" placeholder="termit-core" />
+      <label for="routingPolicy">Routing policy</label>
+      <select id="routingPolicy">
+        <option value="default">default</option>
+        <option value="benchmark">benchmark</option>
+      </select>
 
       <label for="prompt">Prompt</label>
       <textarea id="prompt" rows="7" placeholder="Describe coding task..."></textarea>
@@ -98,10 +140,143 @@
       <button id="exportSessionBtn">Export session</button>
       <button id="downloadExportBtn">Download export</button>
       <button id="checkProvidersBtn">Check providers</button>
+      <button id="usageBtn">Check usage</button>
+
+      <label for="feedbackMessage">Beta feedback</label>
+      <textarea id="feedbackMessage" rows="3" placeholder="What should we improve?"></textarea>
+      <button id="sendFeedbackBtn">Send feedback</button>
+
+      <h3>Task console</h3>
+      <label for="taskInput">Task input</label>
+      <textarea id="taskInput" rows="4" placeholder="Describe end-to-end task..."></textarea>
+      <label for="taskMode">Task mode</label>
+      <select id="taskMode">
+        <option value="auto">auto</option>
+        <option value="guided">guided</option>
+      </select>
+      <button id="createTaskBtn">Create task</button>
+      <label for="taskId">Task ID</label>
+      <input id="taskId" placeholder="filled after task creation" />
+      <button id="refreshTaskBtn">Refresh task</button>
+      <button id="listTasksBtn">List recent tasks</button>
+      <button id="loadTaskEventsBtn">Load task events</button>
+      <button id="cancelTaskBtn">Cancel task</button>
+      <pre id="taskPanel" class="meta" style="max-height:180px;overflow:auto;"></pre>
+
+      <h3>Multi-agent orchestration</h3>
+      <label for="orchestrationInput">Orchestration objective</label>
+      <textarea id="orchestrationInput" rows="3" placeholder="Plan, execute, verify, and report..."></textarea>
+      <button id="runOrchestrationBtn">Run orchestration</button>
+
+      <h3>Agent profiles</h3>
+      <label for="newAgentName">New agent name</label>
+      <input id="newAgentName" placeholder="Local Dev Agent" />
+      <label for="newAgentPrompt">New agent system prompt</label>
+      <textarea id="newAgentPrompt" rows="3" placeholder="You are a local autonomous coding agent."></textarea>
+      <label for="newAgentModel">New agent model (optional)</label>
+      <input id="newAgentModel" placeholder="ollama:qwen2.5-coder:14b" />
+      <label for="newAgentTools">New agent enabled tools (comma separated)</label>
+      <input id="newAgentTools" placeholder="list_files,read_file,execute_command" />
+      <label>
+        <input id="newAgentAllowOnline" type="checkbox" />
+        Allow online automation for this agent
+      </label>
+      <button id="createAgentBtn">Create agent</button>
+      <button id="listAgentsBtn">List agents</button>
+      <label for="agentId">Agent ID</label>
+      <input id="agentId" placeholder="agt_..." />
+      <label for="agentRunInput">Agent run input</label>
+      <textarea id="agentRunInput" rows="3"></textarea>
+      <label for="agentOnlineUrl">Agent online URL (optional)</label>
+      <input id="agentOnlineUrl" placeholder="https://example.com" />
+      <label for="agentOnlineObjective">Agent online objective (optional)</label>
+      <input id="agentOnlineObjective" placeholder="Collect page evidence and blockers" />
+      <button id="runAgentBtn">Run agent</button>
+      <button id="queueAgentRunBtn">Queue run (background)</button>
+      <label for="agentRunId">Agent run ID</label>
+      <input id="agentRunId" placeholder="arun_..." />
+      <button id="checkAgentRunBtn">Check queued run</button>
+      <button id="loadAgentRunEventsBtn">Load run events</button>
+      <button id="cancelAgentRunBtn">Cancel queued run</button>
+      <label for="agentToolPath">Agent tool path</label>
+      <input id="agentToolPath" placeholder="README.md" />
+      <button id="agentReadFileBtn">Agent read file tool</button>
+
+      <h3>Team workspace</h3>
+      <button id="teamUsageBtn">Team usage</button>
+      <button id="listRoutingProfilesBtn">List routing profiles</button>
+      <button id="exportDashboardBtn">Export KPI dashboard JSON</button>
+
+      <h3>Fine-tune pipeline</h3>
+      <label for="finetuneDatasetName">Dataset name</label>
+      <input id="finetuneDatasetName" value="termit-export" />
+      <button id="finetuneExportBtn">Export dataset</button>
+      <label for="finetuneJobId">Job ID</label>
+      <input id="finetuneJobId" placeholder="ft_..." />
+      <button id="finetuneCreateJobBtn">Create job from last export</button>
+      <button id="finetuneRunJobBtn">Run / validate job</button>
+      <button id="finetuneListJobsBtn">List jobs</button>
+      <button id="finetuneRecipeBtn">Training recipe</button>
+      <label for="finetuneAdapterModel">Adapter model</label>
+      <input id="finetuneAdapterModel" placeholder="ollama:termit-core-ft" />
+      <button id="finetuneRegisterAdapterBtn">Register adapter</button>
+      <button id="finetuneListAdaptersBtn">List adapters</button>
+
+      <h3>Eval harness</h3>
+      <label for="evalScenarioId">Scenario ID</label>
+      <input id="evalScenarioId" placeholder="A1, L1, W1..." />
+      <button id="listEvalScenariosBtn">List scenarios</button>
+      <button id="runEvalScenarioBtn">Run scenario</button>
+      <label for="evalCategory">Suite category filter (optional)</label>
+      <input id="evalCategory" placeholder="coding | local | web" />
+      <button id="runEvalSuiteBtn">Run full suite (24)</button>
+      <button id="listEvalReportsBtn">List eval reports</button>
+      <button id="captureMetricsBtn">Capture KPI snapshot</button>
+
+      <h3>Beta ops</h3>
+      <button id="opsReadinessBtn">Check readiness</button>
+      <button id="opsDrillBtn">Run incident drill</button>
+      <button id="opsQuotaSummaryBtn">Quota summary (admin)</button>
+
+      <h3>Code retrieval</h3>
+      <label for="retrievalQuery">Search query</label>
+      <input id="retrievalQuery" placeholder="e.g. ChatService compaction" />
+      <button id="reindexRetrievalBtn">Reindex workspace</button>
+      <button id="searchRetrievalBtn">Search codebase</button>
 
       <h3>Response</h3>
+      <div id="kpiHealthBadge" class="health-badge"></div>
       <div id="responseMeta" class="meta"></div>
       <pre id="responseBox"></pre>
+
+      <h3>Help</h3>
+      <pre class="meta">
+Quick start
+- Enter a prompt and click "Run" for standard chat.
+- Use "Run stream" for token-by-token output.
+- Keep "Use session memory" enabled if you want multi-turn context.
+
+Task console
+- Create task with mode=auto for full execution.
+- Use mode=guided to inspect state transitions before finalizing.
+- Refresh/List/Events/Cancel controls are in the Task console block.
+
+Agents
+- Create an agent with a system prompt and optional model override.
+- Enable only required tools in "enabled tools" (least-privilege principle).
+- Use "Run agent" for synchronous execution.
+- Use "Queue run" for background processing, then check/cancel by run ID.
+
+Online mode
+- Enable "Allow online automation" when creating the agent.
+- Include web_automation in enabled tools.
+- Provide online URL + objective at run time.
+
+Troubleshooting
+- Provider health: click "Check providers".
+- Auth issues: set API key if auth is enabled.
+- If a run fails, inspect run state and error payload in the Response panel.
+      </pre>
     </div>
 
     <script>
@@ -112,6 +287,10 @@
       const modelEl = document.getElementById("model");
       const sessionIdEl = document.getElementById("sessionId");
       const useMemoryEl = document.getElementById("useMemory");
+      const useRetrievalEl = document.getElementById("useRetrieval");
+      const retrievalPrefixEl = document.getElementById("retrievalPrefix");
+      const repoProfileEl = document.getElementById("repoProfile");
+      const routingPolicyEl = document.getElementById("routingPolicy");
       const responseBox = document.getElementById("responseBox");
       const responseMeta = document.getElementById("responseMeta");
       const clearSessionBtn = document.getElementById("clearSessionBtn");
@@ -119,6 +298,83 @@
       const exportSessionBtn = document.getElementById("exportSessionBtn");
       const downloadExportBtn = document.getElementById("downloadExportBtn");
       const checkProvidersBtn = document.getElementById("checkProvidersBtn");
+      const usageBtn = document.getElementById("usageBtn");
+      const apiKeyEl = document.getElementById("apiKey");
+      const feedbackMessageEl = document.getElementById("feedbackMessage");
+      const sendFeedbackBtn = document.getElementById("sendFeedbackBtn");
+      const taskInputEl = document.getElementById("taskInput");
+      const taskModeEl = document.getElementById("taskMode");
+      const createTaskBtn = document.getElementById("createTaskBtn");
+      const taskIdEl = document.getElementById("taskId");
+      const refreshTaskBtn = document.getElementById("refreshTaskBtn");
+      const listTasksBtn = document.getElementById("listTasksBtn");
+      const cancelTaskBtn = document.getElementById("cancelTaskBtn");
+      const loadTaskEventsBtn = document.getElementById("loadTaskEventsBtn");
+      const taskPanelEl = document.getElementById("taskPanel");
+      const orchestrationInputEl = document.getElementById("orchestrationInput");
+      const runOrchestrationBtn = document.getElementById("runOrchestrationBtn");
+      const createAgentBtn = document.getElementById("createAgentBtn");
+      const newAgentNameEl = document.getElementById("newAgentName");
+      const newAgentPromptEl = document.getElementById("newAgentPrompt");
+      const newAgentModelEl = document.getElementById("newAgentModel");
+      const newAgentToolsEl = document.getElementById("newAgentTools");
+      const newAgentAllowOnlineEl = document.getElementById("newAgentAllowOnline");
+      const listAgentsBtn = document.getElementById("listAgentsBtn");
+      const agentIdEl = document.getElementById("agentId");
+      const agentRunInputEl = document.getElementById("agentRunInput");
+      const agentOnlineUrlEl = document.getElementById("agentOnlineUrl");
+      const agentOnlineObjectiveEl = document.getElementById("agentOnlineObjective");
+      const runAgentBtn = document.getElementById("runAgentBtn");
+      const queueAgentRunBtn = document.getElementById("queueAgentRunBtn");
+      const agentRunIdEl = document.getElementById("agentRunId");
+      const checkAgentRunBtn = document.getElementById("checkAgentRunBtn");
+      const loadAgentRunEventsBtn = document.getElementById("loadAgentRunEventsBtn");
+      const cancelAgentRunBtn = document.getElementById("cancelAgentRunBtn");
+      const agentToolPathEl = document.getElementById("agentToolPath");
+      const agentReadFileBtn = document.getElementById("agentReadFileBtn");
+      const teamUsageBtn = document.getElementById("teamUsageBtn");
+      const listRoutingProfilesBtn = document.getElementById("listRoutingProfilesBtn");
+      const finetuneDatasetNameEl = document.getElementById("finetuneDatasetName");
+      const finetuneExportBtn = document.getElementById("finetuneExportBtn");
+      const finetuneJobIdEl = document.getElementById("finetuneJobId");
+      const finetuneCreateJobBtn = document.getElementById("finetuneCreateJobBtn");
+      const finetuneRunJobBtn = document.getElementById("finetuneRunJobBtn");
+      const finetuneListJobsBtn = document.getElementById("finetuneListJobsBtn");
+      const finetuneRecipeBtn = document.getElementById("finetuneRecipeBtn");
+      const finetuneAdapterModelEl = document.getElementById("finetuneAdapterModel");
+      const finetuneRegisterAdapterBtn = document.getElementById("finetuneRegisterAdapterBtn");
+      const finetuneListAdaptersBtn = document.getElementById("finetuneListAdaptersBtn");
+      let lastFinetuneExport = null;
+      const exportDashboardBtn = document.getElementById("exportDashboardBtn");
+      const evalScenarioIdEl = document.getElementById("evalScenarioId");
+      const listEvalScenariosBtn = document.getElementById("listEvalScenariosBtn");
+      const runEvalScenarioBtn = document.getElementById("runEvalScenarioBtn");
+      const evalCategoryEl = document.getElementById("evalCategory");
+      const runEvalSuiteBtn = document.getElementById("runEvalSuiteBtn");
+      const listEvalReportsBtn = document.getElementById("listEvalReportsBtn");
+      const captureMetricsBtn = document.getElementById("captureMetricsBtn");
+      const opsReadinessBtn = document.getElementById("opsReadinessBtn");
+      const opsDrillBtn = document.getElementById("opsDrillBtn");
+      const opsQuotaSummaryBtn = document.getElementById("opsQuotaSummaryBtn");
+      const retrievalQueryEl = document.getElementById("retrievalQuery");
+      const reindexRetrievalBtn = document.getElementById("reindexRetrievalBtn");
+      const searchRetrievalBtn = document.getElementById("searchRetrievalBtn");
+      const kpiHealthBadgeEl = document.getElementById("kpiHealthBadge");
+      const API_KEY_STORAGE = "termit_api_key";
+
+      apiKeyEl.value = localStorage.getItem(API_KEY_STORAGE) || "";
+      apiKeyEl.addEventListener("change", () => {
+        localStorage.setItem(API_KEY_STORAGE, apiKeyEl.value.trim());
+      });
+
+      function authHeaders(extraHeaders = {}) {
+        const headers = { ...extraHeaders };
+        const key = apiKeyEl.value.trim();
+        if (key) {
+          headers["X-API-Key"] = key;
+        }
+        return headers;
+      }
 
       function buildPayload() {
         return {
@@ -127,6 +383,11 @@
           model: modelEl.value || null,
           session_id: sessionIdEl.value.trim() || null,
           use_memory: useMemoryEl.checked,
+          use_retrieval: useRetrievalEl.checked,
+          retrieval_limit: 5,
+          retrieval_path_prefix: retrievalPrefixEl.value.trim(),
+          repo_profile: repoProfileEl.value.trim() || null,
+          routing_policy: routingPolicyEl.value,
           temperature: 0.2,
           max_tokens: 1200,
           history: [],
@@ -137,7 +398,73 @@
         const attempts = (data.attempted_models || []).join(" -> ");
         responseMeta.textContent =
           `${prefix}provider=${data.provider}, model=${data.model}, task=${data.task_type}, ` +
-          `session=${data.session_id || "none"}, history=${data.history_size}, attempts=${attempts}`;
+          `session=${data.session_id || "none"}, history=${data.history_size}, attempts=${attempts}, ` +
+          `retrieval=${data.retrieval_hits || 0}, compacted=${data.context_compacted || false}, ` +
+          `dropped=${data.dropped_messages || 0}, via=${data.selected_via || "n/a"}`;
+      }
+
+      function parseSseEventsFromBuffer(inputBuffer) {
+        const normalized = inputBuffer.replace(/\r\n/g, "\n");
+        const rawEvents = normalized.split("\n\n");
+        const remainingBuffer = rawEvents.pop() || "";
+        const parsedEvents = [];
+
+        for (const rawEvent of rawEvents) {
+          const lines = rawEvent.split("\n");
+          let eventName = "message";
+          const dataLines = [];
+
+          for (const line of lines) {
+            if (!line || line.startsWith(":")) {
+              continue;
+            }
+            if (line.startsWith("event:")) {
+              eventName = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              dataLines.push(line.slice(5).replace(/^ /, ""));
+            }
+          }
+
+          if (dataLines.length === 0) {
+            continue;
+          }
+          parsedEvents.push({ eventName, data: dataLines.join("\n") });
+        }
+
+        return { parsedEvents, remainingBuffer };
+      }
+
+      function formatPercent(value) {
+        return `${(Number(value || 0) * 100).toFixed(1)}%`;
+      }
+
+      function renderKpiHealthBadge(metrics) {
+        const status = metrics.health_status || "ok";
+        const reasons = Array.isArray(metrics.health_reasons) ? metrics.health_reasons : [];
+        const thresholds = metrics.active_thresholds || {};
+        const emptyRate = formatPercent(metrics.chat_empty_response_rate);
+        const fallbackRate = formatPercent(metrics.chat_fallback_rate);
+        const emptyThreshold = formatPercent(thresholds.degrade_empty_response_rate);
+        const fallbackThreshold = formatPercent(thresholds.degrade_fallback_rate);
+        const reasonText = reasons.length ? reasons[0] : "No active KPI risks.";
+
+        kpiHealthBadgeEl.classList.remove("ok", "warning", "degraded");
+        kpiHealthBadgeEl.classList.add(status === "warning" ? "warning" : (status === "degraded" ? "degraded" : "ok"));
+        kpiHealthBadgeEl.textContent =
+          `KPI health: ${status.toUpperCase()} | empty ${emptyRate}/${emptyThreshold}, fallback ${fallbackRate}/${fallbackThreshold}. ${reasonText}`;
+      }
+
+      async function refreshMetricsHealth() {
+        try {
+          const resp = await fetch("/api/metrics", { headers: authHeaders() });
+          if (!resp.ok) {
+            return;
+          }
+          const data = await resp.json();
+          renderKpiHealthBadge(data);
+        } catch (_error) {
+          // Non-blocking dashboard helper.
+        }
       }
 
       async function runRequest(mode) {
@@ -154,7 +481,7 @@
           try {
             const resp = await fetch("/api/chat", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: authHeaders({ "Content-Type": "application/json" }),
               body: JSON.stringify(payload),
             });
             const data = await resp.json();
@@ -178,7 +505,7 @@
         try {
           const resp = await fetch("/api/chat/stream", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(payload),
           });
           if (!resp.ok || !resp.body) {
@@ -197,33 +524,29 @@
             const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
+            const { parsedEvents, remainingBuffer } = parseSseEventsFromBuffer(buffer);
+            buffer = remainingBuffer;
 
-            const events = buffer.split("\n\n");
-            buffer = events.pop() || "";
-
-            for (const rawEvent of events) {
-              const lines = rawEvent.split("\n");
-              const eventName = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
-              const dataLine = lines.find((line) => line.startsWith("data:"))?.slice(5).trim();
-              if (!eventName || !dataLine) continue;
-
+            for (const evt of parsedEvents) {
               try {
-                const data = JSON.parse(dataLine);
-                if (eventName === "meta") {
+                const data = JSON.parse(evt.data);
+                if (evt.eventName === "meta") {
                   if (data.session_id && !sessionIdEl.value.trim()) {
                     sessionIdEl.value = data.session_id;
                   }
-                  const attempts = data.attempted_models || "n/a";
+                  const attempts = Array.isArray(data.attempted_models)
+                    ? data.attempted_models.join(" -> ")
+                    : (data.attempted_models || "n/a");
                   responseMeta.textContent =
                     `stream provider=${data.provider}, model=${data.model}, ` +
                     `session=${data.session_id || "none"}, history=${data.history_size}, attempts=${attempts}`;
-                } else if (eventName === "token") {
+                } else if (evt.eventName === "token") {
                   streamText += data.text || "";
                   responseBox.textContent = streamText;
-                } else if (eventName === "error") {
+                } else if (evt.eventName === "error") {
                   responseMeta.textContent = "Stream error";
                   responseBox.textContent = JSON.stringify(data, null, 2);
-                } else if (eventName === "done") {
+                } else if (evt.eventName === "done") {
                   responseMeta.textContent = `${responseMeta.textContent} (done)`;
                 }
               } catch (e) {
@@ -255,6 +578,7 @@
         try {
           const resp = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
             method: "DELETE",
+            headers: authHeaders(),
           });
           const data = await resp.json();
           if (!resp.ok) {
@@ -281,7 +605,8 @@
         try {
           const format = exportFormatEl.value;
           const resp = await fetch(
-            `/api/sessions/${encodeURIComponent(sessionId)}/export?format=${encodeURIComponent(format)}`
+            `/api/sessions/${encodeURIComponent(sessionId)}/export?format=${encodeURIComponent(format)}`,
+            { headers: authHeaders() }
           );
           const data = await resp.json();
           if (!resp.ok) {
@@ -308,7 +633,8 @@
         try {
           const format = exportFormatEl.value;
           const resp = await fetch(
-            `/api/sessions/${encodeURIComponent(sessionId)}/export?format=${encodeURIComponent(format)}`
+            `/api/sessions/${encodeURIComponent(sessionId)}/export?format=${encodeURIComponent(format)}`,
+            { headers: authHeaders() }
           );
           const data = await resp.json();
           if (!resp.ok) {
@@ -336,11 +662,844 @@
         }
       });
 
+      usageBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Checking usage...";
+        responseBox.textContent = "";
+        try {
+          const resp = await fetch("/api/usage", { headers: authHeaders() });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = "Usage status";
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      sendFeedbackBtn.addEventListener("click", async () => {
+        const message = feedbackMessageEl.value.trim();
+        if (!message) {
+          responseMeta.textContent = "Feedback message is required";
+          return;
+        }
+        try {
+          const resp = await fetch("/api/feedback", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ message, rating: 5 }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Feedback error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `Feedback accepted at ${data.timestamp}`;
+          responseBox.textContent = "";
+          feedbackMessageEl.value = "";
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      createTaskBtn.addEventListener("click", async () => {
+        const input = taskInputEl.value.trim();
+        if (!input) {
+          responseMeta.textContent = "Task input is required";
+          return;
+        }
+        responseMeta.textContent = "Creating task...";
+        responseBox.textContent = "";
+        try {
+          const resp = await fetch("/api/tasks", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              input,
+              task_type: taskTypeEl.value,
+              mode: taskModeEl.value,
+              session_id: sessionIdEl.value.trim() || null,
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Task error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          taskIdEl.value = data.task_id;
+          responseMeta.textContent = `task created id=${data.task_id}, state=${data.state}`;
+          await refreshTask();
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      function renderTaskPanel(task, events) {
+        const lines = [
+          `id=${task.task_id}`,
+          `state=${task.state}`,
+          `mode=${task.mode}`,
+          `attempts=${task.attempts}/${task.max_attempts}`,
+          `failure=${task.failure_class || "none"}`,
+          "",
+          "events:",
+        ];
+        for (const event of events || []) {
+          lines.push(`- [${event.timestamp}] ${event.event_type}: ${event.message}`);
+        }
+        if (task.report) {
+          lines.push("", "report:", task.report);
+        }
+        taskPanelEl.textContent = lines.join("\n");
+      }
+
+      async function refreshTask(includeEvents = false) {
+        const taskId = taskIdEl.value.trim();
+        if (!taskId) {
+          responseMeta.textContent = "Task ID is required";
+          return;
+        }
+        const resp = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+          headers: authHeaders(),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          responseMeta.textContent = "Task error";
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          return;
+        }
+        let events = data.events || [];
+        if (includeEvents) {
+          const eventsResp = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/events`, {
+            headers: authHeaders(),
+          });
+          if (eventsResp.ok) {
+            events = await eventsResp.json();
+          }
+        }
+        renderTaskPanel(data, events);
+        responseMeta.textContent = `task=${data.task_id}, state=${data.state}, attempts=${data.attempts}/${data.max_attempts}`;
+        responseBox.textContent = JSON.stringify(data, null, 2);
+      }
+
+      loadTaskEventsBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading task events...";
+        try {
+          await refreshTask(true);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      runOrchestrationBtn.addEventListener("click", async () => {
+        const input = orchestrationInputEl.value.trim() || taskInputEl.value.trim();
+        if (!input) {
+          responseMeta.textContent = "Orchestration input is required";
+          return;
+        }
+        responseMeta.textContent = "Running orchestration...";
+        try {
+          const resp = await fetch("/api/orchestration/run", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              input,
+              task_type: taskTypeEl.value,
+              use_retrieval: useRetrievalEl.checked,
+              retrieval_path_prefix: retrievalPrefixEl.value.trim(),
+              repo_profile: repoProfileEl.value.trim() || null,
+              routing_policy: routingPolicyEl.value,
+            }),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = `orchestration=${data.status}, run_id=${data.run_id}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      listAgentsBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading agents...";
+        try {
+          const resp = await fetch("/api/agents", { headers: authHeaders() });
+          const data = await resp.json();
+          responseMeta.textContent = `agents=${data.length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          if (data.length && !agentIdEl.value.trim()) {
+            agentIdEl.value = data[0].agent_id;
+          }
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      createAgentBtn.addEventListener("click", async () => {
+        const name = newAgentNameEl.value.trim();
+        const systemPrompt = newAgentPromptEl.value.trim();
+        if (!name || !systemPrompt) {
+          responseMeta.textContent = "New agent name and system prompt are required";
+          return;
+        }
+        const enabledTools = (newAgentToolsEl.value || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        responseMeta.textContent = "Creating agent...";
+        try {
+          const resp = await fetch("/api/agents", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              name,
+              description: "Created from web panel",
+              system_prompt: systemPrompt,
+              task_type: "general",
+              model: newAgentModelEl.value.trim() || null,
+              allow_online: newAgentAllowOnlineEl.checked,
+              enabled_tools: enabledTools,
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Create agent error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          agentIdEl.value = data.agent_id;
+          responseMeta.textContent = `agent created: ${data.agent_id}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      runAgentBtn.addEventListener("click", async () => {
+        const agentId = agentIdEl.value.trim();
+        const input = agentRunInputEl.value.trim();
+        if (!agentId || !input) {
+          responseMeta.textContent = "Agent ID and input are required";
+          return;
+        }
+        responseMeta.textContent = "Running agent...";
+        try {
+          const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/run`, {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              input,
+              online_url: agentOnlineUrlEl.value.trim() || null,
+              online_objective: agentOnlineObjectiveEl.value.trim() || null,
+            }),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = `agent=${data.agent_name}, model=${data.model}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      queueAgentRunBtn.addEventListener("click", async () => {
+        const agentId = agentIdEl.value.trim();
+        const input = agentRunInputEl.value.trim();
+        if (!agentId || !input) {
+          responseMeta.textContent = "Agent ID and input are required";
+          return;
+        }
+        responseMeta.textContent = "Queueing agent run...";
+        try {
+          const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/runs`, {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              input,
+              online_url: agentOnlineUrlEl.value.trim() || null,
+              online_objective: agentOnlineObjectiveEl.value.trim() || null,
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Queue error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          agentRunIdEl.value = data.run_id;
+          responseMeta.textContent = `queued run=${data.run_id}, position=${data.queued_position}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      checkAgentRunBtn.addEventListener("click", async () => {
+        const runId = agentRunIdEl.value.trim();
+        if (!runId) {
+          responseMeta.textContent = "Run ID is required";
+          return;
+        }
+        responseMeta.textContent = "Loading run status...";
+        try {
+          const resp = await fetch(`/api/agents/runs/${encodeURIComponent(runId)}`, {
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Run status error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `run=${data.run_id}, state=${data.state}, model=${data.model || "n/a"}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      loadAgentRunEventsBtn.addEventListener("click", async () => {
+        const runId = agentRunIdEl.value.trim();
+        if (!runId) {
+          responseMeta.textContent = "Run ID is required";
+          return;
+        }
+        responseMeta.textContent = "Loading run events...";
+        try {
+          const resp = await fetch(`/api/agents/runs/${encodeURIComponent(runId)}/events`, {
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Run events error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `run=${runId}, events=${data.length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      cancelAgentRunBtn.addEventListener("click", async () => {
+        const runId = agentRunIdEl.value.trim();
+        if (!runId) {
+          responseMeta.textContent = "Run ID is required";
+          return;
+        }
+        responseMeta.textContent = "Cancelling run...";
+        try {
+          const resp = await fetch(`/api/agents/runs/${encodeURIComponent(runId)}/cancel`, {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Cancel run error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `run=${data.run_id}, cancelled=${data.cancelled}, state=${data.state}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      agentReadFileBtn.addEventListener("click", async () => {
+        const agentId = agentIdEl.value.trim();
+        const path = agentToolPathEl.value.trim();
+        if (!agentId || !path) {
+          responseMeta.textContent = "Agent ID and tool path are required";
+          return;
+        }
+        responseMeta.textContent = "Running agent read_file tool...";
+        try {
+          const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/tools/read_file`, {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ path }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Agent tool error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `agent tool read_file success, path=${data.path}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      listRoutingProfilesBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading routing profiles...";
+        try {
+          const resp = await fetch("/api/routing/profiles", { headers: authHeaders() });
+          const data = await resp.json();
+          responseMeta.textContent = `routing profiles=${data.length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          if (data.length && !repoProfileEl.value.trim()) {
+            repoProfileEl.value = data[0].profile_id;
+          }
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      finetuneExportBtn.addEventListener("click", async () => {
+        const name = finetuneDatasetNameEl.value.trim() || "termit-export";
+        responseMeta.textContent = "Exporting finetune dataset...";
+        try {
+          const resp = await fetch("/api/finetune/datasets/export", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              name,
+              include_feedback: true,
+              include_tasks: true,
+              include_agent_runs: true,
+              min_samples: 1,
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Finetune export error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          lastFinetuneExport = data;
+          responseMeta.textContent = `dataset exported, samples=${data.sample_count}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      finetuneCreateJobBtn.addEventListener("click", async () => {
+        if (!lastFinetuneExport) {
+          responseMeta.textContent = "Export a dataset first";
+          return;
+        }
+        responseMeta.textContent = "Creating finetune job...";
+        try {
+          const resp = await fetch("/api/finetune/jobs", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              name: lastFinetuneExport.name,
+              dataset_path: lastFinetuneExport.dataset_path,
+              sample_count: lastFinetuneExport.sample_count,
+              base_model: "ollama:deepseek-coder",
+              notes: "Created from web UI",
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Finetune job error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          finetuneJobIdEl.value = data.job_id;
+          responseMeta.textContent = `job created id=${data.job_id}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      finetuneRunJobBtn.addEventListener("click", async () => {
+        const jobId = finetuneJobIdEl.value.trim();
+        if (!jobId) {
+          responseMeta.textContent = "Job ID required";
+          return;
+        }
+        responseMeta.textContent = "Running finetune job validation...";
+        try {
+          const resp = await fetch(`/api/finetune/jobs/${encodeURIComponent(jobId)}/run`, {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = resp.ok ? `job status=${data.status}` : "Finetune run error";
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      finetuneListJobsBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading finetune jobs...";
+        try {
+          const resp = await fetch("/api/finetune/jobs", { headers: authHeaders() });
+          const data = await resp.json();
+          responseMeta.textContent = `jobs=${data.jobs.length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      finetuneRecipeBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading training recipe...";
+        try {
+          const resp = await fetch(
+            "/api/finetune/recipe?base_model=ollama%3Adeepseek-coder",
+            { headers: authHeaders() },
+          );
+          const data = await resp.json();
+          responseMeta.textContent = "recipe loaded";
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      finetuneRegisterAdapterBtn.addEventListener("click", async () => {
+        const model = finetuneAdapterModelEl.value.trim();
+        const profileId = repoProfileEl.value.trim() || "termit-core";
+        if (!model) {
+          responseMeta.textContent = "Adapter model required";
+          return;
+        }
+        responseMeta.textContent = "Registering adapter...";
+        try {
+          const resp = await fetch("/api/finetune/adapters", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              name: `${profileId}-adapter`,
+              model,
+              base_model: "ollama:deepseek-coder",
+              repo_profile_id: profileId,
+              description: "Registered from web UI",
+            }),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = resp.ok ? `adapter=${data.adapter_id}` : "Adapter error";
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      finetuneListAdaptersBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading adapters...";
+        try {
+          const resp = await fetch("/api/finetune/adapters", { headers: authHeaders() });
+          const data = await resp.json();
+          responseMeta.textContent = `adapters=${data.adapters.length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      exportDashboardBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Exporting KPI dashboard bundle...";
+        try {
+          const resp = await fetch("/api/metrics/executive-summary?days=7&limit=200", {
+            headers: authHeaders(),
+          });
+          const summary = await resp.json();
+          const trendResp = await fetch("/api/metrics/trend?days=7&limit=200", {
+            headers: authHeaders(),
+          });
+          const trend = await trendResp.json();
+          const bundle = {
+            exported_at: new Date().toISOString(),
+            executive_summary: summary,
+            trend,
+          };
+          responseMeta.textContent = "dashboard bundle ready (copy JSON below)";
+          responseBox.textContent = JSON.stringify(bundle, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      teamUsageBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading team usage...";
+        try {
+          const resp = await fetch("/api/teams/usage", { headers: authHeaders() });
+          const data = await resp.json();
+          responseMeta.textContent = `teams=${data.entries.length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      refreshTaskBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Refreshing task...";
+        try {
+          await refreshTask();
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      listTasksBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading tasks...";
+        responseBox.textContent = "";
+        try {
+          const resp = await fetch("/api/tasks?limit=10", { headers: authHeaders() });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Task list error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `tasks loaded: ${data.total}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      cancelTaskBtn.addEventListener("click", async () => {
+        const taskId = taskIdEl.value.trim();
+        if (!taskId) {
+          responseMeta.textContent = "Task ID is required";
+          return;
+        }
+        try {
+          const resp = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Cancel error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `task ${taskId} cancelled=${data.cancelled}, state=${data.state}`;
+          await refreshTask();
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      listEvalScenariosBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading eval scenarios...";
+        try {
+          const resp = await fetch("/api/eval/scenarios", { headers: authHeaders() });
+          const data = await resp.json();
+          responseMeta.textContent = `scenarios: ${data.length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          if (data.length && !evalScenarioIdEl.value.trim()) {
+            evalScenarioIdEl.value = data[0].id;
+          }
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      runEvalScenarioBtn.addEventListener("click", async () => {
+        const scenarioId = evalScenarioIdEl.value.trim();
+        if (!scenarioId) {
+          responseMeta.textContent = "Scenario ID is required";
+          return;
+        }
+        responseMeta.textContent = `Running ${scenarioId}...`;
+        try {
+          const resp = await fetch("/api/eval/run", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ scenario_id: scenarioId }),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = `eval ${scenarioId}: ${data.status}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      runEvalSuiteBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Running eval suite...";
+        const category = evalCategoryEl.value.trim();
+        try {
+          const resp = await fetch("/api/eval/run-suite", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              category: category || null,
+              persist_report: true,
+            }),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = `suite ${data.run_id}: pass_rate=${data.pass_rate}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      listEvalReportsBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading eval reports...";
+        try {
+          const resp = await fetch("/api/eval/reports?limit=5", { headers: authHeaders() });
+          const data = await resp.json();
+          responseMeta.textContent = `reports: ${data.total}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      opsReadinessBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Checking readiness...";
+        try {
+          const resp = await fetch("/api/ops/readiness");
+          const data = await resp.json();
+          responseMeta.textContent = `readiness=${data.status}, passed=${data.passed}, failed=${data.failed}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      opsDrillBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Running incident drill...";
+        try {
+          const resp = await fetch("/api/ops/incident-drill", {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Drill error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `drill=${data.status}, run_id=${data.run_id}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      opsQuotaSummaryBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading quota summary...";
+        try {
+          const resp = await fetch("/api/ops/quota-summary", { headers: authHeaders() });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Quota summary error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `quota entries=${data.entries.length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      reindexRetrievalBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Reindexing workspace...";
+        try {
+          const resp = await fetch("/api/retrieval/reindex", {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = `indexed files=${data.indexed_files}, chunks=${data.indexed_chunks}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      searchRetrievalBtn.addEventListener("click", async () => {
+        const query = retrievalQueryEl.value.trim() || promptEl.value.trim();
+        if (!query) {
+          responseMeta.textContent = "Retrieval query is required";
+          return;
+        }
+        responseMeta.textContent = "Searching codebase...";
+        try {
+          const resp = await fetch("/api/retrieval/search", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              query,
+              limit: 8,
+              path_prefix: retrievalPrefixEl.value.trim(),
+            }),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = `retrieval hits: ${data.total}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      captureMetricsBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Capturing KPI snapshot...";
+        try {
+          const resp = await fetch("/api/metrics/snapshot", {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = `snapshot captured at ${data.captured_at}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          await refreshMetricsHealth();
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
       checkProvidersBtn.addEventListener("click", async () => {
         responseMeta.textContent = "Checking provider health...";
         responseBox.textContent = "";
         try {
-          const resp = await fetch("/api/providers/status");
+          const resp = await fetch("/api/providers/status", { headers: authHeaders() });
           const data = await resp.json();
           if (!resp.ok) {
             responseMeta.textContent = "Error";
@@ -354,6 +1513,8 @@
           responseBox.textContent = String(error);
         }
       });
+
+      refreshMetricsHealth();
     </script>
   </body>
 </html>
