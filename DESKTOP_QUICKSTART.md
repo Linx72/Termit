@@ -48,7 +48,7 @@ cd Termit
 ./scripts/run_termit_stack.sh
 ```
 
-См. [SYNC_WORKFLOW.md](SYNC_WORKFLOW.md).
+См. [SYNC_WORKFLOW.md](SYNC_WORKFLOW.md) и [GITHUB_SETUP_RU.md](GITHUB_SETUP_RU.md) (первый push).
 
 ## Проверка
 
