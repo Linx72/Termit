@@ -3,15 +3,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
 if ! command -v npm >/dev/null 2>&1; then
   if [[ -x "/opt/homebrew/bin/npm" ]]; then
     export PATH="/opt/homebrew/bin:$PATH"
   elif [[ -x "/usr/local/bin/npm" ]]; then
     export PATH="/usr/local/bin:$PATH"
   else
-    echo "error: npm not found. Install Node.js 20+ (https://nodejs.org) or: brew install node" >&2
-    exit 1
+    "$ROOT/scripts/install_node_local.sh"
+    NODE_BIN="$(find "$ROOT/.tools" -path '*/bin/npm' 2>/dev/null | head -1)"
+    [[ -n "$NODE_BIN" ]] || { echo "error: npm not found" >&2; exit 1; }
+    export PATH="$(dirname "$NODE_BIN"):${PATH}"
   fi
 fi
 

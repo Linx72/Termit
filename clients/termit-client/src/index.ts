@@ -4,5 +4,18 @@ export { parseSseStream } from "./sse";
 export { parseAgentRunSseStream } from "./agentSse";
 export * from "./composer";
 export * from "./patchUtils";
-export * from "./workflows";
 export * from "./types";
+export {
+  fetchInlineEditPatch,
+  requestTabCompletion,
+  formatAgentTimeline,
+  watchAgentRun,
+  buildTabCompletionMessage,
+  parseTabCompletionResponse,
+  computePatchedContent,
+} from "./workflows";
+export type {
+  InlineEditParams,
+  InlineEditResult,
+  AgentRunWatchOptions,
+} from "./workflows";

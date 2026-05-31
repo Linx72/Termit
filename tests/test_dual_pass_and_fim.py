@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from typing import Optional
 
 from app.core.config import Settings
 from app.domain.schemas import ChatRequest, FimCompletionRequest, TaskCreateRequest, TaskMode, TaskType

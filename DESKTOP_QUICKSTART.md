@@ -2,11 +2,20 @@
 
 Своё приложение **Termit** + свой AI (Ollama). **Cursor не нужен.**
 
+## Полная автоматическая настройка
+
+```bash
+cd /path/to/Termit
+chmod +x scripts/*.sh
+./scripts/do_all_setup.sh
+```
+
+Скрипт: venv, тесты, Node в `.tools/`, сборка SDK и desktop, push на GitHub (если SSH настроен).
+
 ## Один скрипт (разработка)
 
 ```bash
 cd /path/to/Termit
-chmod +x scripts/run_termit_stack.sh scripts/package_desktop.sh
 ./scripts/run_termit_stack.sh
 ```
 

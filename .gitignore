@@ -10,6 +10,8 @@ __pycache__/
 # Client builds
 clients/*/node_modules/
 clients/*/dist/
+clients/termit-desktop/dist-electron/
+clients/termit-desktop/release/
 clients/termit-desktop/out/
 
 # Runtime artifacts under data/ (keep seed JSON tracked)

@@ -48,6 +48,11 @@ if ! command -v npm >/dev/null 2>&1; then
   export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 fi
 if ! command -v npm >/dev/null 2>&1; then
+  "$ROOT/scripts/install_node_local.sh" || true
+  NODE_BIN="$(find "$ROOT/.tools" -path '*/bin/npm' 2>/dev/null | head -1)"
+  [[ -n "$NODE_BIN" ]] && export PATH="$(dirname "$NODE_BIN"):${PATH}"
+fi
+if ! command -v npm >/dev/null 2>&1; then
   echo "error: npm required for desktop. Install Node 20+ or run server only: $0 --server-only" >&2
   exit 1
 fi
