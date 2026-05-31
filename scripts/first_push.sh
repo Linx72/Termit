@@ -23,4 +23,4 @@ for tag in v0.2.0 v0.3.0 v0.3.1; do
   fi
 done
 
-echo "Done. Remote: https://github.com/orosam/Termit"
+echo "Done. Remote: https://github.com/Linx72/Termit"

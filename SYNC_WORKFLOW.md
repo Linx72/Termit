@@ -2,7 +2,7 @@
 
 GitHub — единственный источник правды. Локальные изменения на каждой машине должны регулярно попадать в `origin/main`.
 
-**Репозиторий:** https://github.com/orosam/Termit
+**Репозиторий:** https://github.com/Linx72/Termit
 
 ---
 
@@ -20,14 +20,14 @@ GitHub — единственный источник правды. Локаль�
 ### 2. Клонирование
 
 ```bash
-git clone git@github.com:orosam/Termit.git
+git clone git@github.com:Linx72/Termit.git
 cd Termit
 ```
 
 HTTPS-вариант:
 
 ```bash
-git clone https://github.com/orosam/Termit.git
+git clone https://github.com/Linx72/Termit.git
 cd Termit
 ```
 
@@ -195,12 +195,12 @@ git branch -d feature/my-task
 | `Permission denied (publickey)` | Настройте SSH-ключ или переключите remote на HTTPS |
 | `could not read Username` | Используйте PAT для HTTPS |
 | `rejected (non-fast-forward)` | Сначала `git pull --rebase origin main`, потом снова push |
-| `Repository not found` | Создайте repo `orosam/Termit` на GitHub или проверьте права доступа |
+| `Repository not found` | Создайте repo `Linx72/Termit` на GitHub или проверьте права доступа |
 
 Переключение remote на HTTPS (без global config):
 
 ```bash
-git remote set-url origin https://github.com/orosam/Termit.git
+git remote set-url origin https://github.com/Linx72/Termit.git
 ```
 
 ---

@@ -5,8 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-REPO_SSH="git@github.com:orosam/Termit.git"
-REPO_HTTPS="https://github.com/orosam/Termit.git"
+REPO_SSH="git@github.com:Linx72/Termit.git"
+REPO_HTTPS="https://github.com/Linx72/Termit.git"
 
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "This directory is not a git clone."

@@ -1,7 +1,7 @@
 # GitHub — одноразовая настройка
 
-Репозиторий: **https://github.com/orosam/Termit**  
-Remote уже: `git@github.com:orosam/Termit.git`
+Репозиторий: **https://github.com/Linx72/Termit**  
+Remote уже: `git@github.com:Linx72/Termit.git`
 
 ## 1. SSH-ключ (рекомендуется)
 
@@ -64,7 +64,7 @@ git push origin v0.3.2
 ## HTTPS вместо SSH
 
 ```bash
-git remote set-url origin https://github.com/orosam/Termit.git
+git remote set-url origin https://github.com/Linx72/Termit.git
 git push -u origin main
 # логин: GitHub username, пароль: Personal Access Token
 ```
