@@ -7,6 +7,8 @@ from app.core.config import Settings
 from app.core.rbac import role_allows
 from app.domain.schemas import (
     ExecuteCommandRequest,
+    HealthzDependency,
+    HealthzResponse,
     ListFilesRequest,
     OpsCheckResult,
     OpsIncidentDrillResponse,
@@ -34,6 +36,43 @@ class OpsService:
             checks.append(await self._check_providers(providers_status_cb))
         return self._build_response(checks, OpsReadinessResponse)
 
+    async def healthz(
+        self,
+        *,
+        version: str,
+        providers_status_cb=None,
+        agent_workers_cb=None,
+        maintenance_status_cb=None,
+        local_runtime_status_cb=None,
+    ) -> HealthzResponse:
+        import time
+
+        dependencies: list[HealthzDependency] = []
+        for check in self._healthz_storage_checks():
+            started = time.perf_counter()
+            dependency = self._dependency_from_check(check, started)
+            dependencies.append(dependency)
+
+        if providers_status_cb is not None:
+            started = time.perf_counter()
+            check = await self._check_providers(providers_status_cb)
+            dependencies.append(self._dependency_from_check(check, started))
+
+        if agent_workers_cb is not None:
+            started = time.perf_counter()
+            dependencies.append(self._check_agent_workers(agent_workers_cb, started))
+
+        if maintenance_status_cb is not None:
+            started = time.perf_counter()
+            dependencies.append(self._check_maintenance_scheduler(maintenance_status_cb, started))
+
+        if local_runtime_status_cb is not None:
+            started = time.perf_counter()
+            dependencies.append(await self._check_local_runtime(local_runtime_status_cb, started))
+
+        status = self._aggregate_health_status(dependencies)
+        return HealthzResponse(status=status, version=version, dependencies=dependencies)
+
     async def incident_drill(self, providers_status_cb=None) -> OpsIncidentDrillResponse:
         checks = self._base_checks()
         checks.extend(self._drill_only_checks())
@@ -49,6 +88,174 @@ class OpsService:
             checks=summary.checks,
             recommended_actions=actions,
         )
+
+    def _healthz_storage_checks(self) -> list[OpsCheckResult]:
+        return [
+            self._check_path_writable(self.settings.memory_sqlite_path, "memory_sqlite"),
+            self._check_path_writable(self.settings.task_sqlite_path, "task_sqlite"),
+            self._check_path_writable(self.settings.agent_run_sqlite_path, "agent_run_sqlite"),
+            self._check_path_writable(self.settings.quota_sqlite_path, "quota_sqlite"),
+            self._check_agent_registry_path(),
+        ]
+
+    def _check_agent_registry_path(self) -> OpsCheckResult:
+        path = Path(self.settings.agent_registry_file_path).resolve()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            return OpsCheckResult(
+                name="agent_registry",
+                passed=True,
+                severity="info",
+                detail=f"Agent registry path ready ({path.parent})",
+            )
+        except OSError as exc:
+            return OpsCheckResult(
+                name="agent_registry",
+                passed=False,
+                severity="critical",
+                detail=f"Agent registry path unavailable: {exc}",
+            )
+
+    @staticmethod
+    def _dependency_from_check(check: OpsCheckResult, started: float) -> HealthzDependency:
+        import time
+
+        latency_ms = round((time.perf_counter() - started) * 1000, 2)
+        if not check.passed:
+            status = "unhealthy" if check.severity == "critical" else "degraded"
+        else:
+            status = "ok"
+        return HealthzDependency(
+            name=check.name,
+            status=status,
+            detail=check.detail,
+            latency_ms=latency_ms,
+        )
+
+    @staticmethod
+    def _check_agent_workers(agent_workers_cb, started: float) -> HealthzDependency:
+        import time
+
+        metrics = agent_workers_cb()
+        worker_count = int(metrics.get("worker_count", 0))
+        alive_workers = int(metrics.get("alive_workers", 0))
+        latency_ms = round((time.perf_counter() - started) * 1000, 2)
+        if worker_count <= 0:
+            return HealthzDependency(
+                name="agent_workers",
+                status="unhealthy",
+                detail="Agent worker pool is not configured.",
+                latency_ms=latency_ms,
+            )
+        if alive_workers <= 0:
+            return HealthzDependency(
+                name="agent_workers",
+                status="unhealthy",
+                detail=f"No agent workers alive (configured={worker_count}).",
+                latency_ms=latency_ms,
+            )
+        if alive_workers < worker_count:
+            return HealthzDependency(
+                name="agent_workers",
+                status="degraded",
+                detail=f"Partial worker availability ({alive_workers}/{worker_count} alive).",
+                latency_ms=latency_ms,
+            )
+        return HealthzDependency(
+            name="agent_workers",
+            status="ok",
+            detail=f"All agent workers alive ({alive_workers}/{worker_count}).",
+            latency_ms=latency_ms,
+        )
+
+    @staticmethod
+    def _check_maintenance_scheduler(maintenance_status_cb, started: float) -> HealthzDependency:
+        import time
+
+        status_payload = maintenance_status_cb()
+        latency_ms = round((time.perf_counter() - started) * 1000, 2)
+        enabled = bool(status_payload.get("enabled"))
+        if not enabled:
+            return HealthzDependency(
+                name="agent_maintenance",
+                status="ok",
+                detail="Agent maintenance scheduler disabled by config.",
+                latency_ms=latency_ms,
+            )
+        thread_alive = bool(status_payload.get("thread_alive"))
+        cleanup_errors = int(status_payload.get("cleanup_errors_total", 0))
+        snapshot_errors = int(status_payload.get("snapshot_errors_total", 0))
+        if not thread_alive:
+            return HealthzDependency(
+                name="agent_maintenance",
+                status="degraded",
+                detail="Maintenance scheduler enabled but thread is not alive.",
+                latency_ms=latency_ms,
+            )
+        if cleanup_errors > 0 or snapshot_errors > 0:
+            return HealthzDependency(
+                name="agent_maintenance",
+                status="degraded",
+                detail=(
+                    f"Maintenance scheduler running with errors "
+                    f"(cleanup={cleanup_errors}, snapshot={snapshot_errors})."
+                ),
+                latency_ms=latency_ms,
+            )
+        return HealthzDependency(
+            name="agent_maintenance",
+            status="ok",
+            detail="Maintenance scheduler running.",
+            latency_ms=latency_ms,
+        )
+
+    @staticmethod
+    async def _check_local_runtime(local_runtime_status_cb, started: float) -> HealthzDependency:
+        import time
+
+        try:
+            runtime_status = await local_runtime_status_cb()
+        except Exception as exc:  # noqa: BLE001
+            latency_ms = round((time.perf_counter() - started) * 1000, 2)
+            return HealthzDependency(
+                name="local_runtime",
+                status="degraded",
+                detail=f"Local runtime probe failed: {exc}",
+                latency_ms=latency_ms,
+            )
+
+        latency_ms = round((time.perf_counter() - started) * 1000, 2)
+        providers = getattr(runtime_status, "providers", []) or []
+        healthy = [item for item in providers if getattr(item, "ok", False)]
+        if not providers:
+            return HealthzDependency(
+                name="local_runtime",
+                status="degraded",
+                detail="No local runtime providers configured.",
+                latency_ms=latency_ms,
+            )
+        if not healthy:
+            return HealthzDependency(
+                name="local_runtime",
+                status="degraded",
+                detail="Local runtime providers are unavailable.",
+                latency_ms=latency_ms,
+            )
+        names = ", ".join(item.provider for item in healthy)
+        return HealthzDependency(
+            name="local_runtime",
+            status="ok",
+            detail=f"Healthy local runtime providers: {names}",
+            latency_ms=latency_ms,
+        )
+
+    @staticmethod
+    def _aggregate_health_status(dependencies: list[HealthzDependency]) -> str:
+        if any(item.status == "unhealthy" for item in dependencies):
+            return "unhealthy"
+        if any(item.status == "degraded" for item in dependencies):
+            return "degraded"
+        return "ok"
 
     def _base_checks(self) -> list[OpsCheckResult]:
         return [

@@ -18,6 +18,36 @@
    - UI button `Check readiness`, or `GET /api/ops/readiness`
 6. Paste API key in UI (stored in browser local storage).
 
+## Client apps (optional)
+
+Termit works as a backend; clients provide Cursor-like UX without Cursor billing:
+
+| Client | Setup |
+|--------|--------|
+| **VS Code extension** | `cd clients/termit-client && npm i && npm run build` then `cd ../vscode-extension && npm i && npm run build` — press F5 |
+| **Desktop app** | Same SDK build, then `cd clients/termit-desktop && npm i && npm run dev` |
+| **TypeScript SDK** | `@termit/client` — chat, tasks, agents, `apply_patch`, workflows |
+
+See [`clients/CLIENT_UX.md`](clients/CLIENT_UX.md). With auth enabled, set `termit.apiKey` / desktop API key to an **operator** key for patches.
+
+## Hosted beta (Docker)
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+curl -s http://localhost:8080/api/ops/readiness
+```
+
+See [`HOSTED_DEPLOYMENT.md`](HOSTED_DEPLOYMENT.md).
+
+## Weekly quality loop
+
+```bash
+./scripts/release_smoke.sh          # tests + health before release
+./scripts/weekly_eval.sh          # eval suite + KPI snapshot
+./scripts/stage1_weekly.sh        # finetune pipeline (optional)
+```
+
 ## First Tasks to Try
 
 1. Coding prompt (`task_type=coding`) with memory enabled.

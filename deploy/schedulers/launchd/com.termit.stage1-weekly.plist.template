@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.termit.stage1-weekly</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>@REPO_ROOT@/scripts/stage1_weekly.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>TERMIT_STAGE1_ENV_FILE</key>
+    <string>@REPO_ROOT@/deploy/schedulers/stage1-weekly.env</string>
+  </dict>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>3</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>@LOG_DIR@/termit-stage1-weekly.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@LOG_DIR@/termit-stage1-weekly.err.log</string>
+</dict>
+</plist>

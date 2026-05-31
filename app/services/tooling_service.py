@@ -8,6 +8,9 @@ from pathlib import Path
 from threading import Lock
 
 from app.domain.schemas import (
+    ApplyPatchHunk,
+    ApplyPatchRequest,
+    ApplyPatchResponse,
     ExecuteCommandRequest,
     ExecuteCommandResponse,
     ListFilesRequest,
@@ -187,6 +190,113 @@ class ToolingService:
                 duration_ms=duration_ms,
             )
 
+    def apply_patch(self, payload: ApplyPatchRequest) -> ApplyPatchResponse:
+        target = self._resolve_in_root(payload.path)
+        rel_path = payload.path.replace("\\", "/")
+
+        risk_level, reason = self._classify_patch_path(rel_path)
+        if risk_level == ToolRiskLevel.blocked:
+            self._record_audit(
+                tool_name="apply_patch",
+                action="policy_block",
+                risk_level=risk_level,
+                allowed=False,
+                reason=reason,
+                path=payload.path,
+            )
+            return ApplyPatchResponse(
+                path=payload.path,
+                risk_level=risk_level,
+                policy_reason=reason,
+                applied=False,
+            )
+
+        if target.exists() and not target.is_file():
+            raise ToolingError(f"Path is not a file: {payload.path}")
+
+        file_exists = target.exists()
+        if not file_exists and not payload.create:
+            raise ToolingError(
+                f"File does not exist: {payload.path}. Set create=true to create it."
+            )
+
+        if payload.content is not None and payload.hunks:
+            raise ToolingError("Provide either content or hunks, not both.")
+
+        if payload.content is None and not payload.hunks:
+            raise ToolingError("Patch must include content or at least one hunk.")
+
+        current_text = target.read_text(encoding="utf-8") if file_exists else ""
+        new_text, hunks_applied = self._build_patched_text(
+            current_text=current_text,
+            content=payload.content,
+            hunks=payload.hunks,
+        )
+        preview_excerpt = new_text[:500]
+        created = not file_exists
+
+        if payload.dry_run:
+            self._record_audit(
+                tool_name="apply_patch",
+                action="dry_run",
+                risk_level=ToolRiskLevel.safe,
+                allowed=True,
+                reason="Dry run requested; patch was not applied.",
+                path=payload.path,
+            )
+            return ApplyPatchResponse(
+                path=payload.path,
+                risk_level=ToolRiskLevel.safe,
+                policy_reason="Dry run preview only.",
+                applied=False,
+                created=created,
+                hunks_applied=hunks_applied,
+                bytes_written=len(new_text.encode("utf-8")),
+                preview_excerpt=preview_excerpt,
+            )
+
+        if not payload.confirmed:
+            self._record_audit(
+                tool_name="apply_patch",
+                action="confirmation_required",
+                risk_level=ToolRiskLevel.confirm,
+                allowed=False,
+                reason="File writes require explicit confirmation.",
+                path=payload.path,
+            )
+            return ApplyPatchResponse(
+                path=payload.path,
+                risk_level=ToolRiskLevel.confirm,
+                policy_reason="File writes require explicit confirmation.",
+                applied=False,
+                requires_confirmation=True,
+                created=created,
+                hunks_applied=hunks_applied,
+                bytes_written=len(new_text.encode("utf-8")),
+                preview_excerpt=preview_excerpt,
+            )
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(new_text, encoding="utf-8")
+        self._record_audit(
+            tool_name="apply_patch",
+            action="applied",
+            risk_level=ToolRiskLevel.confirm,
+            allowed=True,
+            reason="Patch applied.",
+            path=payload.path,
+        )
+        return ApplyPatchResponse(
+            path=payload.path,
+            risk_level=ToolRiskLevel.confirm,
+            policy_reason=reason,
+            applied=True,
+            created=created,
+            hunks_applied=hunks_applied,
+            bytes_written=len(new_text.encode("utf-8")),
+            preview_excerpt=preview_excerpt,
+        )
+
     def get_audit_events(self, limit: int = 100) -> list[ToolAuditEvent]:
         safe_limit = max(1, min(limit, 1000))
         with self._audit_lock:
@@ -231,6 +341,44 @@ class ToolingService:
             return ToolRiskLevel.safe, "Command is allowlisted as safe."
 
         return ToolRiskLevel.confirm, "Command is not allowlisted and needs confirmation."
+
+    def _classify_patch_path(self, rel_path: str) -> tuple[ToolRiskLevel, str]:
+        normalized = rel_path.replace("\\", "/").strip("/")
+        lower = normalized.lower()
+        basename = Path(normalized).name.lower()
+
+        blocked_prefixes = (".git/", ".ssh/")
+        blocked_exact = {".env", ".env.local", ".env.production", "credentials.json"}
+        blocked_suffixes = (".pem", ".key", ".p12", ".pfx")
+
+        if lower in blocked_exact or basename in blocked_exact:
+            return ToolRiskLevel.blocked, "Path is blocked by safety policy."
+        if any(lower.startswith(prefix) or f"/{prefix}" in f"/{lower}/" for prefix in blocked_prefixes):
+            return ToolRiskLevel.blocked, "Path is blocked by safety policy."
+        if lower.endswith(blocked_suffixes) or basename.endswith(blocked_suffixes):
+            return ToolRiskLevel.blocked, "Path is blocked by safety policy."
+
+        return ToolRiskLevel.confirm, "File write requires confirmation."
+
+    @staticmethod
+    def _build_patched_text(
+        *,
+        current_text: str,
+        content: str | None,
+        hunks: list[ApplyPatchHunk],
+    ) -> tuple[str, int]:
+        if content is not None:
+            return content, 0
+
+        updated = current_text
+        for index, hunk in enumerate(hunks):
+            count = updated.count(hunk.old_text)
+            if count == 0:
+                raise ToolingError(f"Hunk {index + 1} old_text not found in file.")
+            if count > 1:
+                raise ToolingError(f"Hunk {index + 1} old_text matches {count} times; must be unique.")
+            updated = updated.replace(hunk.old_text, hunk.new_text, 1)
+        return updated, len(hunks)
 
     def _record_audit(
         self,

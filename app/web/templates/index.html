@@ -1,94 +1,111 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Termit - Open Source Coding Agent</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        background: #0f1115;
-        color: #e6eaf2;
-      }
-      .container {
-        max-width: 980px;
-        margin: 30px auto;
-        padding: 24px;
-        background: #161b22;
-        border-radius: 12px;
-      }
-      textarea, select, input, button {
-        width: 100%;
-        box-sizing: border-box;
-        margin-top: 8px;
-        margin-bottom: 14px;
-        padding: 10px 12px;
-        border-radius: 8px;
-        border: 1px solid #2a3342;
-        background: #0f141d;
-        color: #e6eaf2;
-      }
-      input[type="checkbox"] {
-        width: auto;
-        margin-right: 8px;
-      }
-      button {
-        cursor: pointer;
-        background: #1f6feb;
-        border: 0;
-        font-weight: 600;
-      }
-      pre {
-        white-space: pre-wrap;
-        background: #0b1017;
-        border: 1px solid #2a3342;
-        border-radius: 8px;
-        padding: 14px;
-      }
-      .meta {
-        color: #9fb0c7;
-        font-size: 13px;
-        margin-bottom: 12px;
-      }
-      .health-badge {
-        display: none;
-        margin-bottom: 12px;
-        padding: 8px 10px;
-        border-radius: 8px;
-        font-size: 13px;
-        border: 1px solid #2a3342;
-      }
-      .health-badge.ok {
-        display: block;
-        background: #0f1b15;
-        border-color: #1f7a45;
-        color: #8ee4b2;
-      }
-      .health-badge.warning {
-        display: block;
-        background: #2a230f;
-        border-color: #9d7c2f;
-        color: #ffd88a;
-      }
-      .health-badge.degraded {
-        display: block;
-        background: #2a1212;
-        border-color: #b84949;
-        color: #ffb0b0;
-      }
-    </style>
+    <link rel="stylesheet" href="/static/ui.css" />
+    <script src="/static/ui-i18n.js"></script>
+    <script src="/static/ui-tips-data.js"></script>
+    <script src="/static/ui-tooltips.js"></script>
+    <script src="/static/charts.js"></script>
+    <script src="/static/agent-hub.js"></script>
+    <script src="/static/terminal-dock.js"></script>
   </head>
   <body>
-    <div class="container">
-      <h1>Termit</h1>
-      <div class="meta">Open-source coding orchestrator MVP</div>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">T</div>
+          <div>
+            <h1>Termit</h1>
+            <small>AI orchestrator</small>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a href="#ops-dashboard-section"><span class="nav-icon">📊</span><span data-i18n="nav.sidebarDashboard">Панель</span></a>
+          <a href="#chat-section"><span class="nav-icon">💬</span><span data-i18n="nav.sidebarChat">Чат</span></a>
+          <a href="#task-section"><span class="nav-icon">📋</span><span data-i18n="nav.sidebarTasks">Задачи</span></a>
+          <a href="#agent-section" class="is-agents"><span class="nav-icon">🤖</span><span data-i18n="nav.sidebarAgents">Агенты</span></a>
+          <a href="#finetune-section"><span class="nav-icon">🧬</span><span data-i18n="nav.sidebarFinetune">Finetune</span></a>
+          <a href="#stage1-section"><span class="nav-icon">⚡</span><span data-i18n="nav.sidebarStage1">Stage1</span></a>
+          <a href="#eval-section"><span class="nav-icon">✓</span><span data-i18n="nav.sidebarEval">Eval</span></a>
+          <a href="#ops-section"><span class="nav-icon">🛠</span><span data-i18n="nav.sidebarOps">Ops</span></a>
+        </nav>
+      </aside>
+      <div class="main-column">
+        <header class="top-bar">
+          <div class="meta" id="pageSubtitle" data-i18n="page.subtitle">Open-source coding orchestrator MVP · панель управления</div>
+          <div class="lang-bar">
+            <label for="uiLang" data-i18n="label.lang" style="margin:0;width:auto;">Язык интерфейса</label>
+            <select id="uiLang" data-tip="uiLang" aria-label="Interface language">
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </header>
+        <div class="container">
 
-      <label for="apiKey">API key (optional, saved locally)</label>
-      <input id="apiKey" type="password" placeholder="Used when TERMIT_AUTH_ENABLED=true" />
+      <div class="help-panel">
+        <h2 id="helpTitle" data-i18n="help.title">Справка: функционал и логика работы</h2>
+        <div class="meta help-nav">
+          <span data-i18n="help.navLabel">Разделы:</span>
+          <a href="#ops-dashboard-section" id="nav-dashboard">Панель</a> ·
+          <a href="#chat-section" id="nav-chat">Чат</a> ·
+          <a href="#task-section" id="nav-task">Задачи</a> ·
+          <a href="#agent-section" id="nav-agents">Агенты</a> ·
+          <a href="#finetune-section" id="nav-finetune">Finetune</a> ·
+          <a href="#stage1-section" id="nav-stage1">Stage1</a> ·
+          <a href="#eval-section" id="nav-eval">Eval</a> ·
+          <a href="#ops-section" id="nav-ops">Ops</a>
+        </div>
 
-      <label for="taskType">Task type</label>
-      <select id="taskType">
+        <h4 data-i18n="help.quickstartTitle">Быстрый старт (2 терминала)</h4>
+        <div id="helpQuickstartBody"></div>
+
+        <h4 data-i18n="help.troubleTitle">Если «нет ответа»</h4>
+        <div id="helpTroubleBody"></div>
+      </div>
+
+      <label for="apiKey" data-tip="apiKey" data-i18n="label.apiKey">API-ключ (необязательно, сохраняется локально)</label>
+      <input id="apiKey" data-tip="apiKey" type="password" data-i18n-placeholder="apiKeyPlaceholder" placeholder="Нужен при TERMIT_AUTH_ENABLED=true" />
+
+      <section class="content-section" id="ops-dashboard-section">
+      <h3 data-i18n="section.dashboard">Панель оператора</h3>
+      <details class="section-help" id="help-dashboard" data-i18n-html="dashboard"></details>
+      <div class="dashboard-grid">
+        <div id="dashQueueCard" data-tip="dashQueueCard" class="dash-card ok">
+          <h4 data-i18n="dash.queue">Загрузка очереди</h4>
+          <div id="dashQueueValue" class="dash-value">—</div>
+          <div id="dashQueueMeta" class="dash-meta">Ожидание метрик...</div>
+        </div>
+        <div id="dashWorkersCard" data-tip="dashWorkersCard" class="dash-card ok">
+          <h4 data-i18n="dash.workers">Живые воркеры</h4>
+          <div id="dashWorkersValue" class="dash-value">—</div>
+          <div id="dashWorkersMeta" class="dash-meta">Ожидание метрик...</div>
+        </div>
+        <div id="dashDeadLetterCard" data-tip="dashDeadLetterCard" class="dash-card ok">
+          <h4 data-i18n="dash.deadLetter">Dead-letter rate</h4>
+          <div id="dashDeadLetterValue" class="dash-value">—</div>
+          <div id="dashDeadLetterMeta" class="dash-meta">Ожидание метрик...</div>
+          <div id="dashDeadLetterTrend" class="dash-trend"></div>
+        </div>
+        <div id="dashRunsCard" data-tip="dashRunsCard" class="dash-card ok">
+          <h4 data-i18n="dash.runs">Состояния run</h4>
+          <div id="dashRunsValue" class="dash-value">—</div>
+          <div id="dashRunsMeta" class="dash-meta">Ожидание метрик...</div>
+        </div>
+      </div>
+      <button id="refreshDashboardBtn" data-tip="refreshDashboardBtn" data-i18n="btn.refreshDashboard">Обновить панель</button>
+      <button id="checkHealthzBtn" data-tip="checkHealthzBtn" data-i18n="btn.checkHealthz">Проверить /healthz</button>
+      </section>
+
+      <section class="content-section">
+      <h3 data-i18n="section.chat">Чат</h3>
+      <details class="section-help" id="chat-section" data-i18n-html="chat"></details>
+
+      <label for="taskType" data-i18n="label.taskType">Task type</label>
+      <select id="taskType" data-tip="taskType">
         <option value="coding">coding</option>
         <option value="review">review</option>
         <option value="debug">debug</option>
@@ -96,187 +113,294 @@
         <option value="general">general</option>
       </select>
 
-      <label for="model">Model (optional override)</label>
-      <select id="model">
-        <option value="">auto (router decides)</option>
+      <label for="model" data-i18n="label.model">Model (optional override)</label>
+      <select id="model" data-tip="model">
+        <option id="modelAutoOption" value="">auto (router decides)</option>
         {% for model in models %}
         <option value="{{ model }}">{{ model }}</option>
         {% endfor %}
       </select>
 
-      <label for="sessionId">Session ID (optional)</label>
-      <input id="sessionId" placeholder="auto-create when memory is enabled" />
+      <label for="sessionId" data-tip="sessionId" data-i18n="label.sessionId">Session ID (optional)</label>
+      <input id="sessionId" data-tip="sessionId" data-i18n-placeholder="sessionPlaceholder" placeholder="auto-create when memory is enabled" />
 
       <label>
-        <input id="useMemory" type="checkbox" checked />
-        Use session memory
+        <input id="useMemory" data-tip="useMemory" type="checkbox" checked />
+        <span data-i18n="label.useMemory">Use session memory</span>
       </label>
       <label>
-        <input id="useRetrieval" type="checkbox" />
-        Use codebase retrieval
+        <input id="useRetrieval" data-tip="useRetrieval" type="checkbox" />
+        <span data-i18n="label.useRetrieval">Use codebase retrieval</span>
       </label>
-      <label for="retrievalPrefix">Retrieval path prefix (optional)</label>
-      <input id="retrievalPrefix" placeholder="app/services/" />
-      <label for="repoProfile">Repo profile (optional)</label>
-      <input id="repoProfile" placeholder="termit-core" />
-      <label for="routingPolicy">Routing policy</label>
-      <select id="routingPolicy">
+      <label for="retrievalPrefix" data-tip="retrievalPrefix" data-i18n="label.retrievalPrefix">Retrieval path prefix (optional)</label>
+      <input id="retrievalPrefix" data-tip="retrievalPrefix" placeholder="app/services/" />
+      <label for="repoProfile" data-tip="repoProfile" data-i18n="label.repoProfile">Repo profile (optional)</label>
+      <input id="repoProfile" data-tip="repoProfile" placeholder="termit-core" />
+      <label for="routingPolicy" data-tip="routingPolicy" data-i18n="label.routingPolicy">Routing policy</label>
+      <select id="routingPolicy" data-tip="routingPolicy">
         <option value="default">default</option>
         <option value="benchmark">benchmark</option>
       </select>
 
-      <label for="prompt">Prompt</label>
-      <textarea id="prompt" rows="7" placeholder="Describe coding task..."></textarea>
+      <label for="prompt" data-i18n="label.prompt">Prompt</label>
+      <textarea id="prompt" data-tip="prompt" rows="7" data-i18n-placeholder="promptPlaceholder" placeholder="Describe coding task..."></textarea>
 
-      <button id="sendBtn">Run</button>
-      <button id="streamBtn">Run stream</button>
-      <button id="clearSessionBtn">Clear session memory</button>
-      <label for="exportFormat">Export format</label>
-      <select id="exportFormat">
+      <button id="sendBtn" data-tip="sendBtn" data-i18n="btn.run">Run</button>
+      <button id="streamBtn" data-tip="streamBtn" data-i18n="btn.runStream">Run stream</button>
+      <button id="clearSessionBtn" data-tip="clearSessionBtn" data-i18n="btn.clearSession">Clear session memory</button>
+      <label for="exportFormat" data-tip="exportFormat" data-i18n="label.exportFormat">Export format</label>
+      <select id="exportFormat" data-tip="exportFormat">
         <option value="markdown">markdown</option>
         <option value="txt">txt</option>
         <option value="json">json</option>
       </select>
-      <button id="exportSessionBtn">Export session</button>
-      <button id="downloadExportBtn">Download export</button>
-      <button id="checkProvidersBtn">Check providers</button>
-      <button id="usageBtn">Check usage</button>
+      <button id="exportSessionBtn" data-tip="exportSessionBtn" data-i18n="btn.exportSession">Export session</button>
+      <button id="downloadExportBtn" data-tip="downloadExportBtn" data-i18n="btn.downloadExport">Download export</button>
+      <button id="checkProvidersBtn" data-tip="checkProvidersBtn" data-i18n="btn.checkProviders">Check providers</button>
+      <button id="usageBtn" data-tip="usageBtn" data-i18n="btn.checkUsage">Check usage</button>
 
-      <label for="feedbackMessage">Beta feedback</label>
-      <textarea id="feedbackMessage" rows="3" placeholder="What should we improve?"></textarea>
-      <button id="sendFeedbackBtn">Send feedback</button>
+      <label for="feedbackMessage" data-tip="feedbackMessage" data-i18n="label.feedback">Beta feedback</label>
+      <textarea id="feedbackMessage" data-tip="feedbackMessage" rows="3" data-i18n-placeholder="feedbackPlaceholder" placeholder="What should we improve?"></textarea>
+      <button id="sendFeedbackBtn" data-tip="sendFeedbackBtn" data-i18n="btn.sendFeedback">Send feedback</button>
+      </section>
 
-      <h3>Task console</h3>
-      <label for="taskInput">Task input</label>
-      <textarea id="taskInput" rows="4" placeholder="Describe end-to-end task..."></textarea>
-      <label for="taskMode">Task mode</label>
-      <select id="taskMode">
+      <section class="content-section">
+      <h3 data-i18n="section.task">Task console</h3>
+      <details class="section-help" id="task-section" data-i18n-html="task"></details>
+      <label for="taskInput" data-tip="taskInput" data-i18n="label.taskInput">Task input</label>
+      <textarea id="taskInput" data-tip="taskInput" rows="4" data-i18n-placeholder="taskInputPlaceholder" placeholder="Опишите end-to-end задачу..."></textarea>
+      <label for="taskMode" data-i18n="label.taskMode">Task mode</label>
+      <select id="taskMode" data-tip="taskMode">
         <option value="auto">auto</option>
         <option value="guided">guided</option>
       </select>
-      <button id="createTaskBtn">Create task</button>
-      <label for="taskId">Task ID</label>
-      <input id="taskId" placeholder="filled after task creation" />
-      <button id="refreshTaskBtn">Refresh task</button>
-      <button id="listTasksBtn">List recent tasks</button>
-      <button id="loadTaskEventsBtn">Load task events</button>
-      <button id="cancelTaskBtn">Cancel task</button>
+      <button id="createTaskBtn" data-tip="createTaskBtn" data-i18n="btn.createTask">Create task</button>
+      <label for="taskId" data-i18n="label.taskId">Task ID</label>
+      <input id="taskId" data-tip="taskId" data-i18n-placeholder="taskIdPlaceholder" placeholder="появится после создания" />
+      <button id="refreshTaskBtn" data-tip="refreshTaskBtn" data-i18n="btn.refreshTask">Refresh task</button>
+      <button id="listTasksBtn" data-tip="listTasksBtn" data-i18n="btn.listTasks">List recent tasks</button>
+      <button id="loadTaskEventsBtn" data-tip="loadTaskEventsBtn" data-i18n="btn.loadTaskEvents">Load task events</button>
+      <button id="cancelTaskBtn" data-tip="cancelTaskBtn" data-i18n="btn.cancelTask">Cancel task</button>
       <pre id="taskPanel" class="meta" style="max-height:180px;overflow:auto;"></pre>
+      </section>
 
-      <h3>Multi-agent orchestration</h3>
-      <label for="orchestrationInput">Orchestration objective</label>
-      <textarea id="orchestrationInput" rows="3" placeholder="Plan, execute, verify, and report..."></textarea>
-      <button id="runOrchestrationBtn">Run orchestration</button>
+      <section class="content-section">
+      <h3 data-i18n="section.orchestration">Multi-agent orchestration</h3>
+      <details class="section-help" data-i18n-html="orchestration"></details>
+      <label for="orchestrationInput" data-tip="orchestrationInput" data-i18n="label.orchestrationInput">Orchestration objective</label>
+      <textarea id="orchestrationInput" data-tip="orchestrationInput" rows="3" data-i18n-placeholder="orchestrationPlaceholder" placeholder="Спланировать, выполнить, проверить, отчёт..."></textarea>
+      <button id="runOrchestrationBtn" data-tip="runOrchestrationBtn" data-i18n="btn.runOrchestration">Run orchestration</button>
+      </section>
 
-      <h3>Agent profiles</h3>
-      <label for="newAgentName">New agent name</label>
-      <input id="newAgentName" placeholder="Local Dev Agent" />
-      <label for="newAgentPrompt">New agent system prompt</label>
-      <textarea id="newAgentPrompt" rows="3" placeholder="You are a local autonomous coding agent."></textarea>
-      <label for="newAgentModel">New agent model (optional)</label>
-      <input id="newAgentModel" placeholder="ollama:qwen2.5-coder:14b" />
-      <label for="newAgentTools">New agent enabled tools (comma separated)</label>
-      <input id="newAgentTools" placeholder="list_files,read_file,execute_command" />
+      <section class="content-section" id="agent-section">
+      <h3 data-i18n="section.agents">Agent profiles</h3>
+      <details class="section-help" data-i18n-html="agents"></details>
+
+      <div class="agent-hub">
+        <div class="hub-hero">
+          <div>
+            <h2 data-i18n="agentHub.title">Центр агентов</h2>
+            <p data-i18n="agentHub.subtitle">Карточки профилей, live-метрики очереди и timeline run — всё для работы с автономными агентами.</p>
+          </div>
+          <div id="agentHubHealth" class="hub-health-pill ok">● OK</div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h4 data-i18n="agentHub.chartStates">Состояния run</h4>
+            <canvas id="chartRunStates" data-tip="chartRunStates" height="180"></canvas>
+            <div id="chartRunStatesLegend" class="chart-legend"></div>
+          </div>
+          <div class="chart-card">
+            <h4 data-i18n="agentHub.chartQueue">Загрузка очереди (live)</h4>
+            <canvas id="chartQueueHistory" data-tip="chartQueueHistory" height="160"></canvas>
+          </div>
+          <div class="chart-card">
+            <h4 data-i18n="agentHub.chartWorkers">Воркеры</h4>
+            <canvas id="chartWorkers" data-tip="chartWorkers" height="120"></canvas>
+          </div>
+        </div>
+
+        <div class="agent-cards-header">
+          <h4 data-i18n="agentHub.yourAgents">Ваши агенты</h4>
+          <button type="button" id="refreshAgentHubBtn" data-tip="refreshAgentHubBtn" class="btn-secondary" data-i18n="agentHub.refresh">Обновить</button>
+        </div>
+        <div id="agentCards" class="agent-cards"></div>
+
+        <div class="recent-runs-panel">
+          <div class="agent-cards-header">
+            <h4 data-i18n="agentHub.recentRuns">Последние run</h4>
+            <button type="button" id="duplicateAgentBtn" class="btn-secondary" data-i18n="agentHub.duplicate" data-tip="duplicateAgentBtn">Клонировать</button>
+          </div>
+          <div id="agentRecentRuns" class="recent-runs-list" data-tip="agentRecentRuns"></div>
+        </div>
+
+        <div class="agent-workspace">
+          <div class="workspace-panel">
+            <h4 data-i18n="agentHub.compose">Запуск агента</h4>
+            <label for="agentId" data-i18n="label.agentId">Agent ID</label>
+            <input id="agentId" data-tip="agentId" placeholder="agt_..." />
+            <label for="agentRunInput" data-tip="agentRunInput" data-i18n="label.agentRunInput">Agent run input</label>
+            <textarea id="agentRunInput" data-tip="agentRunInput" rows="4" data-i18n-placeholder="agentHub.promptPlaceholder" placeholder="Опишите задачу для агента..."></textarea>
+            <div class="btn-row">
+              <button id="runAgentBtn" data-tip="runAgentBtn" data-i18n="btn.runAgent">Run agent</button>
+              <button id="queueAgentRunBtn" data-tip="queueAgentRunBtn" data-i18n="btn.queueAgentRun">Queue run (background)</button>
+            </div>
+          </div>
+          <div class="workspace-panel">
+            <h4 data-i18n="agentHub.liveFeed">Live feed</h4>
+            <div id="agentRunTimeline" class="run-timeline">
+              <p class="timeline-empty" data-i18n="agentHub.timelineEmpty">Запустите run — здесь появится timeline событий.</p>
+            </div>
+            <div id="agentLiveOutput" class="live-output">
+              <p class="timeline-empty" data-i18n="agentHub.liveEmpty">Ответ агента и статус run в реальном времени.</p>
+            </div>
+          </div>
+        </div>
+
+        <details class="advanced-agent-form">
+          <summary data-i18n="agentHub.advanced">Расширенные настройки и создание агента</summary>
+          <label for="newAgentName" data-tip="newAgentName" data-i18n="label.newAgentName">New agent name</label>
+          <input id="newAgentName" data-tip="newAgentName" placeholder="Local Dev Agent" />
+          <label for="newAgentPrompt" data-tip="newAgentPrompt" data-i18n="label.newAgentPrompt">New agent system prompt</label>
+          <textarea id="newAgentPrompt" data-tip="newAgentPrompt" rows="3" placeholder="You are a local autonomous coding agent."></textarea>
+          <label for="newAgentModel" data-tip="newAgentModel" data-i18n="label.newAgentModel">New agent model (optional)</label>
+          <input id="newAgentModel" data-tip="newAgentModel" placeholder="ollama:qwen2.5-coder:14b" />
+          <label for="newAgentTools" data-tip="newAgentTools" data-i18n="label.newAgentTools">New agent enabled tools (comma separated)</label>
+          <input id="newAgentTools" data-tip="newAgentTools" placeholder="list_files,read_file,execute_command" />
+          <label>
+            <input id="newAgentAllowOnline" data-tip="newAgentAllowOnline" type="checkbox" />
+            <span data-i18n="label.allowOnline">Allow online automation for this agent</span>
+          </label>
+          <div class="btn-row">
+            <button id="createAgentBtn" data-tip="createAgentBtn" data-i18n="btn.createAgent">Create agent</button>
+            <button id="listAgentsBtn" data-tip="listAgentsBtn" data-i18n="btn.listAgents">List agents</button>
+          </div>
+          <label for="agentOnlineUrl" data-tip="agentOnlineUrl" data-i18n="label.agentOnlineUrl">Agent online URL (optional)</label>
+          <input id="agentOnlineUrl" data-tip="agentOnlineUrl" placeholder="https://example.com" />
+          <label for="agentOnlineObjective" data-tip="agentOnlineObjective" data-i18n="label.agentOnlineObjective">Agent online objective (optional)</label>
+          <input id="agentOnlineObjective" data-tip="agentOnlineObjective" placeholder="Collect page evidence and blockers" />
+          <label for="agentRunId" data-tip="agentRunId" data-i18n="label.agentRunId">Agent run ID</label>
+          <input id="agentRunId" data-tip="agentRunId" placeholder="arun_..." />
+          <div class="btn-row">
+            <button id="checkAgentRunBtn" data-tip="checkAgentRunBtn" data-i18n="btn.checkAgentRun">Check queued run</button>
+            <button id="loadAgentRunEventsBtn" data-tip="loadAgentRunEventsBtn" data-i18n="btn.loadAgentRunEvents">Load run events</button>
+            <button id="cancelAgentRunBtn" data-tip="cancelAgentRunBtn" data-i18n="btn.cancelAgentRun">Cancel queued run</button>
+          </div>
+          <label for="agentToolPath" data-tip="agentToolPath" data-i18n="label.agentToolPath">Agent tool path</label>
+          <input id="agentToolPath" data-tip="agentToolPath" placeholder="README.md" />
+          <button id="agentReadFileBtn" data-tip="agentReadFileBtn" data-i18n="btn.agentReadFile">Agent read file tool</button>
+        </details>
+      </div>
+      </section>
+
+      <section class="content-section">
+      <h3 data-i18n="section.team">Team workspace</h3>
+      <details class="section-help" data-i18n-html="team"></details>
+      <button id="teamUsageBtn" data-tip="teamUsageBtn" data-i18n="btn.teamUsage">Team usage</button>
+      <button id="listRoutingProfilesBtn" data-tip="listRoutingProfilesBtn" data-i18n="btn.listRoutingProfiles">List routing profiles</button>
+      <button id="exportDashboardBtn" data-tip="exportDashboardBtn" data-i18n="btn.exportDashboard">Export KPI dashboard JSON</button>
+      </section>
+
+      <section class="content-section" id="finetune-section">
+      <h3 data-i18n="section.finetune">Fine-tune pipeline</h3>
+      <details class="section-help" data-i18n-html="finetune"></details>
+      <label for="finetuneDatasetName" data-tip="finetuneDatasetName" data-i18n="label.datasetName">Dataset name</label>
+      <input id="finetuneDatasetName" data-tip="finetuneDatasetName" value="termit-export" />
+      <button id="finetuneExportBtn" data-tip="finetuneExportBtn" data-i18n="btn.exportDataset">Export dataset</button>
+      <label for="finetuneJobId" data-tip="finetuneJobId" data-i18n="label.jobId">Job ID</label>
+      <input id="finetuneJobId" data-tip="finetuneJobId" placeholder="ft_..." />
+      <button id="finetuneCreateJobBtn" data-tip="finetuneCreateJobBtn" data-i18n="btn.createJob">Create job from last export</button>
+      <button id="finetuneRunJobBtn" data-tip="finetuneRunJobBtn" data-i18n="btn.runJob">Run / validate job</button>
+      <button id="finetuneListJobsBtn" data-tip="finetuneListJobsBtn" data-i18n="btn.listJobs">List jobs</button>
+      <button id="finetuneRecipeBtn" data-tip="finetuneRecipeBtn" data-i18n="btn.trainingRecipe">Training recipe</button>
+      <label for="finetuneAdapterModel" data-tip="finetuneAdapterModel" data-i18n="label.adapterModel">Adapter model</label>
+      <input id="finetuneAdapterModel" data-tip="finetuneAdapterModel" placeholder="ollama:termit-core-ft" />
+      <button id="finetuneRegisterAdapterBtn" data-tip="finetuneRegisterAdapterBtn" data-i18n="btn.registerAdapter">Register adapter</button>
+      <button id="finetuneListAdaptersBtn" data-tip="finetuneListAdaptersBtn" data-i18n="btn.listAdapters">List adapters</button>
+      </section>
+
+      <section class="content-section" id="eval-section">
+      <h3 data-i18n="section.eval">Eval harness</h3>
+      <details class="section-help" data-i18n-html="eval"></details>
+      <label for="evalScenarioId" data-tip="evalScenarioId" data-i18n="label.scenarioId">Scenario ID</label>
+      <input id="evalScenarioId" data-tip="evalScenarioId" placeholder="A1, L1, W1..." />
+      <button id="listEvalScenariosBtn" data-tip="listEvalScenariosBtn" data-i18n="btn.listScenarios">List scenarios</button>
+      <button id="runEvalScenarioBtn" data-tip="runEvalScenarioBtn" data-i18n="btn.runScenario">Run scenario</button>
+      <label for="evalCategory" data-tip="evalCategory" data-i18n="label.suiteCategory">Suite category filter (optional)</label>
+      <input id="evalCategory" data-tip="evalCategory" placeholder="coding | local | web" />
+      <button id="runEvalSuiteBtn" data-tip="runEvalSuiteBtn" data-i18n="btn.runSuite">Run full suite (24)</button>
+      <button id="listEvalReportsBtn" data-tip="listEvalReportsBtn" data-i18n="btn.listEvalReports">List eval reports</button>
+      <button id="captureMetricsBtn" data-tip="captureMetricsBtn" data-i18n="btn.captureMetrics">Capture KPI snapshot</button>
+      </section>
+
+      <section class="content-section" id="stage1-section">
+      <h3 data-i18n="section.stage1">Finetune Stage1 Queue</h3>
+      <details class="section-help" data-i18n-html="stage1" open></details>
+      <label for="finetuneRunName" data-tip="finetuneRunName" data-i18n="label.pipelineName">Pipeline name</label>
+      <input id="finetuneRunName" data-tip="finetuneRunName" placeholder="stage1-weekly" />
+      <label for="finetuneBaseModel" data-tip="finetuneBaseModel" data-i18n="label.baseModel">Base model</label>
+      <input id="finetuneBaseModel" data-tip="finetuneBaseModel" placeholder="ollama:deepseek-coder" value="ollama:deepseek-coder" />
       <label>
-        <input id="newAgentAllowOnline" type="checkbox" />
-        Allow online automation for this agent
+        <input id="finetuneRunBaseline" data-tip="finetuneRunBaseline" type="checkbox" checked />
+        <span data-i18n="label.runBaseline">Run baseline eval before pipeline</span>
       </label>
-      <button id="createAgentBtn">Create agent</button>
-      <button id="listAgentsBtn">List agents</button>
-      <label for="agentId">Agent ID</label>
-      <input id="agentId" placeholder="agt_..." />
-      <label for="agentRunInput">Agent run input</label>
-      <textarea id="agentRunInput" rows="3"></textarea>
-      <label for="agentOnlineUrl">Agent online URL (optional)</label>
-      <input id="agentOnlineUrl" placeholder="https://example.com" />
-      <label for="agentOnlineObjective">Agent online objective (optional)</label>
-      <input id="agentOnlineObjective" placeholder="Collect page evidence and blockers" />
-      <button id="runAgentBtn">Run agent</button>
-      <button id="queueAgentRunBtn">Queue run (background)</button>
-      <label for="agentRunId">Agent run ID</label>
-      <input id="agentRunId" placeholder="arun_..." />
-      <button id="checkAgentRunBtn">Check queued run</button>
-      <button id="loadAgentRunEventsBtn">Load run events</button>
-      <button id="cancelAgentRunBtn">Cancel queued run</button>
-      <label for="agentToolPath">Agent tool path</label>
-      <input id="agentToolPath" placeholder="README.md" />
-      <button id="agentReadFileBtn">Agent read file tool</button>
+      <label for="finetuneRunId" data-tip="finetuneRunId" data-i18n="label.pipelineRunId">Pipeline run ID</label>
+      <input id="finetuneRunId" data-tip="finetuneRunId" placeholder="ftpbg_..." />
+      <button id="enqueueFinetuneBtn" data-tip="enqueueFinetuneBtn" data-i18n="btn.enqueueStage1">Enqueue stage1 pipeline</button>
+      <button id="listFinetuneRunsBtn" data-tip="listFinetuneRunsBtn" data-i18n="btn.listStage1Runs">List stage1 runs</button>
+      <button id="listFailedFinetuneRunsBtn" data-tip="listFailedFinetuneRunsBtn" data-i18n="btn.listFailedRuns">List failed runs</button>
+      <button id="checkFinetuneRunBtn" data-tip="checkFinetuneRunBtn" data-i18n="btn.checkStage1Run">Check stage1 run</button>
+      <button id="cancelFinetuneRunBtn" data-tip="cancelFinetuneRunBtn" data-i18n="btn.cancelStage1Run">Cancel stage1 run</button>
+      <button id="retryFinetuneRunBtn" data-tip="retryFinetuneRunBtn" data-i18n="btn.retryFailedRun">Retry failed run</button>
+      <button id="trainFinetuneRunBtn" data-tip="trainFinetuneRunBtn" data-i18n="btn.trainStage1Run">Train now</button>
+      <pre id="finetunePanel" class="meta" style="max-height:180px;overflow:auto;"></pre>
+      </section>
 
-      <h3>Team workspace</h3>
-      <button id="teamUsageBtn">Team usage</button>
-      <button id="listRoutingProfilesBtn">List routing profiles</button>
-      <button id="exportDashboardBtn">Export KPI dashboard JSON</button>
+      <section class="content-section" id="ops-section">
+      <h3 data-i18n="section.ops">Beta ops</h3>
+      <details class="section-help" data-i18n-html="ops"></details>
+      <button id="opsReadinessBtn" data-tip="opsReadinessBtn" data-i18n="btn.opsReadiness">Check readiness</button>
+      <button id="opsDrillBtn" data-tip="opsDrillBtn" data-i18n="btn.opsDrill">Run incident drill</button>
+      <button id="opsQuotaSummaryBtn" data-tip="opsQuotaSummaryBtn" data-i18n="btn.opsQuota">Quota summary (admin)</button>
+      </section>
 
-      <h3>Fine-tune pipeline</h3>
-      <label for="finetuneDatasetName">Dataset name</label>
-      <input id="finetuneDatasetName" value="termit-export" />
-      <button id="finetuneExportBtn">Export dataset</button>
-      <label for="finetuneJobId">Job ID</label>
-      <input id="finetuneJobId" placeholder="ft_..." />
-      <button id="finetuneCreateJobBtn">Create job from last export</button>
-      <button id="finetuneRunJobBtn">Run / validate job</button>
-      <button id="finetuneListJobsBtn">List jobs</button>
-      <button id="finetuneRecipeBtn">Training recipe</button>
-      <label for="finetuneAdapterModel">Adapter model</label>
-      <input id="finetuneAdapterModel" placeholder="ollama:termit-core-ft" />
-      <button id="finetuneRegisterAdapterBtn">Register adapter</button>
-      <button id="finetuneListAdaptersBtn">List adapters</button>
+      <section class="content-section">
+      <h3 data-i18n="section.retrieval">Code retrieval</h3>
+      <details class="section-help" data-i18n-html="retrieval"></details>
+      <label for="retrievalQuery" data-tip="retrievalQuery" data-i18n="label.searchQuery">Search query</label>
+      <input id="retrievalQuery" data-tip="retrievalQuery" placeholder="e.g. ChatService compaction" />
+      <button id="reindexRetrievalBtn" data-tip="reindexRetrievalBtn" data-i18n="btn.reindex">Reindex workspace</button>
+      <button id="searchRetrievalBtn" data-tip="searchRetrievalBtn" data-i18n="btn.searchCodebase">Search codebase</button>
+      </section>
 
-      <h3>Eval harness</h3>
-      <label for="evalScenarioId">Scenario ID</label>
-      <input id="evalScenarioId" placeholder="A1, L1, W1..." />
-      <button id="listEvalScenariosBtn">List scenarios</button>
-      <button id="runEvalScenarioBtn">Run scenario</button>
-      <label for="evalCategory">Suite category filter (optional)</label>
-      <input id="evalCategory" placeholder="coding | local | web" />
-      <button id="runEvalSuiteBtn">Run full suite (24)</button>
-      <button id="listEvalReportsBtn">List eval reports</button>
-      <button id="captureMetricsBtn">Capture KPI snapshot</button>
-
-      <h3>Beta ops</h3>
-      <button id="opsReadinessBtn">Check readiness</button>
-      <button id="opsDrillBtn">Run incident drill</button>
-      <button id="opsQuotaSummaryBtn">Quota summary (admin)</button>
-
-      <h3>Code retrieval</h3>
-      <label for="retrievalQuery">Search query</label>
-      <input id="retrievalQuery" placeholder="e.g. ChatService compaction" />
-      <button id="reindexRetrievalBtn">Reindex workspace</button>
-      <button id="searchRetrievalBtn">Search codebase</button>
-
-      <h3>Response</h3>
+      <section class="content-section">
+      <h3 data-i18n="section.response">Response</h3>
+      <details class="section-help" data-i18n-html="response"></details>
       <div id="kpiHealthBadge" class="health-badge"></div>
       <div id="responseMeta" class="meta"></div>
       <pre id="responseBox"></pre>
+        </div>
+      </div>
+    </div>
 
-      <h3>Help</h3>
-      <pre class="meta">
-Quick start
-- Enter a prompt and click "Run" for standard chat.
-- Use "Run stream" for token-by-token output.
-- Keep "Use session memory" enabled if you want multi-turn context.
-
-Task console
-- Create task with mode=auto for full execution.
-- Use mode=guided to inspect state transitions before finalizing.
-- Refresh/List/Events/Cancel controls are in the Task console block.
-
-Agents
-- Create an agent with a system prompt and optional model override.
-- Enable only required tools in "enabled tools" (least-privilege principle).
-- Use "Run agent" for synchronous execution.
-- Use "Queue run" for background processing, then check/cancel by run ID.
-
-Online mode
-- Enable "Allow online automation" when creating the agent.
-- Include web_automation in enabled tools.
-- Provide online URL + objective at run time.
-
-Troubleshooting
-- Provider health: click "Check providers".
-- Auth issues: set API key if auth is enabled.
-- If a run fails, inspect run state and error payload in the Response panel.
-      </pre>
+    <div id="terminalDock" class="terminal-dock">
+      <div class="terminal-dock-header">
+        <h4 data-i18n="terminalDock.title">Терминал 2 — команды</h4>
+        <div class="terminal-dock-actions">
+          <button type="button" class="btn-ghost" data-terminal-cmd="healthz" data-tip="checkHealthzBtn">healthz</button>
+          <button type="button" class="btn-ghost" data-terminal-cmd="agents" data-tip="listAgentsBtn">agents</button>
+          <button type="button" class="btn-ghost" data-terminal-cmd="metrics" data-tip="refreshDashboardBtn">metrics</button>
+          <button type="button" class="btn-ghost" data-terminal-cmd="agentRun" data-tip="queueAgentRunBtn">agent run</button>
+          <button type="button" class="btn-ghost" data-terminal-cmd="stage1" data-tip="enqueueFinetuneBtn">stage1</button>
+          <button type="button" id="terminalDockCopy" class="btn-secondary" data-tip="terminalDockCopy">Копировать</button>
+          <button type="button" id="terminalDockToggle" class="btn-secondary" data-tip="terminalDockToggle">Свернуть</button>
+        </div>
+      </div>
+      <div id="terminalDockBody" class="terminal-dock-body">
+        <p id="terminalDockHint" class="terminal-dock-hint"></p>
+        <pre id="terminalDockOutput" class="terminal-dock-output"></pre>
+      </div>
     </div>
 
     <script>
@@ -353,6 +477,19 @@ Troubleshooting
       const runEvalSuiteBtn = document.getElementById("runEvalSuiteBtn");
       const listEvalReportsBtn = document.getElementById("listEvalReportsBtn");
       const captureMetricsBtn = document.getElementById("captureMetricsBtn");
+      const finetuneRunNameEl = document.getElementById("finetuneRunName");
+      const finetuneBaseModelEl = document.getElementById("finetuneBaseModel");
+      const finetuneRunBaselineEl = document.getElementById("finetuneRunBaseline");
+      const finetuneRunIdEl = document.getElementById("finetuneRunId");
+      const enqueueFinetuneBtn = document.getElementById("enqueueFinetuneBtn");
+      const listFinetuneRunsBtn = document.getElementById("listFinetuneRunsBtn");
+      const listFailedFinetuneRunsBtn = document.getElementById("listFailedFinetuneRunsBtn");
+      const checkFinetuneRunBtn = document.getElementById("checkFinetuneRunBtn");
+      const cancelFinetuneRunBtn = document.getElementById("cancelFinetuneRunBtn");
+      const retryFinetuneRunBtn = document.getElementById("retryFinetuneRunBtn");
+      const trainFinetuneRunBtn = document.getElementById("trainFinetuneRunBtn");
+      const finetunePanelEl = document.getElementById("finetunePanel");
+      let finetuneRunStream = null;
       const opsReadinessBtn = document.getElementById("opsReadinessBtn");
       const opsDrillBtn = document.getElementById("opsDrillBtn");
       const opsQuotaSummaryBtn = document.getElementById("opsQuotaSummaryBtn");
@@ -360,7 +497,39 @@ Troubleshooting
       const reindexRetrievalBtn = document.getElementById("reindexRetrievalBtn");
       const searchRetrievalBtn = document.getElementById("searchRetrievalBtn");
       const kpiHealthBadgeEl = document.getElementById("kpiHealthBadge");
+      const refreshDashboardBtn = document.getElementById("refreshDashboardBtn");
+      const checkHealthzBtn = document.getElementById("checkHealthzBtn");
+      const dashQueueCard = document.getElementById("dashQueueCard");
+      const dashWorkersCard = document.getElementById("dashWorkersCard");
+      const dashDeadLetterCard = document.getElementById("dashDeadLetterCard");
+      const dashRunsCard = document.getElementById("dashRunsCard");
+      const dashQueueValueEl = document.getElementById("dashQueueValue");
+      const dashQueueMetaEl = document.getElementById("dashQueueMeta");
+      const dashWorkersValueEl = document.getElementById("dashWorkersValue");
+      const dashWorkersMetaEl = document.getElementById("dashWorkersMeta");
+      const dashDeadLetterValueEl = document.getElementById("dashDeadLetterValue");
+      const dashDeadLetterMetaEl = document.getElementById("dashDeadLetterMeta");
+      const dashDeadLetterTrendEl = document.getElementById("dashDeadLetterTrend");
+      const dashRunsValueEl = document.getElementById("dashRunsValue");
+      const dashRunsMetaEl = document.getElementById("dashRunsMeta");
+      const deadLetterTrendSamples = [];
       const API_KEY_STORAGE = "termit_api_key";
+      let operatorDashboardLoaded = false;
+      const uiLangEl = document.getElementById("uiLang");
+
+      window.onTermitLanguageApplied = function onTermitLanguageApplied() {
+        if (!operatorDashboardLoaded) {
+          const waiting = window.tTermit("dashWaiting");
+          dashQueueMetaEl.textContent = waiting;
+          dashWorkersMetaEl.textContent = waiting;
+          dashDeadLetterMetaEl.textContent = waiting;
+          dashRunsMetaEl.textContent = waiting;
+        }
+      };
+      if (uiLangEl) {
+        uiLangEl.addEventListener("change", () => window.applyTermitLanguage(uiLangEl.value));
+      }
+      window.applyTermitLanguage(window.getTermitLang());
 
       apiKeyEl.value = localStorage.getItem(API_KEY_STORAGE) || "";
       apiKeyEl.addEventListener("change", () => {
@@ -438,6 +607,136 @@ Troubleshooting
         return `${(Number(value || 0) * 100).toFixed(1)}%`;
       }
 
+      function applyDashCardStatus(cardEl, status) {
+        cardEl.classList.remove("ok", "warning", "degraded");
+        if (status === "warning") {
+          cardEl.classList.add("warning");
+        } else if (status === "degraded") {
+          cardEl.classList.add("degraded");
+        } else {
+          cardEl.classList.add("ok");
+        }
+      }
+
+      function renderTrendSparkline(samples) {
+        if (!samples.length) {
+          return "";
+        }
+        const max = Math.max(...samples, 0.01);
+        const blocks = "▁▂▃▄▅▆▇█";
+        return samples
+          .map((value) => {
+            const index = Math.min(
+              blocks.length - 1,
+              Math.max(0, Math.round((value / max) * (blocks.length - 1)))
+            );
+            return blocks[index];
+          })
+          .join("");
+      }
+
+      function renderOperatorDashboard(metrics, thresholds) {
+        const queueThreshold = Number(
+          (metrics.active_thresholds || thresholds?.agent || {}).queue_utilization_percent || 80
+        );
+        const deadLetterThreshold = Number(
+          (metrics.active_thresholds || thresholds?.agent || {}).dead_letter_rate || 0.15
+        );
+        const workerRatioThreshold = Number(
+          (metrics.active_thresholds || thresholds?.agent || {}).min_worker_alive_ratio || 1
+        );
+
+        const queueUtil = Number(metrics.queue_utilization_percent || 0);
+        const queueSize = Number(metrics.queue_size || 0);
+        const queueCapacity = Number(metrics.queue_capacity || 0);
+        dashQueueValueEl.textContent = `${queueUtil.toFixed(1)}%`;
+        dashQueueMetaEl.textContent = `${queueSize}/${queueCapacity} queued · threshold ${queueThreshold.toFixed(0)}%`;
+        applyDashCardStatus(
+          dashQueueCard,
+          queueUtil >= queueThreshold ? "degraded" : (queueUtil >= queueThreshold * 0.8 ? "warning" : "ok")
+        );
+
+        const aliveWorkers = Number(metrics.alive_workers || 0);
+        const workerCount = Number(metrics.worker_count || 0);
+        const workerRatio = workerCount > 0 ? aliveWorkers / workerCount : 0;
+        dashWorkersValueEl.textContent = `${aliveWorkers}/${workerCount}`;
+        dashWorkersMetaEl.textContent = `Availability ${(workerRatio * 100).toFixed(0)}% · threshold ${(workerRatioThreshold * 100).toFixed(0)}%`;
+        applyDashCardStatus(
+          dashWorkersCard,
+          workerRatio < workerRatioThreshold
+            ? "degraded"
+            : (workerRatio < 1 ? "warning" : "ok")
+        );
+
+        const deadLetterRate = Number(metrics.dead_letter_rate || 0);
+        const failedCount = Number((metrics.by_state || {}).failed || 0);
+        deadLetterTrendSamples.push(deadLetterRate);
+        if (deadLetterTrendSamples.length > 24) {
+          deadLetterTrendSamples.shift();
+        }
+        dashDeadLetterValueEl.textContent = formatPercent(deadLetterRate);
+        dashDeadLetterMetaEl.textContent = `${failedCount} failed runs · threshold ${formatPercent(deadLetterThreshold)}`;
+        dashDeadLetterTrendEl.textContent = `trend ${renderTrendSparkline(deadLetterTrendSamples)}`;
+        applyDashCardStatus(
+          dashDeadLetterCard,
+          deadLetterRate >= deadLetterThreshold
+            ? "degraded"
+            : (deadLetterRate >= deadLetterThreshold * 0.8 ? "warning" : "ok")
+        );
+
+        const byState = metrics.by_state || {};
+        const activeRuns = Number(metrics.active_runs || 0);
+        const totalRuns = Number(metrics.total_runs || 0);
+        dashRunsValueEl.textContent = String(activeRuns);
+        dashRunsMetaEl.textContent =
+          `active now · total ${totalRuns} · ` +
+          `queued ${Number(byState.queued || 0)}, running ${Number(byState.running || 0)}, ` +
+          `failed ${Number(byState.failed || 0)}`;
+        applyDashCardStatus(
+          dashRunsCard,
+          metrics.health_status === "degraded" ? "degraded" : (metrics.health_status === "warning" ? "warning" : "ok")
+        );
+        operatorDashboardLoaded = true;
+      }
+
+      async function refreshOperatorDashboard() {
+        try {
+          const [metricsResp, thresholdsResp] = await Promise.all([
+            fetch("/api/ops/agent-runs/metrics", { headers: authHeaders() }),
+            fetch("/api/metrics/thresholds", { headers: authHeaders() }),
+          ]);
+          if (!metricsResp.ok) {
+            dashQueueMetaEl.textContent = window.tTermit("dashLoadFailed");
+            return;
+          }
+          const metrics = await metricsResp.json();
+          const thresholds = thresholdsResp.ok ? await thresholdsResp.json() : null;
+          renderOperatorDashboard(metrics, thresholds);
+        } catch (_error) {
+          dashQueueMetaEl.textContent = window.tTermit("dashRefreshFailed");
+        }
+      }
+
+      refreshDashboardBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Refreshing operator dashboard...";
+        await refreshOperatorDashboard();
+        responseMeta.textContent = "Operator dashboard refreshed.";
+      });
+
+      checkHealthzBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Checking /healthz...";
+        responseBox.textContent = "";
+        try {
+          const resp = await fetch("/healthz");
+          const data = await resp.json();
+          responseMeta.textContent = `healthz=${data.status}, deps=${(data.dependencies || []).length}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
       function renderKpiHealthBadge(metrics) {
         const status = metrics.health_status || "ok";
         const reasons = Array.isArray(metrics.health_reasons) ? metrics.health_reasons : [];
@@ -464,6 +763,83 @@ Troubleshooting
           renderKpiHealthBadge(data);
         } catch (_error) {
           // Non-blocking dashboard helper.
+        }
+      }
+
+      function renderFinetunePanel(run) {
+        if (!run) {
+          finetunePanelEl.textContent = "";
+          return;
+        }
+        const lines = [
+          `run_id=${run.run_id}`,
+          `status=${run.status}`,
+          `cancelled=${run.cancelled}`,
+          `updated_at=${run.updated_at}`,
+          "",
+          "stages:",
+        ];
+        for (const stage of run.stages || []) {
+          lines.push(`- ${stage.stage}: ${stage.status} (${stage.detail})`);
+        }
+        if (run.error) {
+          lines.push("", `error: ${run.error}`);
+        }
+        finetunePanelEl.textContent = lines.join("\n");
+      }
+
+      function stopFinetuneRunStream() {
+        if (finetuneRunStream) {
+          finetuneRunStream.close();
+          finetuneRunStream = null;
+        }
+      }
+
+      function applyFinetuneRunUpdate(run) {
+        if (!run) return;
+        responseMeta.textContent = `finetune run=${run.run_id}, status=${run.status}`;
+        responseBox.textContent = JSON.stringify(run, null, 2);
+        renderFinetunePanel(run);
+      }
+
+      function startFinetuneRunStream(runId) {
+        stopFinetuneRunStream();
+        if (!runId) return;
+        const streamUrl = `/api/finetune/pipeline/stage1-runs/${encodeURIComponent(runId)}/stream?poll_ms=500&timeout_seconds=3600`;
+        finetuneRunStream = new EventSource(streamUrl);
+        finetuneRunStream.addEventListener("status", (event) => {
+          try {
+            const run = JSON.parse(event.data);
+            applyFinetuneRunUpdate(run);
+          } catch (_error) {
+            // best-effort stream parser
+          }
+        });
+        finetuneRunStream.addEventListener("error", () => {
+          stopFinetuneRunStream();
+        });
+        finetuneRunStream.addEventListener("done", () => {
+          stopFinetuneRunStream();
+        });
+      }
+
+      async function refreshFinetuneRun() {
+        const runId = finetuneRunIdEl.value.trim();
+        if (!runId) return;
+        const resp = await fetch(`/api/finetune/pipeline/stage1-runs/${encodeURIComponent(runId)}`, {
+          headers: authHeaders(),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          responseMeta.textContent = "Finetune run error";
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          return;
+        }
+        responseMeta.textContent = `finetune run=${data.run_id}, status=${data.status}`;
+        responseBox.textContent = JSON.stringify(data, null, 2);
+        renderFinetunePanel(data);
+        if (!["completed", "failed", "cancelled"].includes(data.status)) {
+          startFinetuneRunStream(data.run_id);
         }
       }
 
@@ -836,6 +1212,7 @@ Troubleshooting
           const data = await resp.json();
           responseMeta.textContent = `agents=${data.length}`;
           responseBox.textContent = JSON.stringify(data, null, 2);
+          if (window.TermitAgentHub) TermitAgentHub.renderAgentCards(data);
           if (data.length && !agentIdEl.value.trim()) {
             agentIdEl.value = data[0].agent_id;
           }
@@ -880,6 +1257,10 @@ Troubleshooting
           agentIdEl.value = data.agent_id;
           responseMeta.textContent = `agent created: ${data.agent_id}`;
           responseBox.textContent = JSON.stringify(data, null, 2);
+          if (window.TermitAgentHub) {
+            TermitAgentHub.selectAgent(data.agent_id);
+            TermitAgentHub.refresh();
+          }
         } catch (error) {
           responseMeta.textContent = "Network error";
           responseBox.textContent = String(error);
@@ -940,6 +1321,18 @@ Troubleshooting
           agentRunIdEl.value = data.run_id;
           responseMeta.textContent = `queued run=${data.run_id}, position=${data.queued_position}`;
           responseBox.textContent = JSON.stringify(data, null, 2);
+          if (window.TermitAgentHub) {
+            TermitAgentHub.startRunStream(data.run_id);
+            TermitAgentHub.refresh();
+            fetch(`/api/agents/runs/${encodeURIComponent(data.run_id)}/events`, { headers: authHeaders() })
+              .then((r) => (r.ok ? r.json() : []))
+              .then((events) => TermitAgentHub.renderTimeline(events));
+          }
+          if (window.TermitTerminalDock) {
+            TermitTerminalDock.pushCommand(
+              `curl -s http://127.0.0.1:8765/api/agents/runs/${data.run_id} \\\n  ${apiKeyEl.value.trim() ? `-H "X-API-Key: ${apiKeyEl.value.trim()}" \\\n  ` : ""}| python3 -m json.tool`
+            );
+          }
         } catch (error) {
           responseMeta.textContent = "Network error";
           responseBox.textContent = String(error);
@@ -965,6 +1358,7 @@ Troubleshooting
           }
           responseMeta.textContent = `run=${data.run_id}, state=${data.state}, model=${data.model || "n/a"}`;
           responseBox.textContent = JSON.stringify(data, null, 2);
+          if (window.TermitAgentHub) TermitAgentHub.refresh();
         } catch (error) {
           responseMeta.textContent = "Network error";
           responseBox.textContent = String(error);
@@ -990,6 +1384,7 @@ Troubleshooting
           }
           responseMeta.textContent = `run=${runId}, events=${data.length}`;
           responseBox.textContent = JSON.stringify(data, null, 2);
+          if (window.TermitAgentHub) TermitAgentHub.renderTimeline(data);
         } catch (error) {
           responseMeta.textContent = "Network error";
           responseBox.textContent = String(error);
@@ -1495,6 +1890,208 @@ Troubleshooting
         }
       });
 
+      enqueueFinetuneBtn.addEventListener("click", async () => {
+        const name = finetuneRunNameEl.value.trim();
+        if (!name) {
+          responseMeta.textContent = "Pipeline name is required";
+          return;
+        }
+        responseMeta.textContent = "Queueing stage1 pipeline...";
+        try {
+          const resp = await fetch("/api/finetune/pipeline/stage1-runs", {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({
+              name,
+              base_model: finetuneBaseModelEl.value.trim() || "ollama:deepseek-coder",
+              run_eval_baseline: finetuneRunBaselineEl.checked,
+              min_samples: 5,
+              limit: 500,
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Queue error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          finetuneRunIdEl.value = data.run_id;
+          responseMeta.textContent = `finetune queued run=${data.run_id}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          renderFinetunePanel(data);
+          startFinetuneRunStream(data.run_id);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      listFinetuneRunsBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading finetune runs...";
+        try {
+          const resp = await fetch("/api/finetune/pipeline/stage1-runs?limit=20", {
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Finetune list error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `finetune runs=${data.total}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          if (data.runs && data.runs.length > 0 && !finetuneRunIdEl.value.trim()) {
+            finetuneRunIdEl.value = data.runs[0].run_id;
+          }
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      listFailedFinetuneRunsBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading failed finetune runs...";
+        try {
+          const resp = await fetch("/api/finetune/pipeline/stage1-runs?limit=20&status=failed", {
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Finetune failed list error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `failed finetune runs=${data.total}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          if (data.runs && data.runs.length > 0) {
+            finetuneRunIdEl.value = data.runs[0].run_id;
+            applyFinetuneRunUpdate(data.runs[0]);
+          }
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      checkFinetuneRunBtn.addEventListener("click", async () => {
+        try {
+          await refreshFinetuneRun();
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      cancelFinetuneRunBtn.addEventListener("click", async () => {
+        const runId = finetuneRunIdEl.value.trim();
+        if (!runId) {
+          responseMeta.textContent = "Run ID is required";
+          return;
+        }
+        responseMeta.textContent = "Cancelling finetune run...";
+        try {
+          const resp = await fetch(
+            `/api/finetune/pipeline/stage1-runs/${encodeURIComponent(runId)}/cancel`,
+            {
+              method: "POST",
+              headers: authHeaders(),
+            }
+          );
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Cancel error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `finetune run=${data.run_id}, cancelled=${data.cancelled}, status=${data.status}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          await refreshFinetuneRun();
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      retryFinetuneRunBtn.addEventListener("click", async () => {
+        const runId = finetuneRunIdEl.value.trim();
+        if (!runId) {
+          responseMeta.textContent = "Run ID is required";
+          return;
+        }
+        responseMeta.textContent = "Retrying failed finetune run...";
+        try {
+          const resp = await fetch(
+            `/api/finetune/pipeline/stage1-runs/${encodeURIComponent(runId)}/retry`,
+            {
+              method: "POST",
+              headers: authHeaders(),
+            }
+          );
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Retry error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `finetune retry run=${data.run_id}, status=${data.status}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          renderFinetunePanel(data);
+          startFinetuneRunStream(data.run_id);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      trainFinetuneRunBtn.addEventListener("click", async () => {
+        const runId = finetuneRunIdEl.value.trim();
+        if (!runId) {
+          responseMeta.textContent = "Run ID is required";
+          return;
+        }
+        responseMeta.textContent = "Training Stage1 model...";
+        const trainUrl = `/api/finetune/pipeline/stage1-runs/${encodeURIComponent(runId)}/train`;
+        if (window.TermitTerminalDock) {
+          const keyHeader = apiKeyEl.value.trim()
+            ? `-H "X-API-Key: ${apiKeyEl.value.trim()}" \\\n  `
+            : "";
+          window.TermitTerminalDock.pushCommand(
+            `curl -s -X POST http://127.0.0.1:8765${trainUrl} \\\n  ${keyHeader}-H "Content-Type: application/json" \\\n  -d '{}' | python3 -m json.tool`,
+            "Train Stage1 run via built-in Ollama trainer"
+          );
+        }
+        try {
+          const resp = await fetch(trainUrl, {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({}),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Train error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            finetunePanelEl.textContent = `train failed (${resp.status}): ${JSON.stringify(data, null, 2)}`;
+            return;
+          }
+          responseMeta.textContent = `train status=${data.status}, model=${data.output_model || "n/a"}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          const panelLines = [
+            `train run=${runId}`,
+            `status: ${data.status}`,
+            `trainer: ${data.trainer_mode || "n/a"}`,
+            `output_model: ${data.output_model || "n/a"}`,
+            `detail: ${data.detail || ""}`,
+          ];
+          if (data.command) {
+            panelLines.push(`command: ${data.command}`);
+          }
+          finetunePanelEl.textContent = panelLines.join("\n");
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
       checkProvidersBtn.addEventListener("click", async () => {
         responseMeta.textContent = "Checking provider health...";
         responseBox.textContent = "";
@@ -1515,6 +2112,20 @@ Troubleshooting
       });
 
       refreshMetricsHealth();
+      refreshOperatorDashboard();
+      setInterval(refreshOperatorDashboard, 15000);
+      if (window.TermitAgentHub) {
+        TermitAgentHub.init({ authHeaders });
+      }
+      if (window.TermitTooltips) {
+        TermitTooltips.init();
+      }
+      if (window.TermitTerminalDock) {
+        TermitTerminalDock.init();
+      }
+      if (finetuneRunIdEl.value.trim()) {
+        startFinetuneRunStream(finetuneRunIdEl.value.trim());
+      }
     </script>
   </body>
 </html>

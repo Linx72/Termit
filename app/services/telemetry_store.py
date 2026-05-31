@@ -73,6 +73,16 @@ class TelemetryStore:
             if failure_class:
                 self._failure_classes[failure_class] = self._failure_classes.get(failure_class, 0) + 1
 
+    def record_http_request(
+        self,
+        *,
+        method: str,
+        path: str,
+        status_code: int,
+        latency_ms: int,
+    ) -> None:
+        _ = (method, path, status_code, latency_ms)
+
     def snapshot(self) -> MetricsSummaryResponse:
         with self._lock:
             p50 = self._percentile(self._chat_latencies_ms, 50.0)

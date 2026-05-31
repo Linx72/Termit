@@ -354,6 +354,13 @@ class MetricsApiTests(unittest.TestCase):
         self.assertEqual(slack_payload_resp.status_code, 200)
         self.assertIn("payload", slack_payload_resp.json())
 
+    def test_metrics_prometheus_endpoint(self) -> None:
+        client = TestClient(app)
+        resp = client.get("/api/metrics/prometheus")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("termit_chat_requests_total", resp.text)
+        self.assertIn("termit_agent_queue_size", resp.text)
+
 
 if __name__ == "__main__":
     unittest.main()

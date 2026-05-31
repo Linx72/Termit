@@ -17,6 +17,12 @@ class RbacTests(unittest.TestCase):
     def test_operator_can_execute_command(self) -> None:
         self.assertTrue(role_allows("operator", "POST", "/api/tools/execute_command"))
 
+    def test_viewer_cannot_apply_patch(self) -> None:
+        self.assertFalse(role_allows("viewer", "POST", "/api/tools/apply_patch"))
+
+    def test_operator_can_apply_patch(self) -> None:
+        self.assertTrue(role_allows("operator", "POST", "/api/tools/apply_patch"))
+
     def test_admin_required_for_session_delete(self) -> None:
         self.assertEqual(required_role("DELETE", "/api/sessions/abc"), "admin")
 
@@ -26,8 +32,12 @@ class RbacTests(unittest.TestCase):
     def test_viewer_can_read_ops_readiness(self) -> None:
         self.assertTrue(role_allows("viewer", "GET", "/api/ops/readiness"))
 
-    def test_admin_required_for_agent_run_ops(self) -> None:
-        self.assertEqual(required_role("GET", "/api/ops/agent-runs/metrics"), "admin")
+    def test_viewer_can_read_agent_run_metrics(self) -> None:
+        self.assertEqual(required_role("GET", "/api/ops/agent-runs/metrics"), "viewer")
+        self.assertTrue(role_allows("viewer", "GET", "/api/ops/agent-runs/metrics"))
+        self.assertTrue(role_allows("operator", "GET", "/api/ops/agent-runs/metrics"))
+
+    def test_admin_required_for_agent_run_mutations(self) -> None:
         self.assertEqual(required_role("POST", "/api/ops/agent-runs/cleanup"), "admin")
 
 

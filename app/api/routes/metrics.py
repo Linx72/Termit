@@ -1,7 +1,12 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import PlainTextResponse
 
 from app.core.config import Settings, get_settings
 from app.domain.schemas import (
+    AgentAlertThresholds,
+    AlertThresholdsResponse,
     MetricsActiveThresholds,
     MetricsDailyReportResponse,
     MetricsExecutiveSummaryResponse,
@@ -11,44 +16,30 @@ from app.domain.schemas import (
     MetricsSummaryResponse,
     MetricsTrendResponse,
 )
+from app.services.alert_health_service import build_alert_thresholds_response, evaluate_chat_health
 from app.services.metrics_snapshot_store import MetricsSnapshotStore
 from app.services.telemetry_store import TelemetryStore
-from app.state import get_metrics_snapshot_store, get_telemetry_store
+from app.services.agent_service import AgentService
+from app.state import get_agent_service, get_metrics_snapshot_store, get_telemetry_store
 
 router = APIRouter(prefix="/api", tags=["metrics"])
 
 
-def _health_from_summary(
-    summary: MetricsSummaryResponse, thresholds: MetricsActiveThresholds
-) -> tuple[str, list[str]]:
-    warning_reasons: list[str] = []
-    degraded_reasons: list[str] = []
-    empty_rate = summary.chat_empty_response_rate
-    fallback_rate = summary.chat_fallback_rate
-
-    if empty_rate >= thresholds.degrade_empty_response_rate:
-        degraded_reasons.append(
-            f"Empty response rate is {empty_rate:.2%} (threshold {thresholds.degrade_empty_response_rate:.2%})."
-        )
-    elif empty_rate >= thresholds.degrade_empty_response_rate * 0.8:
-        warning_reasons.append(
-            f"Empty response rate is near threshold: {empty_rate:.2%}/{thresholds.degrade_empty_response_rate:.2%}."
-        )
-
-    if fallback_rate >= thresholds.degrade_fallback_rate:
-        degraded_reasons.append(
-            f"Fallback rate is {fallback_rate:.2%} (threshold {thresholds.degrade_fallback_rate:.2%})."
-        )
-    elif fallback_rate >= thresholds.degrade_fallback_rate * 0.8:
-        warning_reasons.append(
-            f"Fallback rate is near threshold: {fallback_rate:.2%}/{thresholds.degrade_fallback_rate:.2%}."
-        )
-
-    if degraded_reasons:
-        return "degraded", degraded_reasons
-    if warning_reasons:
-        return "warning", warning_reasons
-    return "ok", []
+@router.get("/metrics/thresholds", response_model=AlertThresholdsResponse)
+async def metrics_thresholds(
+    settings: Settings = Depends(get_settings),
+) -> AlertThresholdsResponse:
+    return build_alert_thresholds_response(
+        chat=MetricsActiveThresholds(
+            degrade_empty_response_rate=settings.degrade_empty_response_rate,
+            degrade_fallback_rate=settings.degrade_fallback_rate,
+        ),
+        agent=AgentAlertThresholds(
+            queue_utilization_percent=settings.agent_alert_queue_utilization_percent,
+            dead_letter_rate=settings.agent_alert_dead_letter_rate,
+            min_worker_alive_ratio=settings.agent_alert_min_worker_alive_ratio,
+        ),
+    )
 
 
 @router.get("/metrics", response_model=MetricsSummaryResponse)
@@ -61,7 +52,7 @@ async def metrics_summary(
         degrade_fallback_rate=settings.degrade_fallback_rate,
     )
     summary = telemetry.snapshot()
-    health_status, health_reasons = _health_from_summary(summary, thresholds)
+    health_status, health_reasons = evaluate_chat_health(summary, thresholds)
     return summary.model_copy(
         update={
             "active_thresholds": thresholds,
@@ -122,3 +113,52 @@ async def metrics_executive_summary_slack_payload(
     snapshots: MetricsSnapshotStore = Depends(get_metrics_snapshot_store),
 ) -> MetricsSlackPayloadResponse:
     return snapshots.slack_payload(days=days, limit=limit)
+
+
+def _prom_line(name: str, value: float, labels: Optional[dict[str, str]] = None) -> str:
+    if labels:
+        label_text = ",".join(f'{key}="{val}"' for key, val in sorted(labels.items()))
+        return f"{name}{{{label_text}}} {value}"
+    return f"{name} {value}"
+
+
+@router.get("/metrics/prometheus", response_class=PlainTextResponse)
+async def metrics_prometheus(
+    telemetry: TelemetryStore = Depends(get_telemetry_store),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> PlainTextResponse:
+    summary = telemetry.snapshot()
+    queue = agent_service.queue_metrics()
+    lines = [
+        "# HELP termit_chat_requests_total Total chat requests.",
+        "# TYPE termit_chat_requests_total counter",
+        _prom_line("termit_chat_requests_total", summary.chat_requests_total),
+        "# HELP termit_chat_success_total Total successful chat requests.",
+        "# TYPE termit_chat_success_total counter",
+        _prom_line("termit_chat_success_total", summary.chat_success_total),
+        "# HELP termit_chat_latency_p95_ms Chat latency p95 in milliseconds.",
+        "# TYPE termit_chat_latency_p95_ms gauge",
+        _prom_line("termit_chat_latency_p95_ms", summary.chat_latency_p95_ms),
+        "# HELP termit_agent_queue_size Current agent run queue depth.",
+        "# TYPE termit_agent_queue_size gauge",
+        _prom_line("termit_agent_queue_size", int(queue["queue_size"])),
+        "# HELP termit_agent_queue_capacity Agent queue capacity.",
+        "# TYPE termit_agent_queue_capacity gauge",
+        _prom_line("termit_agent_queue_capacity", int(queue["queue_capacity"])),
+        "# HELP termit_agent_queue_utilization_percent Queue utilization in percent.",
+        "# TYPE termit_agent_queue_utilization_percent gauge",
+        _prom_line("termit_agent_queue_utilization_percent", float(queue["queue_utilization_percent"])),
+        "# HELP termit_agent_workers_configured Configured agent worker count.",
+        "# TYPE termit_agent_workers_configured gauge",
+        _prom_line("termit_agent_workers_configured", int(queue["worker_count"])),
+        "# HELP termit_agent_workers_alive Alive agent worker count.",
+        "# TYPE termit_agent_workers_alive gauge",
+        _prom_line("termit_agent_workers_alive", int(queue.get("alive_workers", 0))),
+    ]
+    by_state = queue.get("by_state", {})
+    if isinstance(by_state, dict):
+        lines.append("# HELP termit_agent_runs_total Total runs by terminal state.")
+        lines.append("# TYPE termit_agent_runs_total gauge")
+        for state, count in sorted(by_state.items()):
+            lines.append(_prom_line("termit_agent_runs_total", int(count), labels={"state": str(state)}))
+    return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")

@@ -1,10 +1,14 @@
 from pathlib import Path
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.automation import router as automation_router
 from app.api.routes.agents import router as agents_router
+from app.api.routes.agent_eval import router as agent_eval_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.tasks import router as tasks_router
 from app.api.routes.tools import router as tools_router
@@ -19,11 +23,21 @@ from app.api.routes.finetune import router as finetune_router
 from app.api.routes.teams import router as teams_router
 from app.api.routes.retrieval import router as retrieval_router
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.request_trace import RequestTraceMiddleware
 from app.api.routes.usage import router as usage_router
 from app.core.config import get_settings
 from app.middleware.auth_quota import AuthQuotaMiddleware
 from app.services.quota_store import QuotaStore
-from app.state import get_quota_store
+from app.domain.schemas import HealthzResponse
+from app.state import (
+    get_agent_maintenance_scheduler_service,
+    get_agent_service,
+    get_chat_service,
+    get_local_runtime_service,
+    get_ops_service,
+    get_quota_store,
+    get_stage1_scheduler_service,
+)
 from app.web.routes import router as web_router
 
 settings = get_settings()
@@ -33,10 +47,27 @@ _app_version = (
     if _version_file.exists()
     else "0.1.0"
 )
+
+
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI):
+    agent_service = get_agent_service()
+    stage1_scheduler = get_stage1_scheduler_service()
+    maintenance_scheduler = get_agent_maintenance_scheduler_service()
+    agent_service.start()
+    stage1_scheduler.start()
+    maintenance_scheduler.start()
+    yield
+    maintenance_scheduler.stop()
+    stage1_scheduler.stop()
+    agent_service.stop()
+
+
 app = FastAPI(
     title="Termit",
     description="Open-source AI coding orchestrator MVP",
     version=_app_version,
+    lifespan=_app_lifespan,
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -53,6 +84,7 @@ if settings.auth_enabled and settings.api_keys:
     quota_store = get_quota_store()
 
 app.add_middleware(AuthQuotaMiddleware, settings=settings, quota_store=quota_store)
+app.add_middleware(RequestTraceMiddleware)
 
 app.include_router(chat_router)
 app.include_router(usage_router)
@@ -66,13 +98,34 @@ app.include_router(tasks_router)
 app.include_router(tools_router)
 app.include_router(local_runtime_router)
 app.include_router(agents_router)
+app.include_router(agent_eval_router)
 app.include_router(teams_router)
 app.include_router(orchestration_router)
 app.include_router(routing_router)
 app.include_router(finetune_router)
 app.include_router(web_router)
 
+_static_dir = Path(__file__).resolve().parent / "web" / "static"
+if _static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/healthz", response_model=HealthzResponse)
+async def healthz() -> HealthzResponse:
+    ops = get_ops_service()
+    chat = get_chat_service()
+    agent_service = get_agent_service()
+    maintenance = get_agent_maintenance_scheduler_service()
+    local_runtime = get_local_runtime_service()
+    return await ops.healthz(
+        version=_app_version,
+        providers_status_cb=chat.providers_status,
+        agent_workers_cb=agent_service.queue_metrics,
+        maintenance_status_cb=maintenance.status,
+        local_runtime_status_cb=local_runtime.status,
+    )

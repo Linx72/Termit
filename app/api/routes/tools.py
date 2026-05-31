@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.schemas import (
+    ApplyPatchRequest,
+    ApplyPatchResponse,
     ExecuteCommandRequest,
     ExecuteCommandResponse,
     ListFilesRequest,
@@ -22,6 +24,7 @@ async def tool_catalog() -> dict[str, list[str]]:
             "list_files(path, pattern)",
             "read_file(path, max_bytes)",
             "execute_command(command, path, timeout_seconds, dry_run, confirmed)",
+            "apply_patch(path, hunks|content, create, dry_run, confirmed)",
             "audit(limit)",
         ]
     }
@@ -56,6 +59,17 @@ async def execute_command(
 ) -> ExecuteCommandResponse:
     try:
         return tooling.execute_command(payload)
+    except ToolingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/apply_patch", response_model=ApplyPatchResponse)
+async def apply_patch(
+    payload: ApplyPatchRequest,
+    tooling: ToolingService = Depends(get_tooling_service),
+) -> ApplyPatchResponse:
+    try:
+        return tooling.apply_patch(payload)
     except ToolingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

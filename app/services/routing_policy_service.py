@@ -24,13 +24,28 @@ class RoutingPolicyService:
         repo_profiles_path: str = "./data/repo_model_profiles.json",
         benchmarks_path: str = "./data/routing_benchmarks.json",
     ) -> None:
-        self._profiles = self._load_profiles(repo_profiles_path)
+        self._repo_profiles_path = Path(repo_profiles_path)
+        self._benchmarks_path = Path(benchmarks_path)
+        self._profiles_mtime: float = -1.0
+        self._profiles: list[RepoModelProfile] = []
+        self._benchmark_scores: dict[str, dict[str, float]] = {}
+        self._reload_profiles_if_changed()
         self._benchmark_scores = self._load_benchmarks(benchmarks_path)
 
+    def _reload_profiles_if_changed(self) -> None:
+        path = self._repo_profiles_path
+        mtime = path.stat().st_mtime if path.exists() else 0.0
+        if mtime == self._profiles_mtime:
+            return
+        self._profiles = self._load_profiles(str(path))
+        self._profiles_mtime = mtime
+
     def list_repo_profiles(self) -> list[RepoModelProfile]:
+        self._reload_profiles_if_changed()
         return list(self._profiles)
 
     def get_repo_profile(self, profile_id: str) -> Optional[RepoModelProfile]:
+        self._reload_profiles_if_changed()
         return next((item for item in self._profiles if item.profile_id == profile_id), None)
 
     def resolve_repo_model(
@@ -40,6 +55,7 @@ class RoutingPolicyService:
         path_prefix: str,
         task_type: TaskType,
     ) -> Optional[str]:
+        self._reload_profiles_if_changed()
         if profile_id:
             profile = self.get_repo_profile(profile_id)
             if profile is not None:

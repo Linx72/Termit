@@ -1,0 +1,170 @@
+{
+  "name": "termit-vscode",
+  "displayName": "Termit",
+  "description": "Termit in the editor: chat, Composer, Cmd+K inline edit, tab completion, agents",
+  "version": "0.4.0",
+  "publisher": "termit",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "Machine Learning"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "termit",
+          "title": "Termit",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "termit": [
+        {
+          "type": "webview",
+          "id": "termit.sidebar",
+          "name": "Termit"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "termit.openChat",
+        "title": "Termit: Open Sidebar",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "termit.openComposer",
+        "title": "Termit: Open Composer"
+      },
+      {
+        "command": "termit.inlineEdit",
+        "title": "Termit: Inline Edit (selection)"
+      },
+      {
+        "command": "termit.createTask",
+        "title": "Termit: Create Task From Selection"
+      },
+      {
+        "command": "termit.addSelectionToChat",
+        "title": "Termit: Add Selection To Chat"
+      },
+      {
+        "command": "termit.applyPatch",
+        "title": "Termit: Apply Patch (with diff preview)"
+      },
+      {
+        "command": "termit.applyPatchFromClipboard",
+        "title": "Termit: Apply Patch From Clipboard JSON"
+      },
+      {
+        "command": "termit.refreshConnection",
+        "title": "Termit: Check API Connection"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "termit.inlineEdit",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "termit.inlineEdit",
+          "group": "termit@0",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "termit.addSelectionToChat",
+          "group": "termit@1",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "termit.createTask",
+          "group": "termit@2"
+        }
+      ],
+      "commandPalette": [
+        { "command": "termit.openChat" },
+        { "command": "termit.openComposer" },
+        { "command": "termit.inlineEdit" },
+        { "command": "termit.createTask" },
+        { "command": "termit.addSelectionToChat" },
+        { "command": "termit.applyPatch" },
+        { "command": "termit.applyPatchFromClipboard" },
+        { "command": "termit.refreshConnection" }
+      ]
+    },
+    "configuration": {
+      "title": "Termit",
+      "properties": {
+        "termit.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765",
+          "description": "Base URL for the Termit API"
+        },
+        "termit.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional X-API-Key for authenticated Termit instances (operator for apply_patch)"
+        },
+        "termit.sessionId": {
+          "type": "string",
+          "default": "",
+          "description": "Optional fixed chat session id (auto-generated if empty)"
+        },
+        "termit.defaultTaskType": {
+          "type": "string",
+          "enum": ["coding", "review", "debug", "explain", "general"],
+          "default": "coding",
+          "description": "Default task type for queued tasks"
+        },
+        "termit.includeEditorContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "Attach active file/selection context to chat messages automatically"
+        },
+        "termit.inlineEdit.model": {
+          "type": "string",
+          "default": "",
+          "description": "Optional model override for inline edit (Cmd+Alt+K)"
+        },
+        "termit.inlineCompletion.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Termit ghost-text tab completion (calls API while typing)"
+        },
+        "termit.inlineCompletion.minPrefixLength": {
+          "type": "number",
+          "default": 12,
+          "minimum": 4,
+          "maximum": 80,
+          "description": "Minimum characters before inline completion triggers"
+        },
+        "termit.inlineCompletion.model": {
+          "type": "string",
+          "default": "",
+          "description": "Optional model override for inline completion"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -watch -p tsconfig.json"
+  },
+  "dependencies": {
+    "@termit/client": "file:../termit-client"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7.3"
+  }
+}

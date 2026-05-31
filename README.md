@@ -21,6 +21,8 @@ Open-source AI coding orchestrator MVP with task-based model routing.
   - `POST /api/automation/web`
 - Metrics endpoint:
   - `GET /api/metrics`
+  - `GET /api/metrics/thresholds` (public alert thresholds for chat + agent ops)
+  - `GET /api/metrics/prometheus`
   - `POST /api/metrics/snapshot`
   - `GET /api/metrics/trend?days=7&limit=200`
   - `GET /api/metrics/daily-report?days=7&limit=200`
@@ -32,6 +34,7 @@ Open-source AI coding orchestrator MVP with task-based model routing.
   - `POST /api/tools/list_files`
   - `POST /api/tools/read_file`
   - `POST /api/tools/execute_command`
+  - `POST /api/tools/apply_patch`
   - `GET /api/tools/audit?limit=100`
 - Local runtime management endpoints:
   - `GET /api/local/status`
@@ -51,6 +54,7 @@ Open-source AI coding orchestrator MVP with task-based model routing.
   - `POST /api/agents/{agent_id}/tools/list_files`
   - `POST /api/agents/{agent_id}/tools/read_file`
   - `POST /api/agents/{agent_id}/tools/execute_command`
+  - `POST /api/agents/{agent_id}/tools/apply_patch`
 - Task-based model router (`coding`, `review`, `debug`, `explain`, `general`)
 - Provider adapters for local open-source runtimes:
   - `ollama:*` models
@@ -76,7 +80,81 @@ app/
     templates/index.html
   state.py
 main.py
+clients/
+  termit-client/      # TypeScript SDK
+  vscode-extension/   # VS Code extension (Chat, Composer, Cmd+Alt+K, agents)
+  termit-desktop/     # Electron app (Monaco Editor, Composer, agents)
 ```
+
+## Client integration
+
+Termit is designed as an AI backend. External editors and apps connect over HTTP/SSE.  
+See [`clients/CLIENT_UX.md`](clients/CLIENT_UX.md) for Cursor-like UX mapped to Termit APIs.
+
+### apply_patch
+
+Server-side file edits (operator role, confirmation required for writes):
+
+```bash
+curl -s -X POST http://127.0.0.1:8765/api/tools/apply_patch \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "path": "app/example.py",
+    "hunks": [{"old_text": "old", "new_text": "new"}],
+    "confirmed": true
+  }'
+```
+
+- `hunks`: search/replace hunks (`old_text` must match exactly once)
+- `content`: full file replacement (mutually exclusive with `hunks`)
+- `create=true`: create a new file
+- `dry_run=true`: preview without writing
+- Sensitive paths (`.env`, `.git/`, `*.pem`, etc.) are blocked
+
+Agents can call the same tool via `POST /api/agents/{agent_id}/tools/apply_patch` when `apply_patch` is in `enabled_tools`.
+
+### TypeScript SDK
+
+See [`clients/termit-client/README.md`](clients/termit-client/README.md).
+
+```typescript
+import { TermitClient } from "@termit/client";
+
+const client = new TermitClient({ baseUrl: "http://127.0.0.1:8765" });
+for await (const event of client.chatStream({ message: "Hello" })) {
+  if (event.event === "token") process.stdout.write(String(event.data.text));
+}
+```
+
+### VS Code extension
+
+See [`clients/vscode-extension/README.md`](clients/vscode-extension/README.md) for build and F5 dev-host instructions.
+
+Sidebar with **Chat / Composer / Tasks / Agents**, editor context (`@ file`), and **apply_patch** diff preview.
+
+Settings: `termit.baseUrl`, `termit.apiKey`, `termit.includeEditorContext`.
+
+### Desktop app (Termit)
+
+See [`clients/termit-desktop/README.md`](clients/termit-desktop/README.md).
+
+Electron app **Termit** — chat, tasks, agents via Termit API + local Ollama. No Cursor API key.
+
+```bash
+cd clients/termit-client && npm install && npm run build
+cd ../termit-desktop && npm install && npm run dev
+```
+
+## Multi-machine sync
+
+Work on several computers via GitHub: see **[SYNC_WORKFLOW.md](SYNC_WORKFLOW.md)**.
+
+```bash
+./scripts/sync_start.sh                    # before work (pull --rebase)
+./scripts/sync_finish.sh "what you changed" # commit + push
+```
+
+New machine: `./scripts/setup_new_machine.sh`
 
 ## Quick start
 
@@ -187,6 +265,9 @@ Use model naming format `provider:model_name`, e.g.:
   - `TERMIT_AGENT_RUN_MAX_EVENTS_PER_RUN`
   - `TERMIT_AGENT_RUN_MAX_RESPONSE_CHARS`
   - `TERMIT_AGENT_RUN_RETENTION_DAYS`
+  - `TERMIT_AGENT_MAINTENANCE_ENABLED`
+  - `TERMIT_AGENT_CLEANUP_INTERVAL_SECONDS`
+  - `TERMIT_AGENT_METRICS_SNAPSHOT_INTERVAL_SECONDS`
 - Agent run persistence backend:
   - `TERMIT_AGENT_RUN_BACKEND=sqlite|memory`
   - `TERMIT_AGENT_RUN_SQLITE_PATH`
@@ -225,10 +306,22 @@ Use model naming format `provider:model_name`, e.g.:
   - `POST /api/finetune/datasets/export`
   - `POST /api/finetune/jobs`, `POST /api/finetune/jobs/{job_id}/run`
   - `POST /api/finetune/adapters`, `GET /api/finetune/recipe`
+  - `POST /api/finetune/pipeline/stage1-run` (auto: export -> baseline eval -> job validate -> recipe -> optional adapter register)
+  - `POST /api/finetune/pipeline/stage1-runs` (enqueue stage1 pipeline in background)
+  - `GET /api/finetune/pipeline/stage1-runs` (list pipeline runs; optional `status=failed`)
+  - `GET /api/finetune/pipeline/stage1-runs/{run_id}` (poll progress/status)
+  - `GET /api/finetune/pipeline/stage1-runs/{run_id}/stream` (SSE progress stream)
+  - `POST /api/finetune/pipeline/stage1-runs/{run_id}/retry` (re-queue failed run)
+  - `POST /api/finetune/pipeline/stage1-runs/{run_id}/cancel` (cancel queued run)
+  - `GET /api/finetune/pipeline/stage1-scheduler/status` (built-in scheduler status)
+  - `POST /api/finetune/pipeline/stage1-scheduler/trigger` (manual scheduler trigger)
   - CLI: `python3 scripts/finetune_export.py --name termit-export`
+  - CLI: `python3 scripts/stage1_enqueue.py --from-env` (external schedulers)
+  - Install schedulers: `./scripts/install_stage1_scheduler.sh all`
 - Hosted deployment:
   - `docker compose up --build` — Caddy on `:8080`, Termit internal `:8765` (see `HOSTED_DEPLOYMENT.md`)
 - Beta ops / incident drills:
+  - `GET /healthz` (public dependency health probe)
   - `GET /api/ops/readiness` (public)
   - `POST /api/ops/incident-drill` (admin)
   - `GET /api/ops/quota-summary` (admin)
@@ -260,6 +353,21 @@ Use model naming format `provider:model_name`, e.g.:
 - `degraded` status thresholds for executive summary are configurable via:
   - `TERMIT_DEGRADE_EMPTY_RATE` (default `0.05`)
   - `TERMIT_DEGRADE_FALLBACK_RATE` (default `0.35`)
+- Agent ops alert thresholds (queue/dead-letter/worker availability):
+  - `TERMIT_AGENT_ALERT_QUEUE_UTILIZATION_PERCENT` (default `80`)
+  - `TERMIT_AGENT_ALERT_DEAD_LETTER_RATE` (default `0.15`)
+  - `TERMIT_AGENT_ALERT_MIN_WORKER_ALIVE_RATIO` (default `1.0`)
+  - `TERMIT_FINETUNE_PIPELINE_MAX_CONCURRENCY` (default `1`, max parallel stage1 pipeline workers)
+- Stage1 weekly scheduler options:
+  - Built-in (inside Termit): `TERMIT_STAGE1_SCHEDULE_ENABLED=true`
+  - External: `./scripts/install_stage1_scheduler.sh launchd|cron|github`
+  - Shared external env: `deploy/schedulers/stage1-weekly.env.example`
+- Continuous model training (Stage1 + Ollama):
+  - Built-in trainer: `TERMIT_FINETUNE_AUTO_TRAIN=true` runs `ollama create` after each Stage1 run
+  - Manual train API: `POST /api/finetune/jobs/{job_id}/train`, `POST /api/finetune/pipeline/stage1-runs/{run_id}/train`
+  - Full loop script: `./scripts/stage1_full_loop.sh` (enqueue → wait → train → eval)
+  - Post-train only: `./scripts/post_stage1_train.sh RUN_ID --wait --auto-register-adapter`
+  - Trainer modes: `ollama` (auto), `modelfile` (write Modelfile only), `off`
 - Metrics snapshot export file:
   - `TERMIT_METRICS_SNAPSHOT_FILE`
 - Beta feedback endpoint:
@@ -345,14 +453,21 @@ Use model naming format `provider:model_name`, e.g.:
 
 ## Agent run operations
 
-- `GET /api/ops/agent-runs/metrics` (admin) returns queue and worker metrics:
+- `GET /api/ops/agent-runs/metrics` returns queue and worker metrics (viewer+ when auth enabled):
   - queue size/capacity/utilization
-  - worker count
+  - worker count and alive workers
   - total runs and state distribution
+  - dead-letter rate + health status/reasons against active thresholds
+- Web UI includes an **Operator dashboard** card row (queue, workers, dead-letter trend).
+- `GET /healthz` returns dependency-level health (`memory/task/agent/quota sqlite`, providers, workers, maintenance, local runtime).
+- `GET /api/metrics/thresholds` returns active chat + agent alert thresholds (public).
 - `POST /api/ops/agent-runs/cleanup` (admin) applies retention cleanup:
   - payload: `{ "retention_days": 14, "dry_run": true }`
   - removes only terminal runs older than cutoff (`completed/failed/cancelled`)
   - returns deleted runs/events and remaining run count.
+- `GET /api/ops/agent-runs/maintenance` returns maintenance scheduler status.
+- `POST /api/ops/agent-runs/maintenance/cleanup-now` triggers one cleanup cycle.
+- `GET /api/metrics/prometheus` exposes Prometheus-compatible metrics text.
 - `POST /api/agents/{agent_id}/tools/web_automation` runs web automation with the agent's permissions.
 - Tool proxy endpoints enforce per-agent permissions before delegating to tool safety policy.
 
@@ -384,6 +499,7 @@ Use model naming format `provider:model_name`, e.g.:
 - `BENCHMARK_SPEC.md` - benchmark method and scoring
 - `OBSERVABILITY_CHECKLIST.md` - metrics, traces, logging, alerts checklist
 - `RELEASE_CHECKLIST.md` - release readiness and handoff checklist
+- `SYNC_WORKFLOW.md` - daily Git sync across machines (GitHub)
 - `BETA_ONBOARDING.md` - beta setup and first tasks
 - `INCIDENT_RUNBOOK.md` - incident triage and recovery
 - `KPI_DASHBOARD_SPEC.md` - KPI definitions and dashboard panels

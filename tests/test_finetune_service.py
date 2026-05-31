@@ -4,7 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.domain.schemas import FinetuneAdapterRegisterRequest, FinetuneDatasetExportRequest
+from app.domain.schemas import (
+    FinetuneAdapterRegisterRequest,
+    FinetuneDatasetExportRequest,
+    FinetuneStage1RunRequest,
+)
 from app.services.finetune_service import FinetuneService
 
 
@@ -133,6 +137,7 @@ class FinetuneServiceTests(unittest.TestCase):
             datasets_dir=str(root / "datasets"),
             jobs_path=str(root / "jobs.json"),
             adapters_path=str(root / "adapters.json"),
+            pipelines_path=str(root / "pipelines.json"),
             feedback_file_path=str(feedback_path),
             task_sqlite_path=str(task_db),
             agent_run_sqlite_path=str(agent_db),
@@ -187,3 +192,151 @@ class FinetuneServiceTests(unittest.TestCase):
             recipe = service.training_recipe("ollama:deepseek-coder")
             self.assertIn("modelfile_template", recipe)
             self.assertIn("ollama create", recipe["recommended_trainers"][0])
+
+    def test_stage1_pipeline_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(Path(tmp))
+            result = service.run_stage1_pipeline(
+                FinetuneStage1RunRequest(
+                    name="stage1-auto",
+                    base_model="ollama:deepseek-coder",
+                    min_samples=2,
+                    run_eval_baseline=True,
+                    auto_register_adapter=True,
+                    adapter_name="stage1-auto-ft",
+                    adapter_model="ollama:stage1-auto-ft",
+                    repo_profile_id="termit-core",
+                ),
+                baseline_report={
+                    "run_id": "eval_123",
+                    "pass_rate": 0.75,
+                    "total": 24,
+                    "passed": 18,
+                },
+            )
+
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(result["baseline_run_id"], "eval_123")
+            self.assertEqual(result["job"]["status"], "completed")
+            self.assertIsNotNone(result["adapter"])
+
+    def test_stage1_pipeline_queue_and_cancel(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(Path(tmp))
+            queued = service.enqueue_stage1_pipeline(
+                FinetuneStage1RunRequest(
+                    name="queued-stage1",
+                    base_model="ollama:deepseek-coder",
+                    min_samples=1,
+                )
+            )
+            run_id = str(queued["run_id"])
+            fetched = service.get_stage1_pipeline_run(run_id)
+            self.assertIsNotNone(fetched)
+            assert fetched is not None
+            self.assertEqual(fetched["status"], "queued")
+
+            cancelled, state = service.cancel_stage1_pipeline_run(run_id)
+            self.assertTrue(cancelled)
+            self.assertEqual(state, "cancelled")
+            after = service.get_stage1_pipeline_run(run_id)
+            assert after is not None
+            self.assertEqual(after["status"], "cancelled")
+
+    def test_stage1_pipeline_queue_drain_completes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(Path(tmp))
+            queued = service.enqueue_stage1_pipeline(
+                FinetuneStage1RunRequest(
+                    name="queued-drain",
+                    base_model="ollama:deepseek-coder",
+                    min_samples=1,
+                    run_eval_baseline=True,
+                )
+            )
+            run_id = str(queued["run_id"])
+
+            def baseline_runner(_payload: FinetuneStage1RunRequest) -> dict[str, object]:
+                return {
+                    "run_id": "eval_queued",
+                    "pass_rate": 0.5,
+                    "total": 10,
+                    "passed": 5,
+                }
+
+            service.drain_stage1_pipeline_queue(baseline_runner, wait=True)
+            done = service.get_stage1_pipeline_run(run_id)
+            assert done is not None
+            self.assertEqual(done["status"], "completed")
+            self.assertIsNotNone(done["result"])
+
+    def test_stage1_pipeline_list_failed_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(Path(tmp))
+            failed_run = service.enqueue_stage1_pipeline(
+                FinetuneStage1RunRequest(
+                    name="will-fail",
+                    base_model="ollama:deepseek-coder",
+                    min_samples=999,
+                )
+            )
+            run_id = str(failed_run["run_id"])
+            service.drain_stage1_pipeline_queue(None, wait=True)
+            done = service.get_stage1_pipeline_run(run_id)
+            assert done is not None
+            self.assertEqual(done["status"], "failed")
+
+            failed_only = service.list_stage1_pipeline_runs(status="failed")
+            self.assertEqual(len(failed_only), 1)
+            self.assertEqual(failed_only[0]["run_id"], run_id)
+
+    def test_stage1_pipeline_retry_requeues_failed_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(Path(tmp))
+            queued = service.enqueue_stage1_pipeline(
+                FinetuneStage1RunRequest(
+                    name="retry-me",
+                    base_model="ollama:deepseek-coder",
+                    min_samples=999,
+                )
+            )
+            run_id = str(queued["run_id"])
+            service.drain_stage1_pipeline_queue(None, wait=True)
+            failed = service.get_stage1_pipeline_run(run_id)
+            assert failed is not None
+            self.assertEqual(failed["status"], "failed")
+
+            retried, state = service.retry_stage1_pipeline_run(run_id)
+            self.assertEqual(state, "queued")
+            assert retried is not None
+            self.assertEqual(retried["status"], "queued")
+            self.assertIsNone(retried["error"])
+
+            busy, busy_state = service.retry_stage1_pipeline_run(run_id)
+            self.assertEqual(busy_state, "queued")
+
+    def test_stage1_pipeline_concurrency_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = FinetuneService(
+                datasets_dir=str(Path(tmp) / "datasets"),
+                jobs_path=str(Path(tmp) / "jobs.json"),
+                adapters_path=str(Path(tmp) / "adapters.json"),
+                pipelines_path=str(Path(tmp) / "pipelines.json"),
+                feedback_file_path=str(Path(tmp) / "feedback.jsonl"),
+                task_sqlite_path=str(Path(tmp) / "tasks.db"),
+                agent_run_sqlite_path=str(Path(tmp) / "agent_runs.db"),
+                pipeline_max_concurrency=1,
+            )
+            service.enqueue_stage1_pipeline(
+                FinetuneStage1RunRequest(name="run-a", base_model="ollama:deepseek-coder", min_samples=1)
+            )
+            service.enqueue_stage1_pipeline(
+                FinetuneStage1RunRequest(name="run-b", base_model="ollama:deepseek-coder", min_samples=1)
+            )
+            first = service._claim_next_queued_pipeline_run()
+            assert first is not None
+            second = service._claim_next_queued_pipeline_run()
+            self.assertIsNone(second)
+            slots = service.active_pipeline_slots()
+            self.assertEqual(slots["running"], 1)
+            self.assertEqual(slots["available"], 0)

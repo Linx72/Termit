@@ -13,16 +13,18 @@ Provide a predictable lifecycle for long-running or multi-step tasks.
 - `failed`: task finished with non-recoverable error.
 - `cancelled`: task was cancelled by request.
 
-## Endpoints (Planned)
+## Endpoints (Implemented)
 
 - `POST /api/tasks`
   - create task execution request
+- `GET /api/tasks`
+  - list recent tasks
 - `GET /api/tasks/{task_id}`
   - retrieve task state and current report
 - `POST /api/tasks/{task_id}/cancel`
   - cancel running task if supported
 - `GET /api/tasks/{task_id}/events`
-  - stream or fetch execution events
+  - fetch execution events
 
 ## Request Shape (Create)
 

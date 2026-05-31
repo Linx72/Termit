@@ -1,9 +1,16 @@
 .venv/
+.tools/
 __pycache__/
 *.pyc
 .env
 *.db
 *.db-journal
+*.db.corrupt*
+
+# Client builds
+clients/*/node_modules/
+clients/*/dist/
+clients/termit-desktop/out/
 
 # Runtime artifacts under data/ (keep seed JSON tracked)
 data/*

@@ -239,6 +239,19 @@ class OpsCheckResult(BaseModel):
     detail: str
 
 
+class HealthzDependency(BaseModel):
+    name: str
+    status: str
+    detail: str
+    latency_ms: float = 0.0
+
+
+class HealthzResponse(BaseModel):
+    status: str
+    version: str
+    dependencies: list[HealthzDependency] = Field(default_factory=list)
+
+
 class OpsReadinessResponse(BaseModel):
     status: str
     passed: int
@@ -280,14 +293,35 @@ class QuotaResetResponse(BaseModel):
     message: str
 
 
+class AgentAlertThresholds(BaseModel):
+    queue_utilization_percent: float = 80.0
+    dead_letter_rate: float = 0.15
+    min_worker_alive_ratio: float = 1.0
+
+
+class MetricsActiveThresholds(BaseModel):
+    degrade_empty_response_rate: float = 0.05
+    degrade_fallback_rate: float = 0.35
+
+
+class AlertThresholdsResponse(BaseModel):
+    chat: MetricsActiveThresholds = Field(default_factory=MetricsActiveThresholds)
+    agent: AgentAlertThresholds = Field(default_factory=AgentAlertThresholds)
+
+
 class AgentRunsMetricsResponse(BaseModel):
     queue_size: int
     queue_capacity: int
     queue_utilization_percent: float
     worker_count: int
+    alive_workers: int = 0
     total_runs: int
     by_state: dict[str, int] = Field(default_factory=dict)
     active_runs: int = 0
+    dead_letter_rate: float = 0.0
+    health_status: str = "ok"
+    health_reasons: list[str] = Field(default_factory=list)
+    active_thresholds: AgentAlertThresholds = Field(default_factory=AgentAlertThresholds)
 
 
 class AgentRunsCleanupRequest(BaseModel):
@@ -302,11 +336,6 @@ class AgentRunsCleanupResponse(BaseModel):
     deleted_runs: int
     deleted_events: int
     remaining_runs: int
-
-
-class MetricsActiveThresholds(BaseModel):
-    degrade_empty_response_rate: float = 0.05
-    degrade_fallback_rate: float = 0.35
 
 
 class MetricsSummaryResponse(BaseModel):
@@ -509,6 +538,32 @@ class ExecuteCommandResponse(BaseModel):
     duration_ms: int = 0
 
 
+class ApplyPatchHunk(BaseModel):
+    old_text: str = Field(default="", max_length=500000)
+    new_text: str = Field(default="", max_length=500000)
+
+
+class ApplyPatchRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=500)
+    hunks: list[ApplyPatchHunk] = Field(default_factory=list)
+    content: Optional[str] = Field(default=None, max_length=500000)
+    create: bool = False
+    dry_run: bool = False
+    confirmed: bool = False
+
+
+class ApplyPatchResponse(BaseModel):
+    path: str
+    risk_level: ToolRiskLevel
+    policy_reason: str = ""
+    applied: bool
+    requires_confirmation: bool = False
+    created: bool = False
+    hunks_applied: int = 0
+    bytes_written: int = 0
+    preview_excerpt: str = ""
+
+
 class ToolAuditEvent(BaseModel):
     timestamp: str
     tool_name: str
@@ -612,6 +667,9 @@ class AgentProfileCreateRequest(BaseModel):
     online_timeout_seconds: int = Field(default=10, ge=1, le=60)
     online_capture_links_limit: int = Field(default=10, ge=1, le=50)
     enabled_tools: list[str] = Field(default_factory=list)
+    use_tool_loop: bool = False
+    max_tool_steps: int = Field(default=6, ge=1, le=20)
+    use_long_term_memory: bool = True
 
 
 class AgentProfileResponse(BaseModel):
@@ -632,6 +690,9 @@ class AgentProfileResponse(BaseModel):
     online_timeout_seconds: int = 10
     online_capture_links_limit: int = 10
     enabled_tools: list[str] = Field(default_factory=list)
+    use_tool_loop: bool = False
+    max_tool_steps: int = 6
+    use_long_term_memory: bool = True
     created_at: str
     updated_at: str
 
@@ -655,6 +716,20 @@ class AgentRunRequest(BaseModel):
     retrieval_path_prefix: Optional[str] = None
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(default=None, ge=64, le=8192)
+    use_tool_loop: Optional[bool] = None
+    priority: int = Field(default=0, ge=0, le=100)
+
+
+class AgentEvalRunRequest(BaseModel):
+    scenario_id: str = Field(min_length=1, max_length=64)
+
+
+class AgentEvalSuiteRunRequest(BaseModel):
+    category: Optional[str] = Field(default=None, max_length=64)
+
+
+class AgentMemoryListResponse(BaseModel):
+    entries: list[dict[str, str]] = Field(default_factory=list)
 
 
 class AgentRunResponse(BaseModel):
@@ -782,3 +857,108 @@ class FinetuneRecipeResponse(BaseModel):
     recommended_trainers: list[str] = Field(default_factory=list)
     modelfile_template: str
     dataset_format: dict[str, str] = Field(default_factory=dict)
+
+
+class FinetuneStage1RunRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    base_model: str = Field(default="ollama:deepseek-coder", min_length=1, max_length=200)
+    include_feedback: bool = True
+    include_tasks: bool = True
+    include_agent_runs: bool = True
+    min_rating: int = Field(default=4, ge=1, le=5)
+    min_samples: int = Field(default=5, ge=1, le=10000)
+    limit: int = Field(default=500, ge=1, le=5000)
+    run_eval_baseline: bool = True
+    eval_category: Optional[str] = None
+    eval_limit: Optional[int] = Field(default=24, ge=1, le=100)
+    notes: str = Field(default="", max_length=2000)
+    auto_register_adapter: bool = False
+    adapter_name: Optional[str] = Field(default=None, max_length=120)
+    adapter_model: Optional[str] = Field(default=None, max_length=200)
+    repo_profile_id: Optional[str] = None
+    adapter_description: str = Field(default="", max_length=2000)
+
+
+class FinetunePipelineStage(BaseModel):
+    stage: str
+    status: str
+    detail: str
+
+
+class FinetuneStage1RunResponse(BaseModel):
+    pipeline_id: str
+    status: str
+    created_at: str
+    dataset: FinetuneDatasetExportResponse
+    baseline_run_id: Optional[str] = None
+    baseline_pass_rate: Optional[float] = None
+    baseline_total: Optional[int] = None
+    baseline_passed: Optional[int] = None
+    job: FinetuneJobResponse
+    recipe: FinetuneRecipeResponse
+    adapter: Optional[FinetuneAdapterResponse] = None
+    stages: list[FinetunePipelineStage] = Field(default_factory=list)
+
+
+class FinetunePipelineRunResponse(BaseModel):
+    run_id: str
+    status: str
+    created_at: str
+    updated_at: str
+    cancelled: bool = False
+    request: FinetuneStage1RunRequest
+    result: Optional[FinetuneStage1RunResponse] = None
+    error: Optional[str] = None
+    stages: list[FinetunePipelineStage] = Field(default_factory=list)
+
+
+class FinetunePipelineRunListResponse(BaseModel):
+    runs: list[FinetunePipelineRunResponse] = Field(default_factory=list)
+    total: int
+
+
+class FinetunePipelineCancelResponse(BaseModel):
+    run_id: str
+    cancelled: bool
+    status: str
+
+
+class FinetuneTrainRequest(BaseModel):
+    output_model: Optional[str] = Field(default=None, max_length=200)
+    trainer_mode: Optional[str] = Field(default=None, max_length=32)
+    auto_register_adapter: bool = False
+    adapter_name: Optional[str] = Field(default=None, max_length=120)
+    adapter_model: Optional[str] = Field(default=None, max_length=200)
+    repo_profile_id: Optional[str] = None
+    adapter_description: str = Field(default="", max_length=2000)
+
+
+class FinetuneTrainResponse(BaseModel):
+    job_id: Optional[str] = None
+    run_id: Optional[str] = None
+    trainer_mode: str
+    status: str
+    output_model: Optional[str] = None
+    modelfile_path: Optional[str] = None
+    command: Optional[str] = None
+    detail: str = ""
+    duration_ms: int = 0
+    adapter: Optional[FinetuneAdapterResponse] = None
+
+
+class FinetuneStage1SchedulerStatusResponse(BaseModel):
+    enabled: bool
+    weekday: int
+    hour_utc: int
+    minute_utc: int
+    name: str
+    base_model: str
+    min_samples: int
+    run_eval_baseline: bool
+    eval_limit: int
+    auto_register_adapter: bool
+    last_run_slot: Optional[str] = None
+    last_run_id: Optional[str] = None
+    last_run_at: Optional[str] = None
+    last_run_source: Optional[str] = None
+    thread_alive: bool = False

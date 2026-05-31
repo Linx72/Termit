@@ -1,0 +1,21 @@
+{
+  "name": "@termit/client",
+  "version": "0.2.0",
+  "description": "TypeScript client for the Termit AI coding orchestrator API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "test": "npm run build && node --test tests/composer.test.mjs"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

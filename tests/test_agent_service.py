@@ -278,6 +278,18 @@ class AgentServiceTests(unittest.TestCase):
             events = service.get_run_events(queued.run_id, limit=100)
             self.assertLessEqual(len(events), 3)
 
+    def test_worker_lifecycle_stop_and_start(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(tmp, max_concurrency=2)
+            before = service.queue_metrics()
+            self.assertGreaterEqual(before["alive_workers"], 1)
+            service.stop()
+            stopped = service.queue_metrics()
+            self.assertEqual(stopped["alive_workers"], 0)
+            service.start()
+            restarted = service.queue_metrics()
+            self.assertGreaterEqual(restarted["alive_workers"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

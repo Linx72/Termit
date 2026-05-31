@@ -1,0 +1,47 @@
+{
+  "name": "termit",
+  "version": "0.4.0",
+  "description": "Termit — desktop AI coding assistant (Termit API + local Ollama)",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "build": "vite build && npm run build:electron",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "start": "electron .",
+    "package": "npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@termit/client": "file:../termit-client",
+    "monaco-editor": "^0.52.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "dev.termit.app",
+    "productName": "Termit",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}

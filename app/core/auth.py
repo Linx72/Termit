@@ -16,6 +16,15 @@ def extract_api_key(request: Request) -> Optional[str]:
 
 
 def is_public_path(path: str) -> bool:
-    if path in {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/ops/readiness"}:
+    if path in {
+        "/",
+        "/health",
+        "/healthz",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/api/ops/readiness",
+        "/api/metrics/thresholds",
+    }:
         return True
     return path.startswith("/docs/")

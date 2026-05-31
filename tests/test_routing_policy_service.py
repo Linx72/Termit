@@ -24,7 +24,7 @@ class RoutingPolicyServiceTests(unittest.TestCase):
             path_prefix="",
             task_type=TaskType.coding,
         )
-        self.assertEqual(model, "ollama:deepseek-coder")
+        self.assertEqual(model, "ollama:termit-core-ft")
 
     def test_benchmark_ranking_prefers_high_score(self) -> None:
         ranked = self.service.rank_models_for_task(
@@ -45,7 +45,7 @@ class RoutingPolicyServiceTests(unittest.TestCase):
             path_prefix="app/services",
             routing_policy="default",
         )
-        self.assertEqual(models[0], "ollama:deepseek-coder")
+        self.assertEqual(models[0], "ollama:termit-core-ft")
 
     def test_model_router_benchmark_reorders_candidates(self) -> None:
         settings = replace(

@@ -1,0 +1,27 @@
+name: Stage1 weekly pipeline
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  enqueue:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || vars.TERMIT_STAGE1_GHA_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Enqueue Stage1 pipeline
+        env:
+          TERMIT_BASE_URL: ${{ secrets.TERMIT_URL }}
+          TERMIT_API_KEY: ${{ secrets.TERMIT_API_KEY }}
+          TERMIT_STAGE1_NAME: weekly-stage1
+          TERMIT_STAGE1_BASE_MODEL: ollama:deepseek-coder
+          TERMIT_STAGE1_MIN_SAMPLES: "10"
+          TERMIT_STAGE1_RUN_EVAL_BASELINE: "true"
+          TERMIT_STAGE1_EVAL_LIMIT: "24"
+          TERMIT_STAGE1_AUTO_REGISTER_ADAPTER: "false"
+        run: python3 scripts/stage1_enqueue.py --from-env

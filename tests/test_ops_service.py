@@ -3,6 +3,9 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
+from app.main import app
 from app.core.api_key_config import ApiKeyConfig
 from app.core.config import Settings
 from app.services.ops_service import OpsService
@@ -68,6 +71,25 @@ class OpsServiceTests(unittest.IsolatedAsyncioTestCase):
     def test_mask_api_key(self) -> None:
         self.assertEqual(OpsService.mask_api_key("abcd"), "****")
         self.assertTrue(OpsService.mask_api_key("dev-key-1234").endswith("1234"))
+
+
+class OpsApiTests(unittest.TestCase):
+    def test_agent_run_ops_endpoints_available_without_auth(self) -> None:
+        client = TestClient(app)
+        metrics_resp = client.get("/api/ops/agent-runs/metrics")
+        self.assertEqual(metrics_resp.status_code, 200)
+        self.assertIn("queue_size", metrics_resp.json())
+
+        cleanup_resp = client.post(
+            "/api/ops/agent-runs/cleanup",
+            json={"retention_days": 14, "dry_run": True},
+        )
+        self.assertEqual(cleanup_resp.status_code, 200)
+        self.assertIn("deleted_runs", cleanup_resp.json())
+
+        status_resp = client.get("/api/ops/agent-runs/maintenance")
+        self.assertEqual(status_resp.status_code, 200)
+        self.assertIn("enabled", status_resp.json())
 
 
 if __name__ == "__main__":

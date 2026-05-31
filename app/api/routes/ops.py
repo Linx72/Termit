@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.core.config import Settings, get_settings
 from app.domain.schemas import (
+    AgentAlertThresholds,
     AgentRunsCleanupRequest,
     AgentRunsCleanupResponse,
     AgentRunsMetricsResponse,
@@ -12,12 +13,42 @@ from app.domain.schemas import (
     QuotaSummaryResponse,
     QuotaEntrySummary,
 )
+from app.services.alert_health_service import evaluate_agent_health
 from app.services.ops_service import OpsService
 from app.services.agent_service import AgentService
+from app.services.agent_maintenance_scheduler_service import AgentMaintenanceSchedulerService
 from app.services.quota_store import QuotaStore
-from app.state import get_agent_service, get_chat_service, get_ops_service, get_quota_store
+from app.state import (
+    get_agent_maintenance_scheduler_service,
+    get_agent_service,
+    get_chat_service,
+    get_ops_service,
+    get_quota_store,
+)
 
 router = APIRouter(prefix="/api/ops", tags=["ops"])
+
+
+def _agent_runs_metrics_payload(
+    service: AgentService,
+    settings: Settings,
+) -> AgentRunsMetricsResponse:
+    raw = service.queue_metrics()
+    thresholds = AgentAlertThresholds(
+        queue_utilization_percent=settings.agent_alert_queue_utilization_percent,
+        dead_letter_rate=settings.agent_alert_dead_letter_rate,
+        min_worker_alive_ratio=settings.agent_alert_min_worker_alive_ratio,
+    )
+    health_status, health_reasons, dead_letter_rate = evaluate_agent_health(raw, thresholds)
+    return AgentRunsMetricsResponse.model_validate(
+        {
+            **raw,
+            "dead_letter_rate": dead_letter_rate,
+            "health_status": health_status,
+            "health_reasons": health_reasons,
+            "active_thresholds": thresholds,
+        }
+    )
 
 
 @router.get("/readiness", response_model=OpsReadinessResponse)
@@ -92,26 +123,53 @@ async def reset_quota(
 
 @router.get("/agent-runs/metrics", response_model=AgentRunsMetricsResponse)
 async def agent_runs_metrics(
-    request: Request,
+    settings: Settings = Depends(get_settings),
     service: AgentService = Depends(get_agent_service),
 ) -> AgentRunsMetricsResponse:
-    caller_role = getattr(request.state, "api_role", "viewer")
-    if caller_role != "admin":
-        raise HTTPException(status_code=403, detail="Admin role required.")
-    return AgentRunsMetricsResponse.model_validate(service.queue_metrics())
+    return _agent_runs_metrics_payload(service, settings)
 
 
 @router.post("/agent-runs/cleanup", response_model=AgentRunsCleanupResponse)
 async def cleanup_agent_runs(
     payload: AgentRunsCleanupRequest,
     request: Request,
+    settings: Settings = Depends(get_settings),
     service: AgentService = Depends(get_agent_service),
 ) -> AgentRunsCleanupResponse:
-    caller_role = getattr(request.state, "api_role", "viewer")
-    if caller_role != "admin":
-        raise HTTPException(status_code=403, detail="Admin role required.")
+    if settings.auth_enabled:
+        caller_role = getattr(request.state, "api_role", "viewer")
+        if caller_role != "admin":
+            raise HTTPException(status_code=403, detail="Admin role required.")
     result = service.cleanup_runs(
         retention_days=payload.retention_days,
         dry_run=payload.dry_run,
     )
+    return AgentRunsCleanupResponse.model_validate(result)
+
+
+@router.get("/agent-runs/maintenance")
+async def agent_runs_maintenance_status(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    scheduler: AgentMaintenanceSchedulerService = Depends(get_agent_maintenance_scheduler_service),
+) -> dict[str, object]:
+    if settings.auth_enabled:
+        caller_role = getattr(request.state, "api_role", "viewer")
+        if caller_role != "admin":
+            raise HTTPException(status_code=403, detail="Admin role required.")
+    return scheduler.status()
+
+
+@router.post("/agent-runs/maintenance/cleanup-now", response_model=AgentRunsCleanupResponse)
+async def agent_runs_maintenance_cleanup_now(
+    payload: AgentRunsCleanupRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    scheduler: AgentMaintenanceSchedulerService = Depends(get_agent_maintenance_scheduler_service),
+) -> AgentRunsCleanupResponse:
+    if settings.auth_enabled:
+        caller_role = getattr(request.state, "api_role", "viewer")
+        if caller_role != "admin":
+            raise HTTPException(status_code=403, detail="Admin role required.")
+    result = scheduler.run_cleanup_once(dry_run=payload.dry_run)
     return AgentRunsCleanupResponse.model_validate(result)

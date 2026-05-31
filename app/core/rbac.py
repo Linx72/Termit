@@ -20,9 +20,13 @@ def required_role(method: str, path: str) -> str:
         return "admin"
     if path.startswith("/api/ops/quota-summary") and method == "GET":
         return "admin"
+    if path.startswith("/api/ops/agent-runs/metrics") and method == "GET":
+        return "viewer"
     if path.startswith("/api/ops/agent-runs"):
         return "admin"
     if path.startswith("/api/tools/execute") and method == "POST":
+        return "operator"
+    if path.startswith("/api/tools/apply_patch") and method == "POST":
         return "operator"
     if path.startswith("/api/tools/audit") and method == "GET":
         return "admin"

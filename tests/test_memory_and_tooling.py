@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 
 from app.domain.schemas import (
+    ApplyPatchHunk,
+    ApplyPatchRequest,
     ChatMessage,
     ExecuteCommandRequest,
     ListFilesRequest,
@@ -97,6 +99,83 @@ class ToolingServiceTests(unittest.TestCase):
             self.assertFalse(flag_path.exists())
             audit = service.get_audit_events(limit=1)
             self.assertEqual(audit[0].action, "dry_run")
+
+    def test_apply_patch_blocks_sensitive_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = ToolingService(tmp)
+            resp = service.apply_patch(
+                ApplyPatchRequest(path=".env", content="SECRET=1", create=True)
+            )
+            self.assertFalse(resp.applied)
+            self.assertEqual(resp.risk_level, ToolRiskLevel.blocked)
+
+    def test_apply_patch_requires_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "example.py"
+            target.write_text("print('old')\n", encoding="utf-8")
+            service = ToolingService(tmp)
+            resp = service.apply_patch(
+                ApplyPatchRequest(
+                    path="example.py",
+                    hunks=[ApplyPatchHunk(old_text="old", new_text="new")],
+                )
+            )
+            self.assertFalse(resp.applied)
+            self.assertTrue(resp.requires_confirmation)
+            self.assertEqual(target.read_text(encoding="utf-8"), "print('old')\n")
+
+    def test_apply_patch_applies_hunks_when_confirmed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "example.py"
+            target.write_text("print('old')\n", encoding="utf-8")
+            service = ToolingService(tmp)
+            resp = service.apply_patch(
+                ApplyPatchRequest(
+                    path="example.py",
+                    hunks=[ApplyPatchHunk(old_text="old", new_text="new")],
+                    confirmed=True,
+                )
+            )
+            self.assertTrue(resp.applied)
+            self.assertEqual(resp.hunks_applied, 1)
+            self.assertIn("new", target.read_text(encoding="utf-8"))
+
+    def test_apply_patch_creates_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "new.py"
+            service = ToolingService(tmp)
+            resp = service.apply_patch(
+                ApplyPatchRequest(
+                    path="new.py",
+                    content="print('created')\n",
+                    create=True,
+                    confirmed=True,
+                )
+            )
+            self.assertTrue(resp.applied)
+            self.assertTrue(resp.created)
+            self.assertTrue(target.exists())
+            self.assertIn("created", target.read_text(encoding="utf-8"))
+
+    def test_apply_patch_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "example.py"
+            target.write_text("alpha\n", encoding="utf-8")
+            service = ToolingService(tmp)
+            resp = service.apply_patch(
+                ApplyPatchRequest(
+                    path="example.py",
+                    content="beta\n",
+                    dry_run=True,
+                )
+            )
+            self.assertFalse(resp.applied)
+            self.assertEqual(target.read_text(encoding="utf-8"), "alpha\n")
+            self.assertIn("beta", resp.preview_excerpt)
 
 
 if __name__ == "__main__":

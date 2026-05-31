@@ -113,6 +113,12 @@ class Settings:
     agent_run_max_events_per_run: int = 500
     agent_run_max_response_chars: int = 12000
     agent_run_retention_days: int = 14
+    agent_memory_sqlite_path: str = "./termit_agent_memory.db"
+    agent_memory_max_entries: int = 50
+    agent_eval_scenarios_path: str = "./data/agent_eval_scenarios.json"
+    agent_maintenance_enabled: bool = True
+    agent_cleanup_interval_seconds: int = 3600
+    agent_metrics_snapshot_interval_seconds: int = 900
     response_cache_backend: str = "memory"
     response_cache_sqlite_path: str = "./termit_response_cache.db"
     response_cache_ttl_seconds: int = 120
@@ -131,12 +137,35 @@ class Settings:
     provider_retry_backoff_ms: int = 150
     degrade_empty_response_rate: float = 0.05
     degrade_fallback_rate: float = 0.35
+    agent_alert_queue_utilization_percent: float = 80.0
+    agent_alert_dead_letter_rate: float = 0.15
+    agent_alert_min_worker_alive_ratio: float = 1.0
     team_quotas: Dict[str, int] = field(default_factory=dict)
     repo_model_profiles_path: str = "./data/repo_model_profiles.json"
     routing_benchmarks_path: str = "./data/routing_benchmarks.json"
     finetune_datasets_dir: str = "./data/finetune/datasets"
     finetune_jobs_path: str = "./data/finetune/jobs.json"
     finetune_adapters_path: str = "./data/finetune/adapters.json"
+    finetune_pipelines_path: str = "./data/finetune/pipelines.json"
+    finetune_pipeline_max_concurrency: int = 1
+    stage1_schedule_enabled: bool = False
+    stage1_schedule_weekday: int = 0
+    stage1_schedule_hour: int = 3
+    stage1_schedule_minute: int = 0
+    stage1_schedule_name: str = "weekly-stage1"
+    stage1_schedule_base_model: str = ""
+    stage1_schedule_min_samples: int = 10
+    stage1_schedule_run_eval_baseline: bool = True
+    stage1_schedule_eval_limit: int = 24
+    stage1_schedule_auto_register_adapter: bool = False
+    stage1_schedule_state_path: str = "./data/finetune/schedule_state.json"
+    finetune_auto_train: bool = False
+    finetune_trainer: str = "ollama"
+    finetune_ollama_bin: str = "ollama"
+    finetune_output_model: str = "termit-core-ft"
+    finetune_auto_register_after_train: bool = False
+    finetune_modelfiles_dir: str = "./data/finetune/modelfiles"
+    finetune_train_timeout_seconds: int = 600
 
 
 def get_settings() -> Settings:
@@ -190,6 +219,21 @@ def get_settings() -> Settings:
         agent_run_max_events_per_run=int(os.getenv("TERMIT_AGENT_RUN_MAX_EVENTS_PER_RUN", "500")),
         agent_run_max_response_chars=int(os.getenv("TERMIT_AGENT_RUN_MAX_RESPONSE_CHARS", "12000")),
         agent_run_retention_days=int(os.getenv("TERMIT_AGENT_RUN_RETENTION_DAYS", "14")),
+        agent_memory_sqlite_path=os.getenv(
+            "TERMIT_AGENT_MEMORY_SQLITE_PATH",
+            "./termit_agent_memory.db",
+        ),
+        agent_memory_max_entries=int(os.getenv("TERMIT_AGENT_MEMORY_MAX_ENTRIES", "50")),
+        agent_eval_scenarios_path=os.getenv(
+            "TERMIT_AGENT_EVAL_SCENARIOS_PATH",
+            "./data/agent_eval_scenarios.json",
+        ),
+        agent_maintenance_enabled=os.getenv("TERMIT_AGENT_MAINTENANCE_ENABLED", "true").lower()
+        in {"1", "true", "yes"},
+        agent_cleanup_interval_seconds=int(os.getenv("TERMIT_AGENT_CLEANUP_INTERVAL_SECONDS", "3600")),
+        agent_metrics_snapshot_interval_seconds=int(
+            os.getenv("TERMIT_AGENT_METRICS_SNAPSHOT_INTERVAL_SECONDS", "900")
+        ),
         response_cache_backend=os.getenv("TERMIT_RESPONSE_CACHE_BACKEND", "memory"),
         response_cache_sqlite_path=os.getenv(
             "TERMIT_RESPONSE_CACHE_SQLITE_PATH",
@@ -214,6 +258,20 @@ def get_settings() -> Settings:
         provider_retry_backoff_ms=int(os.getenv("TERMIT_PROVIDER_RETRY_BACKOFF_MS", "150")),
         degrade_empty_response_rate=_parse_clamped_float_env("TERMIT_DEGRADE_EMPTY_RATE", 0.05),
         degrade_fallback_rate=_parse_clamped_float_env("TERMIT_DEGRADE_FALLBACK_RATE", 0.35),
+        agent_alert_queue_utilization_percent=_parse_clamped_float_env(
+            "TERMIT_AGENT_ALERT_QUEUE_UTILIZATION_PERCENT",
+            80.0,
+            min_value=1.0,
+            max_value=100.0,
+        ),
+        agent_alert_dead_letter_rate=_parse_clamped_float_env(
+            "TERMIT_AGENT_ALERT_DEAD_LETTER_RATE",
+            0.15,
+        ),
+        agent_alert_min_worker_alive_ratio=_parse_clamped_float_env(
+            "TERMIT_AGENT_ALERT_MIN_WORKER_ALIVE_RATIO",
+            1.0,
+        ),
         team_quotas=_parse_team_quotas(os.getenv("TERMIT_TEAM_QUOTAS", "")),
         repo_model_profiles_path=os.getenv(
             "TERMIT_REPO_MODEL_PROFILES_PATH",
@@ -231,5 +289,60 @@ def get_settings() -> Settings:
         finetune_adapters_path=os.getenv(
             "TERMIT_FINETUNE_ADAPTERS_PATH",
             "./data/finetune/adapters.json",
+        ),
+        finetune_pipelines_path=os.getenv(
+            "TERMIT_FINETUNE_PIPELINES_PATH",
+            "./data/finetune/pipelines.json",
+        ),
+        finetune_pipeline_max_concurrency=max(
+            1,
+            int(os.getenv("TERMIT_FINETUNE_PIPELINE_MAX_CONCURRENCY", "1")),
+        ),
+        stage1_schedule_enabled=os.getenv("TERMIT_STAGE1_SCHEDULE_ENABLED", "false").lower()
+        in {"1", "true", "yes"},
+        stage1_schedule_weekday=max(0, min(int(os.getenv("TERMIT_STAGE1_SCHEDULE_WEEKDAY", "0")), 6)),
+        stage1_schedule_hour=max(0, min(int(os.getenv("TERMIT_STAGE1_SCHEDULE_HOUR", "3")), 23)),
+        stage1_schedule_minute=max(0, min(int(os.getenv("TERMIT_STAGE1_SCHEDULE_MINUTE", "0")), 59)),
+        stage1_schedule_name=os.getenv("TERMIT_STAGE1_SCHEDULE_NAME", "weekly-stage1"),
+        stage1_schedule_base_model=os.getenv("TERMIT_STAGE1_SCHEDULE_BASE_MODEL", ""),
+        stage1_schedule_min_samples=max(
+            1,
+            int(os.getenv("TERMIT_STAGE1_SCHEDULE_MIN_SAMPLES", "10")),
+        ),
+        stage1_schedule_run_eval_baseline=os.getenv(
+            "TERMIT_STAGE1_SCHEDULE_RUN_EVAL_BASELINE",
+            "true",
+        ).lower()
+        in {"1", "true", "yes"},
+        stage1_schedule_eval_limit=max(
+            1,
+            min(int(os.getenv("TERMIT_STAGE1_SCHEDULE_EVAL_LIMIT", "24")), 100),
+        ),
+        stage1_schedule_auto_register_adapter=os.getenv(
+            "TERMIT_STAGE1_SCHEDULE_AUTO_REGISTER_ADAPTER",
+            "false",
+        ).lower()
+        in {"1", "true", "yes"},
+        stage1_schedule_state_path=os.getenv(
+            "TERMIT_STAGE1_SCHEDULE_STATE_PATH",
+            "./data/finetune/schedule_state.json",
+        ),
+        finetune_auto_train=os.getenv("TERMIT_FINETUNE_AUTO_TRAIN", "false").lower()
+        in {"1", "true", "yes"},
+        finetune_trainer=os.getenv("TERMIT_FINETUNE_TRAINER", "ollama"),
+        finetune_ollama_bin=os.getenv("TERMIT_FINETUNE_OLLAMA_BIN", "ollama"),
+        finetune_output_model=os.getenv("TERMIT_FINETUNE_OUTPUT_MODEL", "termit-core-ft"),
+        finetune_auto_register_after_train=os.getenv(
+            "TERMIT_FINETUNE_AUTO_REGISTER_AFTER_TRAIN",
+            "false",
+        ).lower()
+        in {"1", "true", "yes"},
+        finetune_modelfiles_dir=os.getenv(
+            "TERMIT_FINETUNE_MODELFILES_DIR",
+            "./data/finetune/modelfiles",
+        ),
+        finetune_train_timeout_seconds=max(
+            30,
+            int(os.getenv("TERMIT_FINETUNE_TRAIN_TIMEOUT_SECONDS", "600")),
         ),
     )

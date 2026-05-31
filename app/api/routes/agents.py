@@ -16,6 +16,9 @@ from app.domain.schemas import (
     AgentRunRequest,
     AgentRunResponse,
     AgentRunState,
+    AgentMemoryListResponse,
+    ApplyPatchRequest,
+    ApplyPatchResponse,
     ExecuteCommandRequest,
     ExecuteCommandResponse,
     ListFilesRequest,
@@ -64,6 +67,19 @@ async def get_agent(
         return service.get_agent(agent_id)
     except AgentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{agent_id}/memory", response_model=AgentMemoryListResponse)
+async def list_agent_memory(
+    agent_id: str,
+    limit: int = 20,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentMemoryListResponse:
+    try:
+        entries = service.list_agent_memory(agent_id, limit=limit)
+    except AgentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return AgentMemoryListResponse(entries=entries)
 
 
 @router.post("/{agent_id}/run", response_model=AgentRunResponse)
@@ -223,6 +239,20 @@ async def execute_command_as_agent(
 ) -> ExecuteCommandResponse:
     try:
         return service.execute_command_as_agent(agent_id, payload)
+    except AgentPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (AgentNotFoundError, ToolingError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/{agent_id}/tools/apply_patch", response_model=ApplyPatchResponse)
+async def apply_patch_as_agent(
+    agent_id: str,
+    payload: ApplyPatchRequest,
+    service: AgentService = Depends(get_agent_service),
+) -> ApplyPatchResponse:
+    try:
+        return service.apply_patch_as_agent(agent_id, payload)
     except AgentPermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except (AgentNotFoundError, ToolingError) as exc:

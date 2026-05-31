@@ -4,8 +4,9 @@
     "title": "Termit core backend",
     "path_prefix": "app/",
     "task_type": "coding",
-    "preferred_model": "ollama:deepseek-coder",
-    "description": "Primary Python orchestrator codebase."
+    "preferred_model": "ollama:termit-core-ft",
+    "description": "Primary Python orchestrator codebase.",
+    "finetuned": true
   },
   {
     "profile_id": "termit-tests",

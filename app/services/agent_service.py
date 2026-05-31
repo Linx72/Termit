@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timezone
-from queue import Empty, Queue
-from threading import Lock, Thread
+from queue import Empty, Full
+from threading import Event, Lock, Thread
 import time
+from typing import Optional
 from uuid import uuid4
 
 from app.domain.schemas import (
@@ -18,6 +20,8 @@ from app.domain.schemas import (
     AgentRunRequest,
     AgentRunResponse,
     AgentRunState,
+    ApplyPatchRequest,
+    ApplyPatchResponse,
     ChatMessage,
     ChatRequest,
     ExecuteCommandRequest,
@@ -31,6 +35,9 @@ from app.domain.schemas import (
 )
 from app.services.agent_registry_store import AgentRegistryStore
 from app.services.agent_run_store import AgentRunStore
+from app.services.agent_run_queue import AgentRunQueue
+from app.services.agent_loop_service import AgentLoopError, AgentLoopService, build_tool_arguments
+from app.services.agent_memory_store import AgentMemoryStore
 from app.services.browser_workflow_service import BrowserWorkflowService
 from app.services.chat_service import ChatService
 from app.services.tooling_service import ToolingService
@@ -68,6 +75,8 @@ class AgentService:
         run_store: AgentRunStore,
         tooling: ToolingService,
         browser_workflow: BrowserWorkflowService,
+        agent_memory_store: Optional[AgentMemoryStore] = None,
+        agent_loop_service: Optional[AgentLoopService] = None,
         max_concurrency: int = 2,
         max_queue_size: int = 100,
         run_max_attempts: int = 2,
@@ -81,7 +90,11 @@ class AgentService:
         self._run_store = run_store
         self._tooling = tooling
         self._browser_workflow = browser_workflow
-        self._run_queue: Queue[tuple[str, str, AgentRunRequest]] = Queue(maxsize=max(1, max_queue_size))
+        self._agent_memory = agent_memory_store
+        self._loop_service = agent_loop_service or AgentLoopService()
+        self._run_queue: AgentRunQueue[tuple[str, str, AgentRunRequest]] = AgentRunQueue(
+            maxsize=max(1, max_queue_size)
+        )
         self._run_max_attempts = max(1, run_max_attempts)
         self._run_retry_backoff_ms = max(0, run_retry_backoff_ms)
         self._max_events_per_run = max(1, max_events_per_run)
@@ -91,11 +104,31 @@ class AgentService:
         self._worker_count = max(1, max_concurrency)
         self._lock = Lock()
         self._workers: list[Thread] = []
+        self._stop = Event()
+        self.start()
 
-        for index in range(self._worker_count):
-            worker = Thread(target=self._worker_loop, name=f"agent-runner-{index}", daemon=True)
-            worker.start()
-            self._workers.append(worker)
+    def start(self) -> None:
+        if self._stop.is_set():
+            self._stop.clear()
+        with self._lock:
+            alive = [worker for worker in self._workers if worker.is_alive()]
+            self._workers = alive
+            missing = max(0, self._worker_count - len(self._workers))
+            next_index = len(self._workers)
+            for offset in range(missing):
+                worker = Thread(
+                    target=self._worker_loop,
+                    name=f"agent-runner-{next_index + offset}",
+                    daemon=True,
+                )
+                worker.start()
+                self._workers.append(worker)
+
+    def stop(self) -> None:
+        self._stop.set()
+        for worker in list(self._workers):
+            worker.join(timeout=2)
+        self._workers = []
 
     def create_agent(self, payload: AgentProfileCreateRequest) -> AgentProfileResponse:
         return self._registry.create_agent(payload)
@@ -137,8 +170,8 @@ class AgentService:
             )
 
         try:
-            self._run_queue.put_nowait((run_id, agent_id, payload))
-        except Exception as exc:  # noqa: BLE001
+            self._run_queue.put_nowait((run_id, agent_id, payload), priority=payload.priority)
+        except Full as exc:
             with self._lock:
                 failed_record = record.model_copy(deep=True)
                 failed_record.state = AgentRunState.failed
@@ -188,6 +221,7 @@ class AgentService:
             by_state = self._run_store.count_runs_by_state()
             total_runs = self._run_store.count_runs()
             queue_size = self._run_queue.qsize()
+            alive_workers = sum(1 for worker in self._workers if worker.is_alive())
         active_runs = int(by_state.get(AgentRunState.running.value, 0))
         utilization = round((queue_size / self._queue_capacity) * 100, 2)
         return {
@@ -195,6 +229,7 @@ class AgentService:
             "queue_capacity": self._queue_capacity,
             "queue_utilization_percent": utilization,
             "worker_count": self._worker_count,
+            "alive_workers": alive_workers,
             "total_runs": total_runs,
             "by_state": by_state,
             "active_runs": active_runs,
@@ -239,6 +274,12 @@ class AgentService:
                 return AgentRunCancelResponse(run_id=run_id, cancelled=True, state=record.state)
             return AgentRunCancelResponse(run_id=run_id, cancelled=False, state=record.state)
 
+    def list_agent_memory(self, agent_id: str, limit: int = 20) -> list[dict[str, str]]:
+        self.get_agent(agent_id)
+        if self._agent_memory is None:
+            return []
+        return self._agent_memory.list_entries(agent_id, limit=limit)
+
     async def run_agent(self, agent_id: str, payload: AgentRunRequest) -> AgentRunResponse:
         profile = self.get_agent(agent_id)
         return await self._run_with_profile(profile, payload)
@@ -259,6 +300,14 @@ class AgentService:
         self._ensure_tool_allowed(agent_id, "execute_command")
         return self._tooling.execute_command(payload)
 
+    def apply_patch_as_agent(
+        self,
+        agent_id: str,
+        payload: ApplyPatchRequest,
+    ) -> ApplyPatchResponse:
+        self._ensure_tool_allowed(agent_id, "apply_patch")
+        return self._tooling.apply_patch(payload)
+
     def run_online_as_agent(self, agent_id: str, payload: WebAutomationRequest) -> WebAutomationResponse:
         self._ensure_tool_allowed(agent_id, "web_automation")
         profile = self.get_agent(agent_id)
@@ -273,6 +322,14 @@ class AgentService:
     ) -> AgentRunResponse:
         if payload.online_url:
             return self._run_online_request(profile, payload)
+
+        use_loop = (
+            profile.use_tool_loop
+            if payload.use_tool_loop is None
+            else payload.use_tool_loop
+        )
+        if use_loop:
+            return await self._run_with_tool_loop(profile, payload)
 
         chat_request = ChatRequest(
             message=payload.input,
@@ -302,6 +359,60 @@ class AgentService:
             attempted_models=result.attempted_models,
             response=result.response,
         )
+
+    async def _run_with_tool_loop(
+        self,
+        profile: AgentProfileResponse,
+        payload: AgentRunRequest,
+    ) -> AgentRunResponse:
+        memory_context: list[str] = []
+        if profile.use_long_term_memory and self._agent_memory is not None:
+            memory_context = self._agent_memory.get_context(profile.agent_id)
+
+        def tool_fn(tool_name: str, arguments: dict[str, object]) -> str:
+            return self._invoke_loop_tool(profile.agent_id, profile, tool_name, arguments)
+
+        loop_result = await self._loop_service.run(
+            profile=profile,
+            payload=payload,
+            chat_fn=self._chat_service.chat,
+            tool_fn=tool_fn,
+            memory_context=memory_context,
+            max_steps=profile.max_tool_steps,
+        )
+        return AgentRunResponse(
+            agent_id=profile.agent_id,
+            agent_name=profile.name,
+            provider=loop_result.provider,
+            model=loop_result.model,
+            task_type=profile.task_type,
+            session_id=payload.session_id,
+            attempted_models=loop_result.attempted_models,
+            response=loop_result.response,
+        )
+
+    def _invoke_loop_tool(
+        self,
+        agent_id: str,
+        profile: AgentProfileResponse,
+        tool_name: str,
+        arguments: dict[str, object],
+    ) -> str:
+        self._ensure_tool_allowed(agent_id, tool_name)
+        if tool_name == "web_automation" and not profile.allow_online:
+            raise AgentOnlineError(f"Agent '{profile.name}' is not configured for online execution.")
+        built = build_tool_arguments(tool_name, arguments)
+        if tool_name == "list_files":
+            result = self._tooling.list_files(built)
+        elif tool_name == "read_file":
+            result = self._tooling.read_file(built)
+        elif tool_name == "execute_command":
+            result = self._tooling.execute_command(built)
+        elif tool_name == "web_automation":
+            result = self._browser_workflow.run(built)
+        else:
+            raise AgentPermissionError(f"Unsupported loop tool: {tool_name}")
+        return json.dumps(result.model_dump(mode="json"), ensure_ascii=True)
 
     def _run_online_request(
         self,
@@ -369,7 +480,7 @@ class AgentService:
             )
 
     def _worker_loop(self) -> None:
-        while True:
+        while not self._stop.is_set():
             try:
                 run_id, agent_id, payload = self._run_queue.get(timeout=0.5)
             except Empty:
@@ -436,6 +547,14 @@ class AgentService:
                         message="Run completed successfully.",
                         attempt=attempt,
                     )
+                    if profile.use_long_term_memory and self._agent_memory is not None:
+                        self._agent_memory.append(
+                            agent_id=agent_id,
+                            outcome="completed",
+                            summary=payload.input[:120],
+                            detail=current.response[:500],
+                            run_id=run_id,
+                        )
                 return
             except Exception as exc:  # noqa: BLE001
                 failure_class = self._classify_failure(exc)
@@ -475,6 +594,8 @@ class AgentService:
 
     @staticmethod
     def _classify_failure(exc: Exception) -> str:
+        if isinstance(exc, AgentLoopError):
+            return "loop_error"
         if isinstance(exc, AgentOnlineError):
             return "online_error"
         if isinstance(exc, AgentPermissionError):
