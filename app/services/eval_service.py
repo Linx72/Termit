@@ -9,6 +9,8 @@ from typing import Optional
 from uuid import uuid4
 
 from app.domain.schemas import (
+    ApplyPatchHunk,
+    ApplyPatchRequest,
     ExecuteCommandRequest,
     ListFilesRequest,
     ReadFileRequest,
@@ -36,6 +38,10 @@ EVAL_STUB_PAGES: dict[str, tuple[int, str, str]] = {
 }
 
 
+_EVAL_PATCH_FIXTURE = "data/eval_fixtures/patch_sample.txt"
+_EVAL_PATCH_BASELINE = "hello world\n"
+
+
 @dataclass(frozen=True)
 class EvalScenario:
     id: str
@@ -50,6 +56,13 @@ class EvalScenario:
     tool_dry_run: bool = False
     web_url: str = "https://example.com"
     web_max_steps: int = 4
+    patch_path: str = ""
+    patch_old: str = ""
+    patch_new: str = ""
+    patch_create: bool = False
+    patch_dry_run: bool = True
+    patch_confirmed: bool = False
+    verify_command: str = ""
 
 
 class EvalService:
@@ -102,6 +115,13 @@ class EvalService:
                     tool_dry_run=bool(item.get("tool_dry_run", False)),
                     web_url=str(item.get("web_url", "https://example.com")),
                     web_max_steps=int(item.get("web_max_steps", 4)),
+                    patch_path=str(item.get("patch_path", "")),
+                    patch_old=str(item.get("patch_old", "")),
+                    patch_new=str(item.get("patch_new", "")),
+                    patch_create=bool(item.get("patch_create", False)),
+                    patch_dry_run=bool(item.get("patch_dry_run", True)),
+                    patch_confirmed=bool(item.get("patch_confirmed", False)),
+                    verify_command=str(item.get("verify_command", "")),
                 )
             )
         return scenarios
@@ -212,6 +232,10 @@ class EvalService:
             return self._run_tool_read(scenario)
         if runner == "tool_exec":
             return self._run_tool_exec(scenario)
+        if runner == "tool_patch":
+            return self._run_tool_patch(scenario)
+        if runner == "tool_patch_verify":
+            return self._run_tool_patch_verify(scenario)
         if runner == "web":
             return self._run_web_scenario(scenario)
         raise ValueError(f"Unsupported runner: {runner}")
@@ -266,6 +290,82 @@ class EvalService:
         failure_class = "safety_block" if blocked else None
         safety_ok = 0 if blocked else 1
         return result.command, passed, failure_class, safety_ok, "semi-auto"
+
+    def _run_tool_patch(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
+        if self._tooling is None:
+            raise RuntimeError("Tooling service is not configured for eval runs.")
+        if not scenario.patch_path:
+            raise ValueError("tool_patch runner requires patch_path.")
+        if scenario.patch_path == _EVAL_PATCH_FIXTURE and not scenario.patch_dry_run:
+            self._reset_patch_fixture()
+        hunks = []
+        if scenario.patch_old or scenario.patch_new:
+            hunks = [ApplyPatchHunk(old_text=scenario.patch_old, new_text=scenario.patch_new)]
+        result = self._tooling.apply_patch(
+            ApplyPatchRequest(
+                path=scenario.patch_path,
+                hunks=hunks,
+                create=scenario.patch_create,
+                dry_run=scenario.patch_dry_run,
+                confirmed=scenario.patch_confirmed,
+            )
+        )
+        blocked = result.risk_level.value == "blocked"
+        passed = not blocked and (result.applied or scenario.patch_dry_run)
+        failure_class = "safety_block" if blocked else None
+        safety_ok = 0 if blocked else 1
+        return result.path, passed, failure_class, safety_ok, "semi-auto"
+
+    def _run_tool_patch_verify(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
+        if self._tooling is None:
+            raise RuntimeError("Tooling service is not configured for eval runs.")
+        if not scenario.patch_path:
+            raise ValueError("tool_patch_verify runner requires patch_path.")
+        if not scenario.verify_command:
+            raise ValueError("tool_patch_verify runner requires verify_command.")
+        if scenario.patch_path == _EVAL_PATCH_FIXTURE:
+            self._reset_patch_fixture()
+        hunks = []
+        if scenario.patch_old or scenario.patch_new:
+            hunks = [ApplyPatchHunk(old_text=scenario.patch_old, new_text=scenario.patch_new)]
+        patch_result = self._tooling.apply_patch(
+            ApplyPatchRequest(
+                path=scenario.patch_path,
+                hunks=hunks,
+                create=scenario.patch_create,
+                dry_run=scenario.patch_dry_run,
+                confirmed=scenario.patch_confirmed,
+            )
+        )
+        if patch_result.risk_level.value == "blocked":
+            return patch_result.path, False, "safety_block", 0, "semi-auto"
+        if not patch_result.applied and not scenario.patch_dry_run:
+            return patch_result.path, False, "verification_error", 1, "semi-auto"
+
+        verify_result = self._tooling.execute_command(
+            ExecuteCommandRequest(
+                command=scenario.verify_command,
+                path=scenario.tool_path or ".",
+                dry_run=False,
+                confirmed=True,
+            )
+        )
+        passed = verify_result.executed and verify_result.exit_code == 0
+        failure_class = None if passed else "verification_error"
+        return (
+            f"{patch_result.path}|{verify_result.command}",
+            passed,
+            failure_class,
+            1,
+            "semi-auto",
+        )
+
+    def _reset_patch_fixture(self) -> None:
+        if self._tooling is None:
+            return
+        target = self._tooling.root / _EVAL_PATCH_FIXTURE
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_EVAL_PATCH_BASELINE, encoding="utf-8")
 
     def _run_web_scenario(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
         url = scenario.web_url

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from threading import Lock
+from typing import Callable, Optional
 from uuid import uuid4
 
 from app.domain.schemas import (
@@ -19,6 +20,7 @@ from app.domain.schemas import (
 from app.services.task_store import TaskStore
 from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingError, ToolingService
+from app.services.training_signal_store import TrainingSignalStore
 
 
 class TaskNotFoundError(Exception):
@@ -41,6 +43,9 @@ class ExternalError(TaskExecutionError):
     error_class = "external_error"
 
 
+TaskAgentRunner = Callable[[str, TaskType, Optional[str]], str]
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -54,11 +59,19 @@ class TaskService:
         store: TaskStore,
         max_attempts: int = 2,
         telemetry: TelemetryStore | None = None,
+        training_signal_store: TrainingSignalStore | None = None,
+        agent_runner: TaskAgentRunner | None = None,
+        use_agent_for_auto: bool = False,
+        task_agent_id: str = "",
     ) -> None:
         self._tooling = tooling
         self._store = store
         self._max_attempts = max_attempts
         self._telemetry = telemetry
+        self._training_signals = training_signal_store
+        self._agent_runner = agent_runner
+        self._use_agent_for_auto = use_agent_for_auto
+        self._task_agent_id = task_agent_id.strip()
         self._lock = Lock()
 
     def create_task(self, payload: TaskCreateRequest) -> TaskCreateResponse:
@@ -167,6 +180,26 @@ class TaskService:
                     "Guided mode paused after planning",
                 )
                 self._store.put_task(current)
+            return
+
+        if self._use_agent_for_auto and self._agent_runner is not None:
+            try:
+                self._run_via_agent(task_id)
+                self._record_task_telemetry(completed=True, auto_mode=True, failure_class=None)
+            except TaskExecutionError as exc:
+                self._fail(task_id, exc.error_class, str(exc))
+                self._record_task_telemetry(
+                    completed=False,
+                    auto_mode=True,
+                    failure_class=exc.error_class,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._fail(task_id, "external_error", f"Unexpected task failure: {exc}")
+                self._record_task_telemetry(
+                    completed=False,
+                    auto_mode=True,
+                    failure_class="external_error",
+                )
             return
 
         try:
@@ -282,6 +315,28 @@ class TaskService:
 
         raise PlanningError(f"Unknown plan step: {step}")
 
+    def _run_via_agent(self, task_id: str) -> None:
+        task = self.get_task(task_id)
+        self._append_event(
+            task_id,
+            "agent_dispatch",
+            TaskState.running,
+            f"Dispatching to agent for task_type={task.task_type.value}",
+        )
+        if self._agent_runner is None:
+            raise PlanningError("Agent runner is not configured.")
+        response = self._agent_runner(task.input, task.task_type, task.session_id)
+        execution_notes = [response]
+        self._append_event(
+            task_id,
+            "agent_completed",
+            TaskState.running,
+            f"Agent completed ({len(response)} chars)",
+        )
+        self._set_state(task_id, TaskState.verifying, "verification_started", "Verifying agent output")
+        self._verify(task_id, execution_notes)
+        self._complete(task_id, execution_notes)
+
     def _verify(self, task_id: str, execution_notes: list[str]) -> None:
         task = self.get_task(task_id)
         if not execution_notes:
@@ -311,6 +366,20 @@ class TaskService:
                 "Task completed successfully",
             )
             self._store.put_task(task)
+            if self._training_signals is not None:
+                trajectory = "\n".join(
+                    f"[{event.event_type}] {event.message}"
+                    for event in task.events
+                    if event.message.strip()
+                )
+                self._training_signals.try_capture_task(
+                    task_id=task.task_id,
+                    instruction=task.input,
+                    report=task.report or "",
+                    task_type=task.task_type.value,
+                    session_id=task.session_id,
+                    trajectory=trajectory,
+                )
 
     def _fail(self, task_id: str, failure_class: str, reason: str) -> None:
         with self._lock:

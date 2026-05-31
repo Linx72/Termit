@@ -122,6 +122,13 @@ def _prom_line(name: str, value: float, labels: Optional[dict[str, str]] = None)
     return f"{name} {value}"
 
 
+@router.get("/metrics/http-endpoints")
+async def metrics_http_endpoints(
+    telemetry: TelemetryStore = Depends(get_telemetry_store),
+) -> dict[str, object]:
+    return {"endpoints": telemetry.http_endpoint_metrics()}
+
+
 @router.get("/metrics/prometheus", response_class=PlainTextResponse)
 async def metrics_prometheus(
     telemetry: TelemetryStore = Depends(get_telemetry_store),
@@ -161,4 +168,10 @@ async def metrics_prometheus(
         lines.append("# TYPE termit_agent_runs_total gauge")
         for state, count in sorted(by_state.items()):
             lines.append(_prom_line("termit_agent_runs_total", int(count), labels={"state": str(state)}))
+    for row in telemetry.http_endpoint_metrics():
+        endpoint = str(row["endpoint"]).replace('"', "")
+        labels = {"endpoint": endpoint}
+        lines.append(_prom_line("termit_http_requests_total", int(row["requests_total"]), labels=labels))
+        lines.append(_prom_line("termit_http_errors_total", int(row["errors_total"]), labels=labels))
+        lines.append(_prom_line("termit_http_latency_p95_ms", float(row["latency_p95_ms"]), labels=labels))
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")

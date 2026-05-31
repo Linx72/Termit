@@ -28,6 +28,23 @@ class CodeRetrievalServiceTests(unittest.TestCase):
         for item in hits:
             self.assertTrue(item.path.startswith("app/services/task"))
 
+    def test_stats_include_mode(self) -> None:
+        service = CodeRetrievalService(root_path=".", mode="keyword")
+        service.reindex()
+        stats = service.stats()
+        self.assertEqual(stats["mode"], "keyword")
+        self.assertIn("cached_embeddings", stats)
+
+    def test_semantic_mode_falls_back_to_keyword(self) -> None:
+        service = CodeRetrievalService(
+            root_path=".",
+            mode="semantic",
+            ollama_base_url="http://127.0.0.1:1",
+        )
+        service.reindex()
+        hits = service.search("ChatService context compaction", limit=3, path_prefix="app/")
+        self.assertGreaterEqual(len(hits), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

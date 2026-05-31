@@ -23,6 +23,7 @@ from app.domain.schemas import (
     FinetuneStage1SchedulerStatusResponse,
     FinetuneTrainRequest,
     FinetuneTrainResponse,
+    FinetuneTrainingDashboardResponse,
 )
 from app.services.eval_service import EvalService
 from app.services.finetune_service import FinetuneJobRecord, FinetuneService
@@ -70,6 +71,14 @@ async def export_dataset(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FinetuneDatasetExportResponse(**result)
+
+
+@router.get("/training/dashboard", response_model=FinetuneTrainingDashboardResponse)
+async def training_dashboard(
+    limit: int = Query(default=10, ge=1, le=50),
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneTrainingDashboardResponse:
+    return FinetuneTrainingDashboardResponse(**service.training_dashboard(limit=limit))
 
 
 @router.post("/jobs", response_model=FinetuneJobResponse)

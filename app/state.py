@@ -31,7 +31,7 @@ from app.services.finetune_service import FinetuneService
 from app.services.finetune_trainer_service import FinetuneTrainerService
 from app.services.feedback_store import FeedbackStore
 from app.services.sqlite_task_store import SQLiteTaskStore
-from app.services.task_service import TaskService
+from app.services.task_service import PlanningError, TaskService
 from app.services.task_store import InMemoryTaskStore
 from app.services.provider_circuit_breaker import ProviderCircuitBreaker
 from app.services.quota_store import QuotaStore
@@ -39,6 +39,9 @@ from app.services.response_cache_store import ResponseCacheStore
 from app.services.stage1_scheduler_service import Stage1SchedulerService
 from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingService
+from app.services.training_signal_store import TrainingSignalStore
+from app.services.alert_webhook_service import AlertWebhookService
+from app.domain.schemas import FinetuneStage1RunRequest
 
 
 @lru_cache
@@ -89,6 +92,8 @@ def _build_chat_service() -> ChatService:
         retrieval_enabled=settings.retrieval_enabled,
         provider_retry_attempts=settings.provider_retry_attempts,
         provider_retry_backoff_ms=settings.provider_retry_backoff_ms,
+        dual_pass_enabled=settings.dual_pass_enabled,
+        dual_pass_task_types=settings.dual_pass_task_types,
     )
 
 
@@ -116,6 +121,20 @@ def get_agent_memory_store() -> AgentMemoryStore:
 
 
 @lru_cache
+def _build_training_signal_store() -> TrainingSignalStore:
+    settings = get_settings()
+    return TrainingSignalStore(
+        file_path=settings.finetune_training_signals_path,
+        min_output_chars=settings.finetune_min_signal_output_chars,
+        enabled=settings.finetune_auto_capture_signals,
+    )
+
+
+def get_training_signal_store() -> TrainingSignalStore:
+    return _build_training_signal_store()
+
+
+@lru_cache
 def _build_agent_service() -> AgentService:
     settings = get_settings()
     if settings.agent_run_backend == "sqlite":
@@ -137,6 +156,9 @@ def _build_agent_service() -> AgentService:
         max_events_per_run=settings.agent_run_max_events_per_run,
         max_response_chars=settings.agent_run_max_response_chars,
         retention_days=settings.agent_run_retention_days,
+        training_signal_store=_build_training_signal_store(),
+        verify_after_patch=settings.agent_verify_after_patch,
+        verify_cmd=settings.agent_verify_cmd,
     )
 
 
@@ -203,7 +225,38 @@ def _build_task_service() -> TaskService:
         store = SQLiteTaskStore(db_path=settings.task_sqlite_path)
     else:
         store = InMemoryTaskStore()
-    return TaskService(tooling, store, telemetry=_build_telemetry_store())
+    agent_runner = _task_agent_runner if settings.task_use_agent else None
+    return TaskService(
+        tooling,
+        store,
+        telemetry=_build_telemetry_store(),
+        training_signal_store=_build_training_signal_store(),
+        agent_runner=agent_runner,
+        use_agent_for_auto=settings.task_use_agent,
+        task_agent_id=settings.task_agent_id,
+    )
+
+
+def _task_agent_runner(input_text: str, task_type, session_id: str | None) -> str:
+    import asyncio
+
+    from app.domain.schemas import AgentRunRequest, TaskType
+
+    settings = get_settings()
+    service = get_agent_service()
+    agent_id = settings.task_agent_id.strip()
+    if not agent_id:
+        agents = service.list_agents()
+        typed = [item for item in agents if item.task_type == task_type]
+        if typed:
+            agent_id = typed[0].agent_id
+        elif agents:
+            agent_id = agents[0].agent_id
+    if not agent_id:
+        raise PlanningError("No agent configured for TERMIT_TASK_USE_AGENT.")
+    payload = AgentRunRequest(input=input_text, session_id=session_id)
+    result = asyncio.run(service.run_agent(agent_id, payload))
+    return result.response or ""
 
 
 def get_task_service() -> TaskService:
@@ -300,6 +353,10 @@ def _build_code_retrieval_service() -> CodeRetrievalService:
         root_path=settings.retrieval_root_path,
         chunk_max_chars=settings.retrieval_chunk_max_chars,
         max_file_bytes=settings.retrieval_max_file_bytes,
+        mode=settings.retrieval_mode,
+        ollama_base_url=settings.ollama_base_url,
+        embed_model=settings.retrieval_embed_model,
+        embed_cache_path=settings.retrieval_embed_cache_path,
     )
 
 
@@ -374,6 +431,15 @@ def get_finetune_trainer_service() -> FinetuneTrainerService:
 @lru_cache
 def _build_finetune_service() -> FinetuneService:
     settings = get_settings()
+    signal_store = _build_training_signal_store()
+
+    def _post_eval_runner(request: FinetuneStage1RunRequest) -> dict[str, object]:
+        return _build_eval_service().run_suite(
+            category=request.eval_category,
+            limit=request.eval_limit or 24,
+            persist_report=True,
+        )
+
     return FinetuneService(
         datasets_dir=settings.finetune_datasets_dir,
         jobs_path=settings.finetune_jobs_path,
@@ -383,12 +449,30 @@ def _build_finetune_service() -> FinetuneService:
         task_sqlite_path=settings.task_sqlite_path,
         agent_run_sqlite_path=settings.agent_run_sqlite_path,
         memory_sqlite_path=settings.memory_sqlite_path,
+        training_signals_path=settings.finetune_training_signals_path,
+        eval_report_file_path=settings.eval_report_file_path,
         repo_profiles_path=settings.repo_model_profiles_path,
         pipeline_max_concurrency=settings.finetune_pipeline_max_concurrency,
         trainer=_build_finetune_trainer_service(),
         auto_train_after_pipeline=settings.finetune_auto_train,
         auto_register_after_train=settings.finetune_auto_register_after_train,
+        auto_post_eval=settings.finetune_auto_post_eval,
+        post_eval_runner=_post_eval_runner,
+        training_signal_store=signal_store,
+        regression_gate_enabled=settings.finetune_regression_gate_enabled,
+        max_train_regression=settings.finetune_max_train_regression,
+        shadow_traffic_percent=settings.finetune_shadow_traffic_percent,
     )
+
+
+@lru_cache
+def _build_alert_webhook_service() -> AlertWebhookService:
+    settings = get_settings()
+    return AlertWebhookService(webhook_url=settings.alert_webhook_url)
+
+
+def get_alert_webhook_service() -> AlertWebhookService:
+    return _build_alert_webhook_service()
 
 
 def get_finetune_service() -> FinetuneService:

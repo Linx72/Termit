@@ -13,6 +13,7 @@ _REFUSAL_PATTERNS = (
 )
 
 _SOURCE_PRIORITY = {
+    "training_signal": 50,
     "feedback": 40,
     "agent_run": 30,
     "task": 25,
@@ -61,6 +62,8 @@ def _sample_score(row: dict[str, str]) -> float:
         score += 4.0
     if str(row.get("trajectory", "")).strip():
         score += 5.0
+    if str(row.get("eval_passed", "")).lower() in {"1", "true", "yes"}:
+        score += 15.0
     output_len = len(str(row.get("output", "")))
     score += min(output_len / 120.0, 6.0)
     return score
@@ -154,5 +157,7 @@ def export_row(row: dict[str, str]) -> dict[str, str]:
         "run_id",
         "rating",
         "quality_score",
+        "eval_passed",
+        "signal_id",
     }
     return {key: value for key, value in row.items() if key in allowed and value}

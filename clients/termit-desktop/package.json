@@ -1,6 +1,6 @@
 {
   "name": "termit",
-  "version": "0.4.0",
+  "version": "0.3.1",
   "description": "Termit — desktop AI coding assistant (Termit API + local Ollama)",
   "private": true,
   "main": "dist-electron/main.js",
@@ -9,7 +9,8 @@
     "build": "vite build && npm run build:electron",
     "build:electron": "tsc -p tsconfig.electron.json",
     "start": "electron .",
-    "package": "npm run build && electron-builder --dir"
+    "package": "npm run build && electron-builder --dir",
+    "package:mac": "npm run build && electron-builder --mac --dir"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

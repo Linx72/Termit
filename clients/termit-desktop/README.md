@@ -52,10 +52,19 @@ npm run package   # output in release/
 
 The packaged app name is **Termit** (`productName` in electron-builder).
 
+## One-command dev stack (from repo root)
+
+```bash
+./scripts/run_termit_stack.sh
+```
+
+See [`../../DESKTOP_QUICKSTART.md`](../../DESKTOP_QUICKSTART.md).
+
 ## Usage
 
-1. **Connect** — checks `/api/providers/status`
-2. **Chat** — streaming (Cmd/Ctrl+Enter), @ file attachments
+1. **Choose repo** — path to Termit clone (for optional auto-start of `uvicorn`)
+2. **Connect** — loads providers, routing profiles, finetune adapters into model list
+3. **Chat** — streaming (Cmd/Ctrl+Enter), @ file attachments
 3. **Composer** — multi-file context → patches → dry-run preview → apply all
 4. **Editor** — Monaco workspace files, Cmd+K inline edit with diff preview, Save via `apply_patch`
 5. **Tasks** — list and inspect background coding tasks

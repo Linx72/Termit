@@ -61,6 +61,26 @@ class ChatResponse(BaseModel):
     repo_profile: Optional[str] = None
     routing_policy: str = "default"
     selected_via: Optional[str] = None
+    dual_pass_used: bool = False
+    validator_model: Optional[str] = None
+
+
+class FimCompletionRequest(BaseModel):
+    prefix: str = Field(min_length=1, max_length=12000)
+    suffix: str = Field(default="", max_length=4000)
+    path: str = Field(default="", max_length=500)
+    language: str = Field(default="", max_length=64)
+    model: Optional[str] = None
+    task_type: TaskType = TaskType.coding
+    max_tokens: int = Field(default=64, ge=8, le=256)
+    temperature: float = Field(default=0.1, ge=0.0, le=1.0)
+
+
+class FimCompletionResponse(BaseModel):
+    insert_text: str
+    provider: str
+    model: str
+    attempted_models: list[str] = Field(default_factory=list)
 
 
 class RepoModelProfileResponse(BaseModel):
@@ -798,6 +818,8 @@ class FinetuneDatasetExportRequest(BaseModel):
     include_agent_runs: bool = True
     include_chat_sessions: bool = True
     include_trajectory: bool = True
+    include_training_signals: bool = True
+    prefer_eval_passed: bool = True
     min_rating: int = Field(default=4, ge=1, le=5)
     min_samples: int = Field(default=1, ge=1, le=10000)
     limit: int = Field(default=500, ge=1, le=5000)
@@ -805,7 +827,7 @@ class FinetuneDatasetExportRequest(BaseModel):
     curate_min_output_chars: int = Field(default=12, ge=1, le=5000)
     curate_max_output_chars: int = Field(default=12000, ge=100, le=100000)
     curate_skip_error_patterns: bool = True
-    curate_stratified_balance: bool = False
+    curate_stratified_balance: bool = True
     curate_max_per_category: Optional[int] = Field(default=None, ge=1, le=5000)
 
 
@@ -816,6 +838,29 @@ class FinetuneDatasetExportResponse(BaseModel):
     format: str
     fields: list[str] = Field(default_factory=list)
     curation: dict[str, int] = Field(default_factory=dict)
+    sources: dict[str, int] = Field(default_factory=dict)
+
+
+class FinetuneTrainingDashboardResponse(BaseModel):
+    stage1_runs: list[dict[str, object]] = Field(default_factory=list)
+    latest_dataset: Optional[str] = None
+    datasets_count: int = 0
+    training_signals_count: int = 0
+    eval_trend: list[dict[str, object]] = Field(default_factory=list)
+    regression_gate_enabled: bool = True
+    shadow_traffic_percent: float = 10.0
+
+
+class AgentRunReplayResponse(BaseModel):
+    run_id: str
+    replay_run_id: str
+    agent_id: str
+    state: AgentRunState
+
+
+class AgentRunDlqReplayResponse(BaseModel):
+    replayed: list[AgentRunCreateResponse] = Field(default_factory=list)
+    count: int = 0
 
 
 class FinetuneJobCreateRequest(BaseModel):
@@ -882,6 +927,7 @@ class FinetuneStage1RunRequest(BaseModel):
     min_samples: int = Field(default=5, ge=1, le=10000)
     limit: int = Field(default=500, ge=1, le=5000)
     run_eval_baseline: bool = True
+    run_post_eval: bool = True
     eval_category: Optional[str] = None
     eval_limit: Optional[int] = Field(default=24, ge=1, le=100)
     notes: str = Field(default="", max_length=2000)

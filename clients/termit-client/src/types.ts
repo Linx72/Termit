@@ -214,3 +214,23 @@ export interface ExecuteCommandResponse {
   stderr?: string;
   duration_ms?: number;
 }
+
+export interface RepoModelProfile {
+  profile_id: string;
+  title: string;
+  path_prefix: string;
+  task_type: string;
+  preferred_model: string;
+  description?: string;
+  finetuned?: boolean;
+}
+
+export interface FinetuneAdapter {
+  adapter_id: string;
+  name: string;
+  model: string;
+  base_model: string;
+  repo_profile_id?: string;
+  description?: string;
+  registered_at: string;
+}

@@ -7,6 +7,8 @@ from fastapi.responses import StreamingResponse
 from app.domain.schemas import (
     ChatRequest,
     ChatResponse,
+    FimCompletionRequest,
+    FimCompletionResponse,
     ProviderInfo,
     ProviderStatus,
     SessionClearResponse,
@@ -28,6 +30,17 @@ async def chat(
 ) -> ChatResponse:
     try:
         return await service.chat(payload)
+    except ProviderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/completion/fim", response_model=FimCompletionResponse)
+async def fim_completion(
+    payload: FimCompletionRequest,
+    service: ChatService = Depends(get_chat_service),
+) -> FimCompletionResponse:
+    try:
+        return await service.fim_complete(payload)
     except ProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

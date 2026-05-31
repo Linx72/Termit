@@ -116,6 +116,13 @@ class Settings:
     agent_memory_sqlite_path: str = "./termit_agent_memory.db"
     agent_memory_max_entries: int = 50
     agent_eval_scenarios_path: str = "./data/agent_eval_scenarios.json"
+    agent_verify_after_patch: bool = False
+    agent_verify_cmd: str = ""
+    dual_pass_enabled: bool = False
+    dual_pass_task_types: str = "coding,review,debug"
+    task_use_agent: bool = False
+    task_agent_id: str = ""
+    fim_max_tokens: int = 64
     agent_maintenance_enabled: bool = True
     agent_cleanup_interval_seconds: int = 3600
     agent_metrics_snapshot_interval_seconds: int = 900
@@ -126,7 +133,10 @@ class Settings:
     metrics_snapshot_file_path: str = "./data/metrics_snapshots.jsonl"
     eval_report_file_path: str = "./data/eval_reports.jsonl"
     retrieval_enabled: bool = True
+    retrieval_mode: str = "keyword"
     retrieval_root_path: str = "."
+    retrieval_embed_model: str = "nomic-embed-text"
+    retrieval_embed_cache_path: str = "./data/retrieval_embeddings.db"
     retrieval_max_chunks: int = 6
     retrieval_chunk_max_chars: int = 1200
     retrieval_max_file_bytes: int = 200000
@@ -166,6 +176,15 @@ class Settings:
     finetune_auto_register_after_train: bool = False
     finetune_modelfiles_dir: str = "./data/finetune/modelfiles"
     finetune_train_timeout_seconds: int = 600
+    finetune_training_signals_path: str = "./data/finetune/training_signals.jsonl"
+    finetune_auto_capture_signals: bool = True
+    finetune_min_signal_output_chars: int = 32
+    finetune_auto_post_eval: bool = True
+    finetune_repo_profile_id: str = "termit-core"
+    finetune_regression_gate_enabled: bool = True
+    finetune_max_train_regression: float = 0.02
+    finetune_shadow_traffic_percent: float = 10.0
+    alert_webhook_url: str = ""
 
 
 def get_settings() -> Settings:
@@ -228,6 +247,17 @@ def get_settings() -> Settings:
             "TERMIT_AGENT_EVAL_SCENARIOS_PATH",
             "./data/agent_eval_scenarios.json",
         ),
+        agent_verify_after_patch=os.getenv("TERMIT_AGENT_VERIFY_AFTER_PATCH", "false").lower()
+        in {"1", "true", "yes"},
+        agent_verify_cmd=os.getenv("TERMIT_AGENT_VERIFY_CMD", ""),
+        dual_pass_enabled=os.getenv("TERMIT_DUAL_PASS_ENABLED", "false").lower() in {"1", "true", "yes"},
+        dual_pass_task_types=os.getenv(
+            "TERMIT_DUAL_PASS_TASK_TYPES",
+            "coding,review,debug",
+        ),
+        task_use_agent=os.getenv("TERMIT_TASK_USE_AGENT", "false").lower() in {"1", "true", "yes"},
+        task_agent_id=os.getenv("TERMIT_TASK_AGENT_ID", ""),
+        fim_max_tokens=int(os.getenv("TERMIT_FIM_MAX_TOKENS", "64")),
         agent_maintenance_enabled=os.getenv("TERMIT_AGENT_MAINTENANCE_ENABLED", "true").lower()
         in {"1", "true", "yes"},
         agent_cleanup_interval_seconds=int(os.getenv("TERMIT_AGENT_CLEANUP_INTERVAL_SECONDS", "3600")),
@@ -247,7 +277,13 @@ def get_settings() -> Settings:
         ),
         eval_report_file_path=os.getenv("TERMIT_EVAL_REPORT_FILE", "./data/eval_reports.jsonl"),
         retrieval_enabled=os.getenv("TERMIT_RETRIEVAL_ENABLED", "true").lower() in {"1", "true", "yes"},
+        retrieval_mode=os.getenv("TERMIT_RETRIEVAL_MODE", "keyword"),
         retrieval_root_path=os.getenv("TERMIT_RETRIEVAL_ROOT_PATH", "."),
+        retrieval_embed_model=os.getenv("TERMIT_RETRIEVAL_EMBED_MODEL", "nomic-embed-text"),
+        retrieval_embed_cache_path=os.getenv(
+            "TERMIT_RETRIEVAL_EMBED_CACHE_PATH",
+            "./data/retrieval_embeddings.db",
+        ),
         retrieval_max_chunks=int(os.getenv("TERMIT_RETRIEVAL_MAX_CHUNKS", "6")),
         retrieval_chunk_max_chars=int(os.getenv("TERMIT_RETRIEVAL_CHUNK_MAX_CHARS", "1200")),
         retrieval_max_file_bytes=int(os.getenv("TERMIT_RETRIEVAL_MAX_FILE_BYTES", "200000")),
@@ -345,4 +381,34 @@ def get_settings() -> Settings:
             30,
             int(os.getenv("TERMIT_FINETUNE_TRAIN_TIMEOUT_SECONDS", "600")),
         ),
+        finetune_training_signals_path=os.getenv(
+            "TERMIT_FINETUNE_TRAINING_SIGNALS_PATH",
+            "./data/finetune/training_signals.jsonl",
+        ),
+        finetune_auto_capture_signals=os.getenv(
+            "TERMIT_FINETUNE_AUTO_CAPTURE_SIGNALS",
+            "true",
+        ).lower()
+        in {"1", "true", "yes"},
+        finetune_min_signal_output_chars=max(
+            8,
+            int(os.getenv("TERMIT_FINETUNE_MIN_SIGNAL_OUTPUT_CHARS", "32")),
+        ),
+        finetune_auto_post_eval=os.getenv("TERMIT_FINETUNE_AUTO_POST_EVAL", "true").lower()
+        in {"1", "true", "yes"},
+        finetune_repo_profile_id=os.getenv("TERMIT_FINETUNE_REPO_PROFILE_ID", "termit-core"),
+        finetune_regression_gate_enabled=os.getenv(
+            "TERMIT_FINETUNE_REGRESSION_GATE_ENABLED",
+            "true",
+        ).lower()
+        in {"1", "true", "yes"},
+        finetune_max_train_regression=max(
+            0.0,
+            float(os.getenv("TERMIT_FINETUNE_MAX_TRAIN_REGRESSION", "0.02")),
+        ),
+        finetune_shadow_traffic_percent=max(
+            0.0,
+            min(float(os.getenv("TERMIT_FINETUNE_SHADOW_TRAFFIC_PERCENT", "10")), 100.0),
+        ),
+        alert_webhook_url=os.getenv("TERMIT_ALERT_WEBHOOK_URL", ""),
     )

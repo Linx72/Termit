@@ -29,9 +29,13 @@ interface StoredSettings {
   apiKey: string;
   sessionId: string;
   workspace: string;
+  repoRoot: string;
+  autoStartServer: boolean;
+  autoConnect: boolean;
   taskType: TaskType;
   useRetrieval: boolean;
   selectedModel: string;
+  repoProfile: string;
   inlineCompletionEnabled: boolean;
 }
 
@@ -46,9 +50,13 @@ function loadSettings(): StoredSettings {
     apiKey: "",
     sessionId: "",
     workspace: "",
+    repoRoot: "",
+    autoStartServer: false,
+    autoConnect: true,
     taskType: "coding",
     useRetrieval: false,
     selectedModel: "",
+    repoProfile: "",
     inlineCompletionEnabled: false,
   };
   try {
@@ -106,6 +114,9 @@ export function App() {
   const [watchedRunId, setWatchedRunId] = useState<string | null>(null);
   const [agentTimeline, setAgentTimeline] = useState("Run timeline appears here.");
   const [models, setModels] = useState<string[]>([]);
+  const [repoProfiles, setRepoProfiles] = useState<
+    Array<{ profile_id: string; title: string; preferred_model: string; finetuned?: boolean }>
+  >([]);
   const [attachments, setAttachments] = useState<ContextAttachment[]>([]);
   const [composerFiles, setComposerFiles] = useState<ComposerFileContext[]>([]);
   const [composerInput, setComposerInput] = useState("");
@@ -138,21 +149,66 @@ export function App() {
     }
   };
 
+  const pickRepoRoot = async () => {
+    const folder = await window.termitDesktop.pickRepoRoot();
+    if (!folder) {
+      return;
+    }
+    updateSettings({ repoRoot: folder });
+    await window.termitDesktop.setLauncherConfig({
+      repoRoot: folder,
+      autoStartServer: settings.autoStartServer,
+    });
+  };
+
+  const toggleAutoStartServer = async (enabled: boolean) => {
+    updateSettings({ autoStartServer: enabled });
+    await window.termitDesktop.setLauncherConfig({
+      repoRoot: settings.repoRoot,
+      autoStartServer: enabled,
+    });
+  };
+
+  const startServer = async () => {
+    const result = await window.termitDesktop.ensureServer(settings.baseUrl);
+    setStatusLine(result.message);
+    if (result.ok) {
+      await connect();
+    }
+  };
+
   const connect = async () => {
     try {
       setStatusLine("Connecting...");
-      const [statuses, providers] = await Promise.all([
+      const [statuses, providers, profiles, adaptersResponse] = await Promise.all([
         client.providersStatus(),
         client.listProviders(),
+        client.listRepoProfiles().catch(() => []),
+        client.listFinetuneAdapters().catch(() => ({ adapters: [] })),
       ]);
       const ok = statuses.filter((item) => item.ok).length;
-      const modelList = providers.flatMap((item) => item.models);
+      const modelSet = new Set<string>(providers.flatMap((item) => item.models));
+      for (const profile of profiles) {
+        if (profile.preferred_model) {
+          modelSet.add(profile.preferred_model);
+        }
+      }
+      for (const adapter of adaptersResponse.adapters) {
+        if (adapter.model) {
+          modelSet.add(adapter.model);
+        }
+      }
+      const modelList = [...modelSet].sort();
       setModels(modelList);
+      setRepoProfiles(profiles);
       if (!settings.selectedModel && modelList.length > 0) {
         updateSettings({ selectedModel: modelList[0] });
       }
+      if (!settings.repoProfile && profiles.length > 0) {
+        updateSettings({ repoProfile: profiles[0].profile_id });
+      }
       setConnected(true);
-      setStatusLine(`Termit · ${ok}/${statuses.length} providers OK`);
+      setStatusLine(`Termit · ${ok}/${statuses.length} providers OK · ${modelList.length} models`);
       setBlocks((prev) => [
         ...prev,
         { id: blockId(), kind: "meta", text: `Connected to ${settings.baseUrl}` },
@@ -217,6 +273,39 @@ export function App() {
     }
   }, [tab, connected]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const launcher = await window.termitDesktop.getLauncherConfig();
+        if (cancelled) {
+          return;
+        }
+        updateSettings({
+          repoRoot: launcher.repoRoot || settings.repoRoot,
+          autoStartServer: launcher.autoStartServer,
+        });
+        if (launcher.autoStartServer) {
+          const result = await window.termitDesktop.ensureServer(settings.baseUrl);
+          if (!cancelled) {
+            setStatusLine(result.message);
+          }
+        }
+        if (settings.autoConnect) {
+          await connect();
+        }
+      } catch {
+        if (!cancelled && settings.autoConnect) {
+          await connect();
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on launch
+  }, []);
+
   const attachFile = async () => {
     if (!settings.workspace) {
       setBlocks((prev) => [
@@ -276,6 +365,7 @@ export function App() {
         task_type: "coding",
         session_id: settings.sessionId || undefined,
         model: settings.selectedModel || undefined,
+        repo_profile: settings.repoProfile || undefined,
         use_retrieval: true,
         retrieval_path_prefix: workspacePrefix(settings.workspace),
       })) {
@@ -369,6 +459,7 @@ export function App() {
         task_type: settings.taskType,
         session_id: sessionId,
         model: settings.selectedModel || undefined,
+        repo_profile: settings.repoProfile || undefined,
         use_retrieval: settings.useRetrieval,
         retrieval_path_prefix: prefix,
       })) {
@@ -446,7 +537,7 @@ export function App() {
     <div className="app">
       <aside className="sidebar">
         <h1>Termit</h1>
-        <p>Cursor-like workflow: chat, @files, tasks, agents — powered by your Termit models.</p>
+        <p>Your AI coding app — chat, composer, editor, tasks, agents via Termit + Ollama.</p>
 
         <div className={`status-pill ${connected ? "connected" : ""}`}>
           {connected ? statusLine : "Offline"}
@@ -473,7 +564,39 @@ export function App() {
         </div>
 
         <div className="field">
-          <label htmlFor="workspace">Workspace folder</label>
+          <label htmlFor="repoRoot">Termit repo (for auto-start server)</label>
+          <input id="repoRoot" value={settings.repoRoot} readOnly placeholder="/path/to/Termit" />
+          <button type="button" className="secondary" onClick={() => void pickRepoRoot()}>
+            Choose repo
+          </button>
+        </div>
+
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={settings.autoStartServer}
+            onChange={(event) => void toggleAutoStartServer(event.target.checked)}
+          />
+          Start Termit server on app launch
+        </label>
+
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={settings.autoConnect}
+            onChange={(event) => updateSettings({ autoConnect: event.target.checked })}
+          />
+          Connect on launch
+        </label>
+
+        <div className="row">
+          <button type="button" className="secondary" onClick={() => void startServer()}>
+            Start server now
+          </button>
+        </div>
+
+        <div className="field">
+          <label htmlFor="workspace">Workspace folder (your code)</label>
           <input id="workspace" value={settings.workspace} readOnly />
           <button type="button" className="secondary" onClick={() => void pickWorkspace()}>
             Choose folder
@@ -514,6 +637,25 @@ export function App() {
           />
           Tab completion (Editor)
         </label>
+
+        {repoProfiles.length > 0 && (
+          <div className="field">
+            <label htmlFor="repoProfile">Repo profile (routing)</label>
+            <select
+              id="repoProfile"
+              value={settings.repoProfile}
+              onChange={(event) => updateSettings({ repoProfile: event.target.value })}
+            >
+              <option value="">None</option>
+              {repoProfiles.map((profile) => (
+                <option key={profile.profile_id} value={profile.profile_id}>
+                  {profile.title}
+                  {profile.finetuned ? " · finetuned" : ""} → {profile.preferred_model}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="field">
           <label htmlFor="model">Model</label>
@@ -557,8 +699,8 @@ export function App() {
             <div className="chat-log">
               {blocks.length === 0 ? (
                 <div className="message-block meta">
-                  Cursor-style UX, Termit backend: Connect, attach @files, pick a model, chat with
-                  streaming. Models from Ollama via Termit — no Cursor subscription.
+                  Connect (or enable auto-connect), choose workspace, attach @files, chat with
+                  streaming. Models and finetune adapters load from Termit routing.
                 </div>
               ) : (
                 blocks.map((block) => (

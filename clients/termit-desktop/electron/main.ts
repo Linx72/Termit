@@ -1,5 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
+import {
+  ensureServer,
+  readLauncherConfig,
+  writeLauncherConfig,
+  type LauncherConfig,
+} from "./serverLauncher";
 
 const isDev = !app.isPackaged;
 
@@ -28,8 +34,18 @@ function createWindow(): BrowserWindow {
   return window;
 }
 
+async function maybeAutoStartServer(): Promise<void> {
+  const config = readLauncherConfig(app.getPath("userData"));
+  if (!config.autoStartServer || !config.repoRoot) {
+    return;
+  }
+  await ensureServer(app.getPath("userData"));
+}
+
 app.whenReady().then(() => {
-  createWindow();
+  void maybeAutoStartServer().finally(() => {
+    createWindow();
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -67,4 +83,27 @@ ipcMain.handle("dialog:pickWorkspace", async () => {
     return null;
   }
   return result.filePaths[0];
+});
+
+ipcMain.handle("dialog:pickRepoRoot", async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openDirectory"],
+    title: "Select Termit repository (contains app/ and .venv)",
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0];
+});
+
+ipcMain.handle("launcher:getConfig", () => {
+  return readLauncherConfig(app.getPath("userData"));
+});
+
+ipcMain.handle("launcher:setConfig", (_event, config: LauncherConfig) => {
+  writeLauncherConfig(app.getPath("userData"), config);
+});
+
+ipcMain.handle("server:ensure", (_event, baseUrl: string) => {
+  return ensureServer(app.getPath("userData"), baseUrl);
 });

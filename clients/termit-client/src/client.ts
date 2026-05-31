@@ -21,6 +21,8 @@ import type {
   ReadFileResponse,
   ProviderStatus,
   ProviderInfo,
+  RepoModelProfile,
+  FinetuneAdapter,
   TaskCreateRequest,
   TaskCreateResponse,
   TaskListResponse,
@@ -164,6 +166,14 @@ export class TermitClient {
 
   listProviders(): Promise<ProviderInfo[]> {
     return this.request<ProviderInfo[]>("/api/providers");
+  }
+
+  listRepoProfiles(): Promise<RepoModelProfile[]> {
+    return this.request<RepoModelProfile[]>("/api/routing/profiles");
+  }
+
+  listFinetuneAdapters(): Promise<{ adapters: FinetuneAdapter[] }> {
+    return this.request<{ adapters: FinetuneAdapter[] }>("/api/finetune/adapters");
   }
 
   applyPatch(payload: ApplyPatchRequest): Promise<ApplyPatchResponse> {

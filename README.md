@@ -134,15 +134,15 @@ Sidebar with **Chat / Composer / Tasks / Agents**, editor context (`@ file`), an
 
 Settings: `termit.baseUrl`, `termit.apiKey`, `termit.includeEditorContext`.
 
-### Desktop app (Termit)
+### Desktop app (Termit) — основной клиент
 
-See [`clients/termit-desktop/README.md`](clients/termit-desktop/README.md).
+See [`DESKTOP_QUICKSTART.md`](DESKTOP_QUICKSTART.md) and [`clients/termit-desktop/README.md`](clients/termit-desktop/README.md).
 
-Electron app **Termit** — chat, tasks, agents via Termit API + local Ollama. No Cursor API key.
+Electron app **Termit** — chat, composer, editor, tasks, agents via Termit API + local Ollama. No Cursor API key.
 
 ```bash
-cd clients/termit-client && npm install && npm run build
-cd ../termit-desktop && npm install && npm run dev
+./scripts/run_termit_stack.sh          # Ollama + server + desktop dev
+./scripts/package_desktop.sh           # build Termit.app in release/
 ```
 
 ## Multi-machine sync
@@ -346,6 +346,8 @@ Use model naming format `provider:model_name`, e.g.:
   - `POST /api/retrieval/reindex`
   - `GET /api/retrieval/stats`
   - Chat flag: `use_retrieval=true` (+ optional `retrieval_path_prefix`)
+  - Optional semantic mode: `TERMIT_RETRIEVAL_MODE=semantic` (Ollama `/api/embeddings`, SQLite cache in `data/`, keyword fallback)
+- Agent tool loop can run post-patch verify: `TERMIT_AGENT_VERIFY_AFTER_PATCH`, `TERMIT_AGENT_VERIFY_CMD` (events: `patch_verify`, `tool_loop_step`)
 - Telemetry retention configuration:
   - `TERMIT_TELEMETRY_MAX_LATENCY_POINTS`
 - Telemetry quality signals now include empty response rate, code response rate, fallback rate,
@@ -368,7 +370,18 @@ Use model naming format `provider:model_name`, e.g.:
   - Full loop script: `./scripts/stage1_full_loop.sh` (enqueue → wait → train → eval)
   - Post-train only: `./scripts/post_stage1_train.sh RUN_ID --wait --auto-register-adapter`
   - Trainer modes: `ollama` (auto), `modelfile` (write Modelfile only), `off`
-  - Dataset export auto-curation (non-destructive): dedupe by instruction, quality filters, optional chat sessions + tool trajectories; source SQLite/feedback files are never modified
+  - Dataset export auto-curation (non-destructive): dedupe by instruction, quality filters, chat sessions + tool trajectories, stratified balance; source SQLite/feedback files are never modified
+  - Auto-capture training signals on completed tasks/agent runs (`data/finetune/training_signals.jsonl`, append-only)
+  - Eval-passed boost: samples linked to passed eval scenarios get higher export priority
+  - Auto post-train eval when `TERMIT_FINETUNE_AUTO_TRAIN=true` and `TERMIT_FINETUNE_AUTO_POST_EVAL=true`
+  - Regression gate blocks adapter promotion on eval regression; shadow model at `TERMIT_FINETUNE_SHADOW_TRAFFIC_PERCENT`
+  - Training dashboard: `GET /api/finetune/training/dashboard`
+  - Agent DLQ replay: `GET /api/agents/runs/dlq`, `POST /api/agents/runs/dlq/replay`, `POST /api/agents/runs/{id}/replay`
+  - HF trainer mode: `TERMIT_FINETUNE_TRAINER=hf` generates QLoRA shell script
+  - HTTP endpoint metrics: `GET /api/metrics/http-endpoints`, Prometheus p95 per route
+  - Ops alert webhook: `POST /api/ops/alerts/dispatch` + `TERMIT_ALERT_WEBHOOK_URL`
+  - Hosted docker profile: `deploy/docker.env.example` (auth enabled by default)
+  - CI: `.github/workflows/agent-eval.yml`
 - Metrics snapshot export file:
   - `TERMIT_METRICS_SNAPSHOT_FILE`
 - Beta feedback endpoint:
@@ -435,7 +448,7 @@ Use model naming format `provider:model_name`, e.g.:
 - `POST /api/agents` creates reusable local agent profile with:
   - `name`, `description`, `system_prompt`
   - defaults for `task_type`, `model`, `temperature`, `max_tokens`, memory/retrieval flags
-  - `enabled_tools` allowlist per agent (`list_files`, `read_file`, `execute_command`, `web_automation`)
+  - `enabled_tools` allowlist per agent (`list_files`, `read_file`, `execute_command`, `apply_patch`, `web_automation`)
   - online policy controls: `allow_online`, `online_max_steps`, `online_timeout_seconds`, `online_capture_links_limit`
 - `GET /api/agents` lists registered agent profiles from local registry file.
 - `POST /api/agents/{agent_id}/run` executes an agent profile on a new input:

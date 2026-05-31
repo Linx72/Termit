@@ -65,7 +65,7 @@ class PlatformServicesTests(unittest.TestCase):
     def test_eval_service_lists_scenarios(self) -> None:
         service = EvalService(scenarios_path="./data/eval_scenarios.json")
         scenarios = service.list_scenarios()
-        self.assertEqual(len(scenarios), 24)
+        self.assertEqual(len(scenarios), 27)
 
 
 if __name__ == "__main__":

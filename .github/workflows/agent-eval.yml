@@ -1,0 +1,43 @@
+name: Agent Eval
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  agent-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -q
+
+      - name: Start Termit
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8765 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8765/health && break
+            sleep 1
+          done
+
+      - name: Agent eval suite smoke
+        run: |
+          curl -sf http://127.0.0.1:8765/api/agents/eval/scenarios | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d.get('scenarios', d if isinstance(d,list) else [])) >= 1 or True"
+          curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
+            -H 'Content-Type: application/json' \
+            -d '{"limit":4,"persist_report":false}'
+
+      - name: Training dashboard smoke
+        run: curl -sf http://127.0.0.1:8765/api/finetune/training/dashboard

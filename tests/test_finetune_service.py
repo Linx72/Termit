@@ -225,6 +225,43 @@ class FinetuneServiceTests(unittest.TestCase):
             self.assertTrue(agent_rows)
             self.assertIn("read_file", agent_rows[0].get("input", ""))
 
+    def test_export_boosts_eval_passed_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = self._build_service(root)
+            eval_reports = root / "eval_reports.jsonl"
+            eval_reports.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "status": "passed",
+                                "execution_ref": "t1",
+                            }
+                        ]
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            service.eval_report_file_path = eval_reports
+            result = service.export_dataset(
+                FinetuneDatasetExportRequest(
+                    name="eval-boost",
+                    min_samples=1,
+                    include_feedback=False,
+                    include_agent_runs=False,
+                    include_chat_sessions=False,
+                    include_training_signals=False,
+                    prefer_eval_passed=True,
+                )
+            )
+            dataset_path = Path(str(result["dataset_path"]))
+            rows = [json.loads(line) for line in dataset_path.read_text(encoding="utf-8").splitlines()]
+            task_rows = [row for row in rows if row.get("source") == "task"]
+            self.assertTrue(task_rows)
+            self.assertEqual(task_rows[0].get("eval_passed"), "1")
+
     def test_job_lifecycle_and_adapter_registration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

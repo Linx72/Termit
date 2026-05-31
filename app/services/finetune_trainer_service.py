@@ -102,6 +102,28 @@ class FinetuneTrainerService:
                 detail="Modelfile written; run ollama create manually or use trainer_mode=ollama.",
             )
 
+        if mode == "hf":
+            script_path = self.modelfiles_dir / f"{slug}_train_hf.sh"
+            from_ref = base_model.split(":", 1)[-1] if ":" in base_model else base_model
+            script_body = (
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                f'DATASET="{dataset}"\n'
+                f'BASE_MODEL="{from_ref}"\n'
+                f'OUTPUT_DIR="./data/finetune/adapters/{resolved_output}"\n'
+                'echo "HF/Unsloth trainer stub — install unsloth and run QLoRA on ${DATASET} with base ${BASE_MODEL}"\n'
+            )
+            script_path.write_text(script_body, encoding="utf-8")
+            script_path.chmod(0o755)
+            return FinetuneTrainResult(
+                trainer_mode=mode,
+                status="completed",
+                output_model=resolved_output,
+                modelfile_path=str(modelfile_path),
+                command=str(script_path),
+                detail="HF training script generated; run manually with GPU dependencies.",
+            )
+
         if mode != "ollama":
             return FinetuneTrainResult(
                 trainer_mode=mode,

@@ -10,8 +10,11 @@ from app.domain.schemas import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
+    FimCompletionRequest,
+    FimCompletionResponse,
     ProviderInfo,
     ProviderStatus,
+    TaskType,
 )
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.context_compaction import ContextCompactor
@@ -38,6 +41,8 @@ class ChatService:
         retrieval_enabled: bool = True,
         provider_retry_attempts: int = 2,
         provider_retry_backoff_ms: int = 150,
+        dual_pass_enabled: bool = False,
+        dual_pass_task_types: str = "coding,review,debug",
     ) -> None:
         self.model_router = model_router
         self.providers = providers
@@ -56,6 +61,12 @@ class ChatService:
         self._retrieval_enabled = retrieval_enabled
         self._provider_retry_attempts = max(1, provider_retry_attempts)
         self._provider_retry_backoff_ms = max(0, provider_retry_backoff_ms)
+        self._dual_pass_enabled = dual_pass_enabled
+        self._dual_pass_task_types = {
+            item.strip().lower()
+            for item in dual_pass_task_types.split(",")
+            if item.strip()
+        }
 
     async def chat(self, payload: ChatRequest) -> ChatResponse:
         started_at = time()
@@ -167,6 +178,14 @@ class ChatService:
             )
             raise ProviderError(" | ".join(errors) if errors else "No available models.")
 
+        validator_model: Optional[str] = None
+        if self._dual_pass_enabled and payload.task_type.value in self._dual_pass_task_types:
+            response_text, validator_model = await self._apply_dual_pass(
+                payload=payload,
+                draft=response_text,
+                draft_model=selected_model,
+            )
+
         if payload.use_memory and session_id:
             self.memory_store.append(session_id, ChatMessage(role="user", content=payload.message))
             self.memory_store.append(session_id, ChatMessage(role="assistant", content=response_text))
@@ -185,6 +204,8 @@ class ChatService:
             repo_profile=payload.repo_profile,
             routing_policy=payload.routing_policy,
             selected_via=selected_via,
+            dual_pass_used=validator_model is not None,
+            validator_model=validator_model,
         )
         if not payload.use_memory:
             self._set_cached(cache_key, response)
@@ -197,6 +218,100 @@ class ChatService:
             fallback_used=bool(attempted_models and selected_model != attempted_models[0]),
         )
         return response
+
+    async def fim_complete(self, payload: FimCompletionRequest) -> FimCompletionResponse:
+        path_hint = f"File: {payload.path}\n" if payload.path else ""
+        lang_hint = f"Language: {payload.language}\n" if payload.language else ""
+        message = "\n".join(
+            [
+                "Complete the code at the cursor. Return ONLY the text to insert.",
+                "No markdown, no explanation, no quotes.",
+                "",
+                path_hint + lang_hint,
+                "Before cursor:",
+                "```",
+                payload.prefix[-2500:],
+                "```",
+                "",
+                "After cursor:",
+                "```",
+                payload.suffix[:800],
+                "```",
+            ]
+        ).strip()
+        chat_payload = ChatRequest(
+            message=message,
+            task_type=payload.task_type,
+            model=payload.model,
+            use_memory=False,
+            use_retrieval=False,
+            temperature=payload.temperature,
+            max_tokens=payload.max_tokens,
+        )
+        result = await self.chat(chat_payload)
+        insert_text = result.response.strip()
+        if not insert_text or "\n\n" in insert_text:
+            insert_text = ""
+        return FimCompletionResponse(
+            insert_text=insert_text,
+            provider=result.provider,
+            model=result.model,
+            attempted_models=result.attempted_models,
+        )
+
+    async def _apply_dual_pass(
+        self,
+        *,
+        payload: ChatRequest,
+        draft: str,
+        draft_model: str,
+    ) -> tuple[str, Optional[str]]:
+        validator_prompt = (
+            "Review the draft answer for quality and correctness.\n"
+            f"User request:\n{payload.message}\n\n"
+            f"Draft (model={draft_model}):\n{draft}\n\n"
+            "If the draft is acceptable, respond with exactly: APPROVED\n"
+            "Otherwise respond with an improved final answer only (no preamble)."
+        )
+        validator_models = self.model_router.candidate_models(
+            TaskType.review,
+            None,
+            message=validator_prompt,
+            repo_profile=payload.repo_profile,
+            path_prefix=payload.retrieval_path_prefix,
+            routing_policy=payload.routing_policy,
+        )
+        validator_messages = [
+            ChatMessage(role="system", content="You are a strict code review validator."),
+            ChatMessage(role="user", content=validator_prompt),
+        ]
+        for model_name in validator_models:
+            provider_name = self.model_router.provider_for_model(model_name)
+            provider = self.providers.get(provider_name)
+            if provider is None:
+                continue
+            if self.circuit_breaker and not self.circuit_breaker.is_available(provider_name):
+                continue
+            try:
+                validated = await self._generate_with_retries(
+                    provider=provider,
+                    model_name=model_name,
+                    messages=validator_messages,
+                    temperature=0.1,
+                    max_tokens=min(payload.max_tokens, 2000),
+                )
+                if self.circuit_breaker:
+                    self.circuit_breaker.record_success(provider_name)
+                cleaned = validated.strip()
+                if cleaned.upper().startswith("APPROVED"):
+                    return draft, model_name
+                if cleaned:
+                    return cleaned, model_name
+            except ProviderError:
+                if self.circuit_breaker:
+                    self.circuit_breaker.record_failure(provider_name)
+                continue
+        return draft, None
 
     def providers_info(self) -> list[ProviderInfo]:
         return [

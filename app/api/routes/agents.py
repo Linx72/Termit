@@ -10,6 +10,8 @@ from app.domain.schemas import (
     AgentProfileResponse,
     AgentRunCancelResponse,
     AgentRunCreateResponse,
+    AgentRunCreateResponse,
+    AgentRunDlqReplayResponse,
     AgentRunEvent,
     AgentRunListResponse,
     AgentRunRecordResponse,
@@ -123,6 +125,36 @@ async def list_agent_runs(
         return service.list_runs(agent_id=agent_id, limit=limit)
     except AgentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/runs/dlq", response_model=AgentRunListResponse)
+async def list_dlq_runs(
+    limit: int = 50,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRunListResponse:
+    return service.list_dlq_runs(limit=limit)
+
+
+@router.post("/runs/dlq/replay", response_model=AgentRunDlqReplayResponse)
+async def replay_dlq_runs(
+    limit: int = 5,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRunDlqReplayResponse:
+    replayed = service.replay_dlq(limit=limit)
+    return AgentRunDlqReplayResponse(replayed=replayed, count=len(replayed))
+
+
+@router.post("/runs/{run_id}/replay", response_model=AgentRunCreateResponse)
+async def replay_agent_run(
+    run_id: str,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRunCreateResponse:
+    try:
+        return service.replay_run(run_id)
+    except AgentRunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/runs/{run_id}", response_model=AgentRunRecordResponse)

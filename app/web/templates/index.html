@@ -231,6 +231,8 @@
           <div class="agent-cards-header">
             <h4 data-i18n="agentHub.recentRuns">Последние run</h4>
             <button type="button" id="duplicateAgentBtn" class="btn-secondary" data-i18n="agentHub.duplicate" data-tip="duplicateAgentBtn">Клонировать</button>
+            <button type="button" id="listDlqBtn" class="btn-secondary" data-tip="listDlqBtn">DLQ</button>
+            <button type="button" id="replayDlqBtn" class="btn-secondary" data-tip="replayDlqBtn">Replay DLQ</button>
           </div>
           <div id="agentRecentRuns" class="recent-runs-list" data-tip="agentRecentRuns"></div>
         </div>
@@ -354,6 +356,7 @@
       <button id="cancelFinetuneRunBtn" data-tip="cancelFinetuneRunBtn" data-i18n="btn.cancelStage1Run">Cancel stage1 run</button>
       <button id="retryFinetuneRunBtn" data-tip="retryFinetuneRunBtn" data-i18n="btn.retryFailedRun">Retry failed run</button>
       <button id="trainFinetuneRunBtn" data-tip="trainFinetuneRunBtn" data-i18n="btn.trainStage1Run">Train now</button>
+      <button id="trainingDashboardBtn" data-tip="trainingDashboardBtn">Training dashboard</button>
       <pre id="finetunePanel" class="meta" style="max-height:180px;overflow:auto;"></pre>
       </section>
 
@@ -363,6 +366,7 @@
       <button id="opsReadinessBtn" data-tip="opsReadinessBtn" data-i18n="btn.opsReadiness">Check readiness</button>
       <button id="opsDrillBtn" data-tip="opsDrillBtn" data-i18n="btn.opsDrill">Run incident drill</button>
       <button id="opsQuotaSummaryBtn" data-tip="opsQuotaSummaryBtn" data-i18n="btn.opsQuota">Quota summary (admin)</button>
+      <button id="dispatchAlertsBtn" data-tip="dispatchAlertsBtn">Dispatch alerts</button>
       </section>
 
       <section class="content-section">
@@ -488,6 +492,10 @@
       const cancelFinetuneRunBtn = document.getElementById("cancelFinetuneRunBtn");
       const retryFinetuneRunBtn = document.getElementById("retryFinetuneRunBtn");
       const trainFinetuneRunBtn = document.getElementById("trainFinetuneRunBtn");
+      const trainingDashboardBtn = document.getElementById("trainingDashboardBtn");
+      const listDlqBtn = document.getElementById("listDlqBtn");
+      const replayDlqBtn = document.getElementById("replayDlqBtn");
+      const dispatchAlertsBtn = document.getElementById("dispatchAlertsBtn");
       const finetunePanelEl = document.getElementById("finetunePanel");
       let finetuneRunStream = null;
       const opsReadinessBtn = document.getElementById("opsReadinessBtn");
@@ -2093,6 +2101,75 @@
             panelLines.push(`command: ${data.command}`);
           }
           finetunePanelEl.textContent = panelLines.join("\n");
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      trainingDashboardBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading training dashboard...";
+        try {
+          const resp = await fetch("/api/finetune/training/dashboard", { headers: authHeaders() });
+          const data = await resp.json();
+          if (!resp.ok) {
+            responseMeta.textContent = "Dashboard error";
+            responseBox.textContent = JSON.stringify(data, null, 2);
+            return;
+          }
+          responseMeta.textContent = `datasets=${data.datasets_count}, signals=${data.training_signals_count}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+          finetunePanelEl.textContent = [
+            `latest: ${data.latest_dataset || "n/a"}`,
+            `regression_gate: ${data.regression_gate_enabled}`,
+            `shadow_traffic: ${data.shadow_traffic_percent}%`,
+            `eval_points: ${(data.eval_trend || []).length}`,
+          ].join("\n");
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      listDlqBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Loading DLQ runs...";
+        try {
+          const resp = await fetch("/api/agents/runs/dlq?limit=20", { headers: authHeaders() });
+          const data = await resp.json();
+          responseMeta.textContent = `DLQ runs=${data.total || 0}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      replayDlqBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Replaying DLQ...";
+        try {
+          const resp = await fetch("/api/agents/runs/dlq/replay?limit=5", {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = `Replayed ${data.count || 0} runs`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          responseMeta.textContent = "Network error";
+          responseBox.textContent = String(error);
+        }
+      });
+
+      dispatchAlertsBtn.addEventListener("click", async () => {
+        responseMeta.textContent = "Dispatching ops alerts...";
+        try {
+          const resp = await fetch("/api/ops/alerts/dispatch", {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          const data = await resp.json();
+          responseMeta.textContent = data.sent ? "Alert sent" : `Alert skipped: ${data.reason || "n/a"}`;
+          responseBox.textContent = JSON.stringify(data, null, 2);
         } catch (error) {
           responseMeta.textContent = "Network error";
           responseBox.textContent = String(error);

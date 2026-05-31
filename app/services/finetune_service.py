@@ -20,6 +20,8 @@ from app.services.finetune_dataset_curator import (
     curate_samples,
     export_row,
 )
+from app.services.finetune_regression_gate import evaluate_training_regression
+from app.services.training_signal_store import TrainingSignalStore
 
 
 @dataclass(frozen=True)
@@ -60,12 +62,20 @@ class FinetuneService:
         task_sqlite_path: str = "./termit_tasks.db",
         agent_run_sqlite_path: str = "./termit_agent_runs.db",
         memory_sqlite_path: str = "./termit_memory.db",
+        training_signals_path: str = "./data/finetune/training_signals.jsonl",
+        eval_report_file_path: str = "./data/eval_reports.jsonl",
         repo_profiles_path: str = "./data/repo_model_profiles.json",
         pipelines_path: str = "./data/finetune/pipelines.json",
         pipeline_max_concurrency: int = 1,
         trainer: Optional[FinetuneTrainerService] = None,
         auto_train_after_pipeline: bool = False,
         auto_register_after_train: bool = False,
+        auto_post_eval: bool = True,
+        post_eval_runner: Optional[Callable[[FinetuneStage1RunRequest], dict[str, object]]] = None,
+        training_signal_store: Optional[TrainingSignalStore] = None,
+        regression_gate_enabled: bool = True,
+        max_train_regression: float = 0.02,
+        shadow_traffic_percent: float = 10.0,
     ) -> None:
         self.datasets_dir = Path(datasets_dir)
         self.jobs_path = Path(jobs_path)
@@ -74,12 +84,21 @@ class FinetuneService:
         self.task_sqlite_path = Path(task_sqlite_path)
         self.agent_run_sqlite_path = Path(agent_run_sqlite_path)
         self.memory_sqlite_path = Path(memory_sqlite_path)
+        self.eval_report_file_path = Path(eval_report_file_path)
         self.repo_profiles_path = Path(repo_profiles_path)
         self.pipelines_path = Path(pipelines_path)
         self._pipeline_max_concurrency = max(1, pipeline_max_concurrency)
         self._trainer = trainer
         self._auto_train_after_pipeline = auto_train_after_pipeline
         self._auto_register_after_train = auto_register_after_train
+        self._auto_post_eval = auto_post_eval
+        self._post_eval_runner = post_eval_runner
+        self._training_signal_store = training_signal_store or TrainingSignalStore(
+            training_signals_path
+        )
+        self._regression_gate_enabled = regression_gate_enabled
+        self._max_train_regression = max(0.0, max_train_regression)
+        self._shadow_traffic_percent = max(0.0, min(shadow_traffic_percent, 100.0))
         self._lock = Lock()
         self._drain_lock = Lock()
         self.datasets_dir.mkdir(parents=True, exist_ok=True)
@@ -110,6 +129,17 @@ class FinetuneService:
             )
         if payload.include_chat_sessions:
             raw_samples.extend(self._load_chat_session_samples(payload.limit))
+        if payload.include_training_signals:
+            raw_samples.extend(self._training_signal_store.load_samples(payload.limit))
+
+        sources_manifest = self._count_sources(raw_samples)
+
+        if payload.prefer_eval_passed:
+            raw_samples = self._apply_eval_passed_boost(raw_samples)
+
+        max_per_category = payload.curate_max_per_category
+        if payload.curate_stratified_balance and max_per_category is None:
+            max_per_category = max(5, payload.limit // 6)
 
         curated, curation_stats = curate_samples(
             raw_samples,
@@ -119,7 +149,7 @@ class FinetuneService:
                 max_output_chars=payload.curate_max_output_chars,
                 skip_error_patterns=payload.curate_skip_error_patterns,
                 stratified_balance=payload.curate_stratified_balance,
-                max_per_category=payload.curate_max_per_category,
+                max_per_category=max_per_category,
             ),
         )
 
@@ -154,6 +184,7 @@ class FinetuneService:
                 "quality_score",
             ],
             "curation": curation_stats.as_dict(),
+            "sources": sources_manifest,
         }
 
     def create_job(
@@ -338,7 +369,10 @@ class FinetuneService:
             job_id,
             output_model=output_model,
             trainer_mode=trainer_mode,
-            auto_register_adapter=auto_register_adapter or request.auto_register_adapter,
+            auto_register_adapter=(
+                (auto_register_adapter or request.auto_register_adapter)
+                and not self._should_defer_adapter_registration(request)
+            ),
             adapter_name=adapter_name or request.adapter_name,
             adapter_model=adapter_model or request.adapter_model,
             base_model=str(job_info.get("base_model") or request.base_model),
@@ -346,6 +380,8 @@ class FinetuneService:
             adapter_description=adapter_description or request.adapter_description,
         )
         train_payload["run_id"] = run_id
+        if self._should_defer_adapter_registration(request):
+            train_payload["deferred_registration"] = True
         self._append_pipeline_stage(
             run_id,
             {
@@ -398,6 +434,8 @@ class FinetuneService:
             )
             merged = dict(result)
             merged["training"] = train_payload
+            merged = self._maybe_post_eval_pipeline(run_id, merged, request)
+            merged = self._finalize_training_deploy(run_id, merged, request)
             return merged
         except Exception as exc:  # noqa: BLE001
             self._append_pipeline_stage(
@@ -411,6 +449,233 @@ class FinetuneService:
             merged = dict(result)
             merged["training"] = {"status": "failed", "detail": str(exc)}
             return merged
+
+    def _maybe_post_eval_pipeline(
+        self,
+        run_id: str,
+        result: dict[str, object],
+        request: FinetuneStage1RunRequest,
+    ) -> dict[str, object]:
+        training = result.get("training")
+        if not isinstance(training, dict):
+            return result
+        if str(training.get("status", "")) != "completed":
+            return result
+        if not request.run_post_eval or not self._auto_post_eval:
+            return result
+        if self._post_eval_runner is None:
+            return result
+        try:
+            report = self._post_eval_runner(request)
+            merged = dict(result)
+            merged["post_eval"] = report
+            pass_rate = float(report.get("pass_rate", 0.0))
+            total = int(report.get("total", 0))
+            self._append_pipeline_stage(
+                run_id,
+                {
+                    "stage": "post_train_eval",
+                    "status": "completed",
+                    "detail": f"Post-train eval pass rate {pass_rate:.2%} on {total} scenarios",
+                },
+            )
+            return merged
+        except Exception as exc:  # noqa: BLE001
+            self._append_pipeline_stage(
+                run_id,
+                {
+                    "stage": "post_train_eval",
+                    "status": "failed",
+                    "detail": str(exc)[:500],
+                },
+            )
+            merged = dict(result)
+            merged["post_eval"] = {"status": "failed", "detail": str(exc)}
+            return merged
+
+    def _should_defer_adapter_registration(self, request: FinetuneStage1RunRequest) -> bool:
+        if not self._regression_gate_enabled:
+            return False
+        wants_register = request.auto_register_adapter or self._auto_register_after_train
+        return wants_register and (request.run_post_eval and self._auto_post_eval)
+
+    def _finalize_training_deploy(
+        self,
+        run_id: str,
+        result: dict[str, object],
+        request: FinetuneStage1RunRequest,
+    ) -> dict[str, object]:
+        training = result.get("training")
+        if not isinstance(training, dict):
+            return result
+        if str(training.get("status", "")) != "completed":
+            return result
+        if not training.get("deferred_registration"):
+            return result
+
+        post_eval = result.get("post_eval")
+        post_rate: Optional[float] = None
+        if isinstance(post_eval, dict) and "pass_rate" in post_eval:
+            post_rate = float(post_eval["pass_rate"])
+
+        baseline_rate = result.get("baseline_pass_rate")
+        baseline = float(baseline_rate) if baseline_rate is not None else None
+
+        decision = evaluate_training_regression(
+            baseline_pass_rate=baseline,
+            post_pass_rate=post_rate,
+            max_regression=self._max_train_regression,
+            shadow_on_regression=True,
+        )
+        training["regression"] = decision.as_dict()
+
+        output_model = training.get("output_model")
+        repo_profile_id = request.repo_profile_id
+        resolved_name = request.adapter_name or f"{request.name}-ft"
+        resolved_model = request.adapter_model or (
+            f"ollama:{output_model}" if output_model else ""
+        )
+
+        if decision.promote and resolved_model:
+            adapter = self.register_adapter(
+                FinetuneAdapterRegisterRequest(
+                    name=resolved_name,
+                    model=resolved_model,
+                    base_model=request.base_model,
+                    repo_profile_id=repo_profile_id,
+                    description=request.adapter_description or "Promoted after regression gate.",
+                )
+            )
+            training["adapter"] = adapter
+            self._append_pipeline_stage(
+                run_id,
+                {
+                    "stage": "adapter_register",
+                    "status": "completed",
+                    "detail": decision.reason,
+                },
+            )
+        elif decision.use_shadow and repo_profile_id and resolved_model:
+            self._upsert_repo_profile_shadow(
+                repo_profile_id,
+                resolved_model,
+                self._shadow_traffic_percent,
+            )
+            training["adapter"] = {
+                "status": "shadow",
+                "model": resolved_model,
+                "repo_profile_id": repo_profile_id,
+                "shadow_traffic_percent": self._shadow_traffic_percent,
+            }
+            self._append_pipeline_stage(
+                run_id,
+                {
+                    "stage": "adapter_register",
+                    "status": "partial",
+                    "detail": decision.reason,
+                },
+            )
+        else:
+            training["adapter"] = None
+            self._append_pipeline_stage(
+                run_id,
+                {
+                    "stage": "adapter_register",
+                    "status": "blocked",
+                    "detail": decision.reason,
+                },
+            )
+
+        merged = dict(result)
+        merged["training"] = training
+        return merged
+
+    def training_dashboard(self, *, limit: int = 10) -> dict[str, object]:
+        safe_limit = max(1, min(limit, 50))
+        runs = self.list_stage1_pipeline_runs(limit=safe_limit)
+        datasets = sorted(self.datasets_dir.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+        latest_dataset = datasets[0].name if datasets else None
+        eval_trend: list[dict[str, object]] = []
+        if self.eval_report_file_path.exists():
+            lines = self.eval_report_file_path.read_text(encoding="utf-8").splitlines()
+            for line in lines[-safe_limit:]:
+                if not line.strip():
+                    continue
+                try:
+                    report = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                eval_trend.append(
+                    {
+                        "run_id": report.get("run_id"),
+                        "pass_rate": report.get("pass_rate"),
+                        "total": report.get("total"),
+                        "timestamp": report.get("timestamp"),
+                    }
+                )
+        signal_count = 0
+        signal_path = self._training_signal_store.file_path
+        if signal_path.exists():
+            signal_count = sum(1 for line in signal_path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+        return {
+            "stage1_runs": runs[:safe_limit],
+            "latest_dataset": latest_dataset,
+            "datasets_count": len(datasets),
+            "training_signals_count": signal_count,
+            "eval_trend": list(reversed(eval_trend)),
+            "regression_gate_enabled": self._regression_gate_enabled,
+            "shadow_traffic_percent": self._shadow_traffic_percent,
+        }
+
+    @staticmethod
+    def _count_sources(samples: list[dict[str, str]]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for row in samples:
+            source = str(row.get("source", "unknown"))
+            counts[source] = counts.get(source, 0) + 1
+        return counts
+
+    def _apply_eval_passed_boost(self, samples: list[dict[str, str]]) -> list[dict[str, str]]:
+        passed_refs = self._load_eval_passed_refs()
+        if not passed_refs:
+            return samples
+        boosted: list[dict[str, str]] = []
+        for row in samples:
+            updated = dict(row)
+            task_id = str(updated.get("task_id", "")).strip()
+            run_id = str(updated.get("run_id", "")).strip()
+            if (task_id and task_id in passed_refs) or (run_id and run_id in passed_refs):
+                updated["eval_passed"] = "1"
+            boosted.append(updated)
+        return boosted
+
+    def _load_eval_passed_refs(self) -> set[str]:
+        if not self.eval_report_file_path.exists():
+            return set()
+        refs: set[str] = set()
+        for line in self.eval_report_file_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                report = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            results = report.get("results")
+            if not isinstance(results, list):
+                continue
+            for item in results:
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("status", "")) != "passed":
+                    continue
+                execution_ref = item.get("execution_ref")
+                if execution_ref:
+                    refs.add(str(execution_ref))
+        return refs
+
+    def training_signal_store(self) -> TrainingSignalStore:
+        return self._training_signal_store
 
     def _append_pipeline_stage(self, run_id: str, stage: dict[str, str]) -> None:
         self._update_pipeline_run(run_id, append_stage=stage)
@@ -1014,6 +1279,27 @@ class FinetuneService:
         for item in raw:
             if str(item.get("profile_id")) == profile_id:
                 item["preferred_model"] = model
+                item["finetuned"] = True
+                updated = True
+                break
+        if updated:
+            profiles_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+
+    def _upsert_repo_profile_shadow(
+        self,
+        profile_id: str,
+        model: str,
+        traffic_percent: float,
+    ) -> None:
+        profiles_path = self.repo_profiles_path
+        if not profiles_path.exists():
+            return
+        raw = json.loads(profiles_path.read_text(encoding="utf-8"))
+        updated = False
+        for item in raw:
+            if str(item.get("profile_id")) == profile_id:
+                item["shadow_model"] = model
+                item["shadow_traffic_percent"] = traffic_percent
                 item["finetuned"] = True
                 updated = True
                 break

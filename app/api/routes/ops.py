@@ -173,3 +173,31 @@ async def agent_runs_maintenance_cleanup_now(
             raise HTTPException(status_code=403, detail="Admin role required.")
     result = scheduler.run_cleanup_once(dry_run=payload.dry_run)
     return AgentRunsCleanupResponse.model_validate(result)
+
+
+@router.post("/alerts/dispatch")
+async def dispatch_ops_alerts(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> dict[str, object]:
+    from app.state import get_alert_webhook_service
+
+    if settings.auth_enabled:
+        caller_role = getattr(request.state, "api_role", "viewer")
+        if caller_role not in {"admin", "operator"}:
+            raise HTTPException(status_code=403, detail="Operator role required.")
+
+    metrics = _agent_runs_metrics_payload(agent_service, settings)
+    webhook = get_alert_webhook_service()
+    if not webhook.enabled:
+        return {"sent": False, "reason": "webhook_not_configured", "health_status": metrics.health_status}
+
+    detail = "; ".join(metrics.health_reasons) if metrics.health_reasons else "All checks passed."
+    result = webhook.send(
+        title="Termit agent ops alert",
+        status=str(metrics.health_status),
+        detail=detail,
+        payload={"dead_letter_rate": metrics.dead_letter_rate},
+    )
+    return {"health_status": metrics.health_status, **result}

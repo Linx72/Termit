@@ -41,6 +41,7 @@ from app.services.agent_memory_store import AgentMemoryStore
 from app.services.browser_workflow_service import BrowserWorkflowService
 from app.services.chat_service import ChatService
 from app.services.tooling_service import ToolingService
+from app.services.training_signal_store import TrainingSignalStore
 
 
 class AgentNotFoundError(Exception):
@@ -84,6 +85,9 @@ class AgentService:
         max_events_per_run: int = 500,
         max_response_chars: int = 12000,
         retention_days: int = 14,
+        training_signal_store: Optional[TrainingSignalStore] = None,
+        verify_after_patch: bool = False,
+        verify_cmd: str = "",
     ) -> None:
         self._chat_service = chat_service
         self._registry = registry
@@ -100,6 +104,9 @@ class AgentService:
         self._max_events_per_run = max(1, max_events_per_run)
         self._max_response_chars = max(256, max_response_chars)
         self._retention_days = max(1, retention_days)
+        self._training_signals = training_signal_store
+        self._verify_after_patch = verify_after_patch
+        self._verify_cmd = verify_cmd.strip()
         self._queue_capacity = max(1, max_queue_size)
         self._worker_count = max(1, max_concurrency)
         self._lock = Lock()
@@ -208,6 +215,30 @@ class AgentService:
             else:
                 selected = self._run_store.list_runs(limit=safe_limit)
         return AgentRunListResponse(runs=selected, total=len(selected))
+
+    def list_dlq_runs(self, limit: int = 50) -> AgentRunListResponse:
+        safe_limit = max(1, min(limit, 200))
+        with self._lock:
+            all_runs = self._run_store.list_runs(limit=1000)
+        failed = [run for run in all_runs if run.state == AgentRunState.failed]
+        failed.sort(key=lambda item: item.updated_at, reverse=True)
+        selected = failed[:safe_limit]
+        return AgentRunListResponse(runs=selected, total=len(selected))
+
+    def replay_run(self, run_id: str) -> AgentRunCreateResponse:
+        run = self.get_run(run_id)
+        if run.state != AgentRunState.failed:
+            raise ValueError(f"Run {run_id} is not in failed/dead-letter state.")
+        payload = AgentRunRequest(input=run.input, session_id=run.session_id)
+        return self.create_run(run.agent_id, payload)
+
+    def replay_dlq(self, limit: int = 5) -> list[AgentRunCreateResponse]:
+        safe_limit = max(1, min(limit, 20))
+        dlq = self.list_dlq_runs(limit=safe_limit)
+        replayed: list[AgentRunCreateResponse] = []
+        for run in dlq.runs:
+            replayed.append(self.replay_run(run.run_id))
+        return replayed
 
     def get_run_events(self, run_id: str, limit: int = 500) -> list[AgentRunEvent]:
         with self._lock:
@@ -319,6 +350,9 @@ class AgentService:
         self,
         profile: AgentProfileResponse,
         payload: AgentRunRequest,
+        *,
+        run_id: str | None = None,
+        attempt: int = 1,
     ) -> AgentRunResponse:
         if payload.online_url:
             return self._run_online_request(profile, payload)
@@ -329,7 +363,12 @@ class AgentService:
             else payload.use_tool_loop
         )
         if use_loop:
-            return await self._run_with_tool_loop(profile, payload)
+            return await self._run_with_tool_loop(
+                profile,
+                payload,
+                run_id=run_id,
+                attempt=attempt,
+            )
 
         chat_request = ChatRequest(
             message=payload.input,
@@ -364,13 +403,45 @@ class AgentService:
         self,
         profile: AgentProfileResponse,
         payload: AgentRunRequest,
+        *,
+        run_id: str | None = None,
+        attempt: int = 1,
     ) -> AgentRunResponse:
         memory_context: list[str] = []
         if profile.use_long_term_memory and self._agent_memory is not None:
             memory_context = self._agent_memory.get_context(profile.agent_id)
 
         def tool_fn(tool_name: str, arguments: dict[str, object]) -> str:
-            return self._invoke_loop_tool(profile.agent_id, profile, tool_name, arguments)
+            observation, side_effects = self._invoke_loop_tool(
+                profile.agent_id,
+                profile,
+                tool_name,
+                arguments,
+            )
+            for event_type, message in side_effects:
+                if run_id:
+                    self._append_event(
+                        run_id=run_id,
+                        event_type=event_type,
+                        state=AgentRunState.running,
+                        message=message,
+                        attempt=attempt,
+                    )
+            return observation
+
+        def on_step(step) -> None:  # type: ignore[no-untyped-def]
+            if not run_id:
+                return
+            message = f"Step {step.step}: {step.action}"
+            if step.tool:
+                message += f" ({step.tool})"
+            self._append_event(
+                run_id=run_id,
+                event_type="tool_loop_step",
+                state=AgentRunState.running,
+                message=message,
+                attempt=attempt,
+            )
 
         loop_result = await self._loop_service.run(
             profile=profile,
@@ -379,6 +450,7 @@ class AgentService:
             tool_fn=tool_fn,
             memory_context=memory_context,
             max_steps=profile.max_tool_steps,
+            on_step=on_step,
         )
         return AgentRunResponse(
             agent_id=profile.agent_id,
@@ -397,7 +469,8 @@ class AgentService:
         profile: AgentProfileResponse,
         tool_name: str,
         arguments: dict[str, object],
-    ) -> str:
+    ) -> tuple[str, list[tuple[str, str]]]:
+        side_effects: list[tuple[str, str]] = []
         self._ensure_tool_allowed(agent_id, tool_name)
         if tool_name == "web_automation" and not profile.allow_online:
             raise AgentOnlineError(f"Agent '{profile.name}' is not configured for online execution.")
@@ -408,11 +481,42 @@ class AgentService:
             result = self._tooling.read_file(built)
         elif tool_name == "execute_command":
             result = self._tooling.execute_command(built)
+        elif tool_name == "apply_patch":
+            result = self._tooling.apply_patch(built)
+            if result.applied and self._verify_after_patch and self._verify_cmd:
+                verify_result = self._tooling.execute_command(
+                    ExecuteCommandRequest(
+                        command=self._verify_cmd,
+                        path=".",
+                        dry_run=False,
+                        confirmed=True,
+                    )
+                )
+                side_effects.append(
+                    (
+                        "patch_verify",
+                        (
+                            f"Verify after patch: exit_code={verify_result.exit_code}, "
+                            f"executed={verify_result.executed}, "
+                            f"stdout={(verify_result.stdout or verify_result.stderr)[:300]}"
+                        ),
+                    )
+                )
+                return (
+                    json.dumps(
+                        {
+                            "patch": result.model_dump(mode="json"),
+                            "verify": verify_result.model_dump(mode="json"),
+                        },
+                        ensure_ascii=True,
+                    ),
+                    side_effects,
+                )
         elif tool_name == "web_automation":
             result = self._browser_workflow.run(built)
         else:
             raise AgentPermissionError(f"Unsupported loop tool: {tool_name}")
-        return json.dumps(result.model_dump(mode="json"), ensure_ascii=True)
+        return json.dumps(result.model_dump(mode="json"), ensure_ascii=True), side_effects
 
     def _run_online_request(
         self,
@@ -525,7 +629,9 @@ class AgentService:
 
             try:
                 profile = self.get_agent(agent_id)
-                result = asyncio.run(self._run_with_profile(profile, payload))
+                result = asyncio.run(
+                    self._run_with_profile(profile, payload, run_id=run_id, attempt=attempt)
+                )
                 with self._lock:
                     current = self._run_store.get_run(run_id)
                     if current is None or current.state == AgentRunState.cancelled:
@@ -554,6 +660,20 @@ class AgentService:
                             summary=payload.input[:120],
                             detail=current.response[:500],
                             run_id=run_id,
+                        )
+                    if self._training_signals is not None:
+                        events = self._run_store.get_events(run_id, limit=40)
+                        trajectory = "\n".join(
+                            f"[{event.event_type}] {event.message}"
+                            for event in events
+                            if event.message.strip()
+                        )
+                        self._training_signals.try_capture_agent_run(
+                            run_id=run_id,
+                            instruction=payload.input,
+                            response=current.response,
+                            session_id=current.session_id,
+                            trajectory=trajectory,
                         )
                 return
             except Exception as exc:  # noqa: BLE001

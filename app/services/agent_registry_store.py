@@ -50,6 +50,9 @@ class AgentRegistryStore:
             online_timeout_seconds=payload.online_timeout_seconds,
             online_capture_links_limit=payload.online_capture_links_limit,
             enabled_tools=list(payload.enabled_tools),
+            use_tool_loop=payload.use_tool_loop,
+            max_tool_steps=payload.max_tool_steps,
+            use_long_term_memory=payload.use_long_term_memory,
             created_at=now,
             updated_at=now,
         )

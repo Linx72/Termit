@@ -25,6 +25,9 @@ class TelemetryStore:
         self._estimated_cost_total_usd = 0.0
         self._model_usage: dict[str, int] = {}
         self._failure_classes: dict[str, int] = {}
+        self._http_latencies_ms: dict[str, list[int]] = {}
+        self._http_requests_total: dict[str, int] = {}
+        self._http_errors_total: dict[str, int] = {}
 
     def record_chat(
         self,
@@ -81,7 +84,30 @@ class TelemetryStore:
         status_code: int,
         latency_ms: int,
     ) -> None:
-        _ = (method, path, status_code, latency_ms)
+        key = f"{method.upper()} {path}"
+        with self._lock:
+            self._http_requests_total[key] = self._http_requests_total.get(key, 0) + 1
+            if status_code >= 400:
+                self._http_errors_total[key] = self._http_errors_total.get(key, 0) + 1
+            bucket = self._http_latencies_ms.setdefault(key, [])
+            bucket.append(max(0, latency_ms))
+            if len(bucket) > self._max_latency_points:
+                self._http_latencies_ms[key] = bucket[-self._max_latency_points :]
+
+    def http_endpoint_metrics(self) -> list[dict[str, object]]:
+        with self._lock:
+            rows: list[dict[str, object]] = []
+            for key in sorted(self._http_requests_total.keys()):
+                latencies = self._http_latencies_ms.get(key, [])
+                rows.append(
+                    {
+                        "endpoint": key,
+                        "requests_total": self._http_requests_total.get(key, 0),
+                        "errors_total": self._http_errors_total.get(key, 0),
+                        "latency_p95_ms": round(self._percentile(latencies, 95.0), 2),
+                    }
+                )
+            return rows
 
     def snapshot(self) -> MetricsSummaryResponse:
         with self._lock:

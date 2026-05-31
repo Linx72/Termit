@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from typing import Optional
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,8 @@ class RepoModelProfile:
     task_type: str
     preferred_model: str
     description: str = ""
+    shadow_model: str = ""
+    shadow_traffic_percent: float = 0.0
 
 
 class RoutingPolicyService:
@@ -59,14 +62,21 @@ class RoutingPolicyService:
         if profile_id:
             profile = self.get_repo_profile(profile_id)
             if profile is not None:
-                return profile.preferred_model
+                return self._pick_profile_model(profile)
 
         normalized_prefix = path_prefix.strip().replace("\\", "/")
         for profile in self._profiles:
             if profile.path_prefix and normalized_prefix.startswith(profile.path_prefix):
                 if profile.task_type == task_type.value or profile.task_type == "general":
-                    return profile.preferred_model
+                    return self._pick_profile_model(profile)
         return None
+
+    def _pick_profile_model(self, profile: RepoModelProfile) -> str:
+        shadow = profile.shadow_model.strip()
+        if shadow and profile.shadow_traffic_percent > 0:
+            if random.random() < min(1.0, profile.shadow_traffic_percent / 100.0):
+                return shadow
+        return profile.preferred_model
 
     def rank_models_for_task(
         self,
@@ -108,6 +118,8 @@ class RoutingPolicyService:
                     task_type=str(item.get("task_type", "general")),
                     preferred_model=str(item["preferred_model"]),
                     description=str(item.get("description", "")),
+                    shadow_model=str(item.get("shadow_model", "")),
+                    shadow_traffic_percent=float(item.get("shadow_traffic_percent", 0.0) or 0.0),
                 )
             )
         return profiles

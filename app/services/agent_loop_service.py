@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import dataclass
 from typing import Callable, Optional
 
 from app.domain.schemas import (
     AgentProfileResponse,
     AgentRunRequest,
+    ApplyPatchHunk,
+    ApplyPatchRequest,
     ChatMessage,
     ChatRequest,
     ExecuteCommandRequest,
@@ -15,17 +15,20 @@ from app.domain.schemas import (
     ReadFileRequest,
     WebAutomationRequest,
 )
+from app.services.tool_json_parser import ToolJsonParseError, parse_loop_action
 
 LOOP_SYSTEM_APPENDIX = """
 You may use tools to complete the task. Respond with a single JSON object only (no markdown unless inside strings).
 
 Tool call:
-{"action":"tool","tool":"list_files|read_file|execute_command|web_automation","arguments":{...}}
+{"action":"tool","tool":"list_files|read_file|execute_command|apply_patch|web_automation","arguments":{...}}
 
 Final answer:
 {"action":"final","answer":"..."}
 
-Allowed tools depend on agent configuration. For execute_command prefer dry_run=true unless execution is explicitly required.
+apply_patch arguments: path, content OR hunks[{old_text,new_text}], create, dry_run, confirmed.
+For execute_command and apply_patch prefer dry_run=true unless execution is explicitly required.
+Allowed tools depend on agent configuration.
 """
 
 
@@ -48,40 +51,6 @@ class AgentLoopResult:
 
 class AgentLoopError(Exception):
     pass
-
-
-def extract_json_object(text: str) -> Optional[dict[str, object]]:
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-    try:
-        payload = json.loads(cleaned)
-    except json.JSONDecodeError:
-        match = re.search(r"\{[\s\S]*\}", text)
-        if not match:
-            return None
-        try:
-            payload = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None
-    if isinstance(payload, dict):
-        return payload
-    return None
-
-
-def parse_loop_action(text: str) -> dict[str, object]:
-    payload = extract_json_object(text)
-    if payload is None:
-        return {"action": "final", "answer": text.strip()}
-    action = str(payload.get("action", "final")).lower()
-    if action == "tool":
-        return {
-            "action": "tool",
-            "tool": str(payload.get("tool", "")).strip(),
-            "arguments": payload.get("arguments", {}) if isinstance(payload.get("arguments"), dict) else {},
-        }
-    return {"action": "final", "answer": str(payload.get("answer", text)).strip()}
 
 
 class AgentLoopService:
@@ -137,7 +106,25 @@ class AgentLoopService:
             if chat_result.model not in attempted:
                 attempted.append(chat_result.model)
 
-            action = parse_loop_action(chat_result.response)
+            try:
+                action = parse_loop_action(chat_result.response)
+            except ToolJsonParseError as exc:
+                observation = f"Tool parse error: {exc}"
+                step_result = LoopStepResult(step=step, action="parse_error", tool=None, observation=observation)
+                steps.append(step_result)
+                if on_step:
+                    on_step(step_result)
+                history.append(ChatMessage(role="assistant", content=chat_result.response))
+                history.append(
+                    ChatMessage(
+                        role="user",
+                        content=(
+                            f"{observation}\n\nRespond with valid JSON: "
+                            '{"action":"tool","tool":"...","arguments":{...}} or {"action":"final","answer":"..."}.'
+                        ),
+                    )
+                )
+                continue
             if action.get("action") == "final":
                 answer = str(action.get("answer", chat_result.response))
                 step_result = LoopStepResult(step=step, action="final", tool=None, observation=answer[:500])
@@ -197,6 +184,27 @@ def build_tool_arguments(tool_name: str, arguments: dict[str, object]):
         return ExecuteCommandRequest(
             command=str(arguments.get("command", "echo ok")),
             path=str(arguments.get("path", ".")),
+            dry_run=bool(arguments.get("dry_run", True)),
+            confirmed=bool(arguments.get("confirmed", False)),
+        )
+    if tool_name == "apply_patch":
+        hunks_raw = arguments.get("hunks", [])
+        hunks = []
+        if isinstance(hunks_raw, list):
+            for item in hunks_raw:
+                if isinstance(item, dict):
+                    hunks.append(
+                        ApplyPatchHunk(
+                            old_text=str(item.get("old_text", "")),
+                            new_text=str(item.get("new_text", "")),
+                        )
+                    )
+        content = arguments.get("content")
+        return ApplyPatchRequest(
+            path=str(arguments.get("path", "")),
+            hunks=hunks,
+            content=str(content) if content is not None else None,
+            create=bool(arguments.get("create", False)),
             dry_run=bool(arguments.get("dry_run", True)),
             confirmed=bool(arguments.get("confirmed", False)),
         )
