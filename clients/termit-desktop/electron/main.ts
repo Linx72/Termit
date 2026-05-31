@@ -1,19 +1,23 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron";
 import path from "node:path";
 import {
   ensureServer,
+  openLogs,
   readLauncherConfig,
+  restartServer,
   writeLauncherConfig,
   type LauncherConfig,
 } from "./serverLauncher";
 
 const isDev = !app.isPackaged;
+let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
-    width: 1180,
-    height: 820,
-    minWidth: 900,
+    width: 1280,
+    height: 860,
+    minWidth: 960,
     minHeight: 640,
     title: "Termit",
     webPreferences: {
@@ -31,7 +35,73 @@ function createWindow(): BrowserWindow {
     void window.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 
+  mainWindow = window;
   return window;
+}
+
+function trayIcon() {
+  const size = process.platform === "darwin" ? 16 : 32;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="3" fill="#238636"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="${Math.round(size * 0.55)}" font-family="sans-serif">T</text></svg>`;
+  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+}
+
+function buildTrayMenu(): Menu {
+  const userData = app.getPath("userData");
+  return Menu.buildFromTemplate([
+    {
+      label: "Show Termit",
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          createWindow();
+        }
+      },
+    },
+    {
+      label: "Restart server",
+      click: () => {
+        void restartServer(userData).then((result) => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("server:status", result);
+          }
+        });
+      },
+    },
+    {
+      label: "Open logs",
+      click: () => {
+        void openLogs(userData).then((result) => {
+          void shell.showItemInFolder(result.message);
+        });
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Quit Termit",
+      click: () => {
+        app.quit();
+      },
+    },
+  ]);
+}
+
+function createTray(): void {
+  if (tray) {
+    return;
+  }
+  tray = new Tray(trayIcon());
+  tray.setToolTip("Termit");
+  tray.setContextMenu(buildTrayMenu());
+  tray.on("click", () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    } else {
+      createWindow();
+    }
+  });
 }
 
 async function maybeAutoStartServer(): Promise<void> {
@@ -43,6 +113,9 @@ async function maybeAutoStartServer(): Promise<void> {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === "darwin") {
+    createTray();
+  }
   void maybeAutoStartServer().finally(() => {
     createWindow();
   });
@@ -106,4 +179,20 @@ ipcMain.handle("launcher:setConfig", (_event, config: LauncherConfig) => {
 
 ipcMain.handle("server:ensure", (_event, baseUrl: string) => {
   return ensureServer(app.getPath("userData"), baseUrl);
+});
+
+ipcMain.handle("server:restart", () => {
+  return restartServer(app.getPath("userData"));
+});
+
+ipcMain.handle("logs:open", async () => {
+  const result = await openLogs(app.getPath("userData"));
+  return { ok: result.ok, path: result.message };
+});
+
+ipcMain.on("notify:show", (_event, payload: { title: string; body: string }) => {
+  if (!Notification.isSupported()) {
+    return;
+  }
+  new Notification({ title: payload.title, body: payload.body }).show();
 });

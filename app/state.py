@@ -337,9 +337,17 @@ def get_metrics_snapshot_store() -> MetricsSnapshotStore:
 @lru_cache
 def _build_local_runtime_service() -> LocalRuntimeService:
     settings = get_settings()
+    required = LocalRuntimeService.collect_required_ollama_models(
+        default_model=settings.default_model,
+        code_model=settings.code_model,
+        analysis_model=settings.analysis_model,
+        retrieval_embed_model=settings.retrieval_embed_model,
+    )
     return LocalRuntimeService(
         ollama_base_url=settings.ollama_base_url,
         openai_compat_base_url=settings.openai_compat_base_url,
+        required_ollama_models=required,
+        retrieval_mode=settings.retrieval_mode,
     )
 
 

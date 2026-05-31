@@ -16,13 +16,72 @@ class LocalRuntimeError(Exception):
 
 
 class LocalRuntimeService:
-    def __init__(self, ollama_base_url: str, openai_compat_base_url: str) -> None:
+    def __init__(
+        self,
+        ollama_base_url: str,
+        openai_compat_base_url: str,
+        required_ollama_models: list[str] | None = None,
+        retrieval_mode: str = "keyword",
+    ) -> None:
         self._ollama_base_url = ollama_base_url.rstrip("/")
         self._openai_compat_base_url = openai_compat_base_url.rstrip("/")
+        self._required_ollama_models = list(required_ollama_models or [])
+        self._retrieval_mode = retrieval_mode.strip().lower() or "keyword"
+
+    @staticmethod
+    def collect_required_ollama_models(
+        *,
+        default_model: str,
+        code_model: str,
+        analysis_model: str,
+        retrieval_embed_model: str,
+    ) -> list[str]:
+        names: list[str] = []
+        seen: set[str] = set()
+        for raw in (default_model, code_model, analysis_model, retrieval_embed_model):
+            candidate = raw.strip()
+            if not candidate:
+                continue
+            if candidate.startswith("ollama:"):
+                bare = candidate.split(":", 1)[1].strip()
+            elif ":" in candidate:
+                continue
+            else:
+                bare = candidate
+            if bare and bare not in seen:
+                seen.add(bare)
+                names.append(bare)
+        return names
+
+    async def check_required_models(self) -> tuple[list[str], list[str]]:
+        required = list(self._required_ollama_models)
+        if not required:
+            return required, []
+        try:
+            listed = await self.list_local_models()
+        except LocalRuntimeError:
+            return required, list(required)
+        installed = {item.model.split(":", 1)[-1] for item in listed.models}
+        missing: list[str] = []
+        for name in required:
+            if any(
+                inst == name or inst.startswith(f"{name}:") or name.startswith(f"{inst}:")
+                for inst in installed
+            ):
+                continue
+            missing.append(name)
+        return required, missing
 
     async def status(self) -> LocalRuntimeStatusResponse:
         ollama_ok, ollama_detail = await self._probe(f"{self._ollama_base_url}/api/tags")
         openai_compat_ok, openai_compat_detail = await self._probe(f"{self._openai_compat_base_url}/v1/models")
+        required, missing = await self.check_required_models()
+        if missing and ollama_ok:
+            ollama_detail = (
+                f"{ollama_detail}; missing models: {', '.join(missing)} "
+                f"(run: ollama pull {' && ollama pull '.join(missing)})"
+            )
+            ollama_ok = False
         return LocalRuntimeStatusResponse(
             providers=[
                 ProviderStatus(provider="ollama", ok=ollama_ok, detail=ollama_detail),
@@ -31,7 +90,10 @@ class LocalRuntimeService:
                     ok=openai_compat_ok,
                     detail=openai_compat_detail,
                 ),
-            ]
+            ],
+            required_ollama_models=required,
+            missing_ollama_models=missing,
+            retrieval_mode=self._retrieval_mode,
         )
 
     async def list_local_models(self) -> LocalModelsResponse:

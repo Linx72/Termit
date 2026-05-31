@@ -412,7 +412,12 @@ window.TermitAgentHub = (function () {
       updateCharts(metrics);
       renderAgentCards(agents);
       if (!selectedAgentId && agents.length) selectAgent(agents[0].agent_id);
-      else if (selectedAgentId) loadRecentRuns(selectedAgentId);
+      else if (selectedAgentId) {
+        const stillExists = agents.some((agent) => agent.agent_id === selectedAgentId);
+        if (stillExists) loadRecentRuns(selectedAgentId);
+        else if (agents.length) selectAgent(agents[0].agent_id);
+        else selectedAgentId = null;
+      }
     } catch (_err) {
       if (els.health) {
         els.health.className = "hub-health-pill degraded";

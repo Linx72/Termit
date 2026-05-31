@@ -117,6 +117,17 @@ class DualPassAndFimTests(unittest.TestCase):
         self.assertEqual(result.insert_text, "insert_me")
         self.assertEqual(provider.calls, 1)
 
+    def test_fim_accepts_low_max_tokens(self) -> None:
+        provider = SequenceProvider(["x"])
+        service = self._service(provider)
+        result = asyncio.run(
+            service.fim_complete(
+                FimCompletionRequest(prefix="a", suffix="b", max_tokens=32)
+            )
+        )
+        self.assertEqual(result.insert_text, "x")
+        self.assertEqual(provider.calls, 1)
+
 
 class TaskAgentBridgeTests(unittest.TestCase):
     def test_auto_task_uses_agent_runner(self) -> None:

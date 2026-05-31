@@ -84,6 +84,35 @@ class LocalRuntimeServiceTests(unittest.TestCase):
         self.assertEqual(result.model, "ollama:qwen2.5-coder:14b")
         self.assertEqual(fake_client.last_post_payload["name"], "qwen2.5-coder:14b")
 
+    def test_collect_required_ollama_models_deduplicates(self) -> None:
+        names = LocalRuntimeService.collect_required_ollama_models(
+            default_model="ollama:deepseek-coder",
+            code_model="ollama:deepseek-coder",
+            analysis_model="ollama:qwen2.5-coder",
+            retrieval_embed_model="nomic-embed-text",
+        )
+        self.assertEqual(names, ["deepseek-coder", "qwen2.5-coder", "nomic-embed-text"])
+
+    def test_check_required_models_reports_missing(self) -> None:
+        responses = {
+            ("GET", "http://localhost:11434/api/tags"): _FakeResponse(
+                200,
+                {"models": [{"name": "deepseek-coder:latest"}]},
+            )
+        }
+        service = LocalRuntimeService(
+            "http://localhost:11434",
+            "http://localhost:8001",
+            required_ollama_models=["deepseek-coder", "nomic-embed-text"],
+        )
+        with patch(
+            "app.services.local_runtime_service.httpx.AsyncClient",
+            lambda **kwargs: _FakeAsyncClient(responses, **kwargs),
+        ):
+            required, missing = asyncio.run(service.check_required_models())
+        self.assertEqual(required, ["deepseek-coder", "nomic-embed-text"])
+        self.assertEqual(missing, ["nomic-embed-text"])
+
 
 if __name__ == "__main__":
     unittest.main()

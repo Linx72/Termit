@@ -181,6 +181,22 @@ class FinetuneServiceTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        signals_path = root / "training_signals.jsonl"
+        signals_path.write_text("", encoding="utf-8")
+        memory_db = root / "memory.db"
+        with sqlite3.connect(memory_db) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.commit()
         return FinetuneService(
             datasets_dir=str(root / "datasets"),
             jobs_path=str(root / "jobs.json"),
@@ -189,6 +205,8 @@ class FinetuneServiceTests(unittest.TestCase):
             feedback_file_path=str(feedback_path),
             task_sqlite_path=str(task_db),
             agent_run_sqlite_path=str(agent_db),
+            memory_sqlite_path=str(memory_db),
+            training_signals_path=str(signals_path),
             repo_profiles_path=str(profiles_path),
         )
 

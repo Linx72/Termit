@@ -8,6 +8,11 @@ export interface ServerEnsureResult {
   message: string;
 }
 
+export interface DesktopNotificationPayload {
+  title: string;
+  body: string;
+}
+
 export interface TermitDesktopApi {
   pickWorkspace(): Promise<string | null>;
   pickWorkspaceFile(workspace: string): Promise<string | null>;
@@ -15,6 +20,9 @@ export interface TermitDesktopApi {
   getLauncherConfig(): Promise<LauncherConfig>;
   setLauncherConfig(config: LauncherConfig): Promise<void>;
   ensureServer(baseUrl: string): Promise<ServerEnsureResult>;
+  restartServer(): Promise<ServerEnsureResult>;
+  openLogs(): Promise<{ ok: boolean; path: string }>;
+  showNotification(payload: DesktopNotificationPayload): void;
 }
 
 declare global {

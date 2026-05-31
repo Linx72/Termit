@@ -43,9 +43,11 @@ async def reindex_codebase(
     service: CodeRetrievalService = Depends(get_code_retrieval_service),
 ) -> RetrievalIndexResponse:
     indexed_files, indexed_chunks = service.reindex()
+    stats = service.stats()
     return RetrievalIndexResponse(
         indexed_files=indexed_files,
         indexed_chunks=indexed_chunks,
+        retrieval_mode=str(stats.get("mode", service.mode)),
     )
 
 
@@ -55,6 +57,7 @@ async def retrieval_stats(
 ) -> RetrievalIndexResponse:
     stats = service.stats()
     return RetrievalIndexResponse(
-        indexed_files=stats["indexed_files"],
-        indexed_chunks=stats["indexed_chunks"],
+        indexed_files=int(stats["indexed_files"]),
+        indexed_chunks=int(stats["indexed_chunks"]),
+        retrieval_mode=str(stats.get("mode", service.mode)),
     )

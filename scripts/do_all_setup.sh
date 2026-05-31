@@ -17,6 +17,23 @@ pip install -q -r requirements.txt
 echo "== Python tests =="
 python -m unittest discover -s tests -q
 
+echo "== Ollama models (optional health check) =="
+if [[ "${TERMIT_SKIP_OLLAMA_CHECK:-}" != "1" ]]; then
+  chmod +x "$ROOT/scripts/check_ollama_models.sh"
+  PULL_FLAG=()
+  if [[ "${TERMIT_PULL_OLLAMA_MODELS:-}" == "1" ]]; then
+    PULL_FLAG=(--pull-missing)
+  fi
+  if "$ROOT/scripts/check_ollama_models.sh" "${PULL_FLAG[@]}"; then
+    echo "Ollama models OK."
+  else
+    echo "warning: some Ollama models missing — chat may fail until you ollama pull them." >&2
+    echo "  Or rerun with: TERMIT_PULL_OLLAMA_MODELS=1 ./scripts/do_all_setup.sh" >&2
+  fi
+else
+  echo "Skipped (TERMIT_SKIP_OLLAMA_CHECK=1)."
+fi
+
 "$ROOT/scripts/install_node_local.sh"
 NODE_BIN="$(find "$ROOT/.tools" -path '*/bin/npm' 2>/dev/null | head -1)"
 [[ -n "$NODE_BIN" ]] || { echo "error: npm not found under .tools" >&2; exit 1; }
@@ -43,5 +60,20 @@ else
   echo "Add key at https://github.com/settings/keys then: $ROOT/scripts/first_push.sh"
 fi
 
+echo "== Termit API (background) =="
+if [[ "${TERMIT_SKIP_SERVER:-}" != "1" ]]; then
+  TERMIT_PORT=8765 "$ROOT/scripts/restart_server.sh" || true
+fi
+
+if [[ "${TERMIT_INSTALL_LAUNCH_AGENT:-}" == "1" ]]; then
+  "$ROOT/scripts/install_launch_agent.sh" || true
+fi
+
 echo ""
-echo "Done. Start app: $ROOT/scripts/run_termit_stack.sh"
+echo "Done."
+echo "  Web UI:  http://127.0.0.1:8765/"
+echo "  Desktop: $ROOT/scripts/run_termit_stack.sh"
+echo "  Default server (macOS login): TERMIT_INSTALL_LAUNCH_AGENT=1 ./scripts/do_all_setup.sh"
+echo "  Auto-pull Ollama models:      TERMIT_PULL_OLLAMA_MODELS=1 ./scripts/do_all_setup.sh"
+echo "  Or now:   ./scripts/install_launch_agent.sh"
+echo "  Guide:    $ROOT/START_HERE_RU.md"

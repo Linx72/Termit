@@ -9,6 +9,7 @@ import {
   type ApplyPatchRequest,
 } from "@termit/client";
 import { languageFromPath } from "./editorUtils";
+import { FileTreePanel } from "./FileTreePanel";
 
 interface EditorPanelProps {
   client: TermitClient;
@@ -18,6 +19,8 @@ interface EditorPanelProps {
   sessionId: string;
   inlineCompletionEnabled?: boolean;
   onSessionId: (id: string) => void;
+  openPath?: string | null;
+  onOpenPathConsumed?: () => void;
 }
 
 type ModalKind = "inline-edit" | "diff-preview" | null;
@@ -30,6 +33,8 @@ export function EditorPanel({
   sessionId,
   inlineCompletionEnabled = false,
   onSessionId,
+  openPath,
+  onOpenPathConsumed,
 }: EditorPanelProps) {
   const [filePath, setFilePath] = useState<string | null>(null);
   const [content, setContent] = useState("");
@@ -48,6 +53,24 @@ export function EditorPanel({
   const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completionDisposableRef = useRef<{ dispose: () => void } | null>(null);
 
+  const openFileAtPath = useCallback(
+    async (relativePath: string) => {
+      try {
+        setStatus(`Loading ${relativePath}…`);
+        const file = await client.readFile({ path: relativePath, max_bytes: 500_000 });
+        suppressDirtyRef.current = true;
+        setFilePath(relativePath);
+        setContent(file.content);
+        setDirty(false);
+        setStatus(`Opened ${relativePath}`);
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        setStatus(text);
+      }
+    },
+    [client]
+  );
+
   const openFile = useCallback(async () => {
     if (!workspace) {
       setStatus("Choose a workspace folder first.");
@@ -57,19 +80,17 @@ export function EditorPanel({
     if (!relativePath) {
       return;
     }
-    try {
-      setStatus(`Loading ${relativePath}…`);
-      const file = await client.readFile({ path: relativePath, max_bytes: 500_000 });
-      suppressDirtyRef.current = true;
-      setFilePath(relativePath);
-      setContent(file.content);
-      setDirty(false);
-      setStatus(`Opened ${relativePath}`);
-    } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
-      setStatus(text);
+    await openFileAtPath(relativePath);
+  }, [workspace, openFileAtPath]);
+
+  useEffect(() => {
+    if (!openPath) {
+      return;
     }
-  }, [workspace, client]);
+    void openFileAtPath(openPath).finally(() => {
+      onOpenPathConsumed?.();
+    });
+  }, [openPath, openFileAtPath, onOpenPathConsumed]);
 
   const reloadFile = useCallback(async () => {
     if (!filePath) {
@@ -342,7 +363,14 @@ export function EditorPanel({
   const lang = filePath ? languageFromPath(filePath) : "plaintext";
 
   return (
-    <div className="editor-panel">
+    <div className="editor-layout">
+      <FileTreePanel
+        client={client}
+        connected={connected}
+        selectedPath={filePath}
+        onSelectFile={(path) => void openFileAtPath(path)}
+      />
+      <div className="editor-panel">
       <div className="editor-toolbar">
         <div className="editor-path">
           {filePath ? (
@@ -467,6 +495,7 @@ export function EditorPanel({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

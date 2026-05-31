@@ -723,6 +723,8 @@ class FinetuneService:
                 min_rating=payload.min_rating,
                 min_samples=payload.min_samples,
                 limit=payload.limit,
+                curate_deduplicate=payload.curate_deduplicate,
+                curate_stratified_balance=payload.curate_stratified_balance,
             )
         )
         stages.append(

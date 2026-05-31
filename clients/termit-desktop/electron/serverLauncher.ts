@@ -1,6 +1,10 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, execFile, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export interface LauncherConfig {
   repoRoot: string;
@@ -99,4 +103,52 @@ export async function ensureServer(
     ok: false,
     message: "Server did not respond on :8765 — check .venv and Ollama",
   };
+}
+
+export function resolveLogPaths(userData: string): string[] {
+  const config = readLauncherConfig(userData);
+  const paths: string[] = [];
+  const homeLogDir = path.join(os.homedir(), "Library", "Logs", "Termit");
+  paths.push(homeLogDir);
+  if (config.repoRoot) {
+    paths.push(path.join(config.repoRoot, ".tools", "termit-launchd.log"));
+    paths.push(path.join(config.repoRoot, ".tools", "termit-launchd.err.log"));
+    paths.push(path.join(config.repoRoot, ".tools", "termit-server.log"));
+  }
+  return paths;
+}
+
+export async function openLogs(userData: string): Promise<{ ok: boolean; message: string }> {
+  const logDir = path.join(os.homedir(), "Library", "Logs", "Termit");
+  fs.mkdirSync(logDir, { recursive: true });
+  for (const candidate of resolveLogPaths(userData)) {
+    if (candidate === logDir) {
+      continue;
+    }
+    if (fs.existsSync(candidate)) {
+      return { ok: true, message: candidate };
+    }
+  }
+  return { ok: true, message: logDir };
+}
+
+export async function restartServer(userData: string): Promise<{ ok: boolean; message: string }> {
+  const config = readLauncherConfig(userData);
+  if (!config.repoRoot || !fs.existsSync(config.repoRoot)) {
+    return { ok: false, message: "Set Termit repo path first." };
+  }
+  const script = path.join(config.repoRoot, "scripts", "restart_server.sh");
+  if (!fs.existsSync(script)) {
+    return { ok: false, message: `Missing ${script}` };
+  }
+  try {
+    await execFileAsync(script, { cwd: config.repoRoot, timeout: 120_000 });
+    const healthy = await checkHealth();
+    return healthy
+      ? { ok: true, message: "Termit server restarted on :8765" }
+      : { ok: false, message: "Restart script ran but health check failed." };
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error);
+    return { ok: false, message: text };
+  }
 }

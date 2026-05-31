@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from contextlib import asynccontextmanager
@@ -49,11 +50,28 @@ _app_version = (
 )
 
 
+_logger = logging.getLogger("termit.startup")
+
+
 @asynccontextmanager
 async def _app_lifespan(_app: FastAPI):
     agent_service = get_agent_service()
     stage1_scheduler = get_stage1_scheduler_service()
     maintenance_scheduler = get_agent_maintenance_scheduler_service()
+    local_runtime = get_local_runtime_service()
+    try:
+        _required, missing = await local_runtime.check_required_models()
+        if missing:
+            pull_hint = " && ollama pull ".join(missing)
+            _logger.error(
+                "Missing Ollama models: %s. Install with: ollama pull %s",
+                ", ".join(missing),
+                pull_hint,
+            )
+        else:
+            _logger.info("Ollama model check passed (%d required).", len(_required))
+    except Exception as exc:  # noqa: BLE001 — startup must not crash on probe failure
+        _logger.warning("Ollama model validation skipped: %s", exc)
     agent_service.start()
     stage1_scheduler.start()
     maintenance_scheduler.start()

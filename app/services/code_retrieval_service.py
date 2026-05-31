@@ -73,7 +73,8 @@ class CodeRetrievalService:
         self.chunk_max_chars = max(400, chunk_max_chars)
         self.max_file_bytes = max(10_000, max_file_bytes)
         self.include_suffixes = include_suffixes or self._INCLUDE_SUFFIXES
-        self.mode = mode.strip().lower() if mode else "keyword"
+        normalized_mode = mode.strip().lower() if mode else "keyword"
+        self.mode = "semantic" if normalized_mode in {"semantic", "hybrid"} else "keyword"
         self.ollama_base_url = ollama_base_url.rstrip("/")
         self.embed_model = embed_model
         self._embed_cache = EmbeddingCache(embed_cache_path)
@@ -124,6 +125,7 @@ class CodeRetrievalService:
             "indexed_chunks": indexed_chunks,
             "mode": self.mode,
             "cached_embeddings": self._embed_cache.count(),
+            "semantic_available": bool(self._semantic_available),
         }
 
     def _keyword_search(

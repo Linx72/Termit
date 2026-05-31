@@ -6,7 +6,22 @@ Remote уже: `git@github.com:orosam/Termit.git`
 ## 1. SSH-ключ (рекомендуется)
 
 ```bash
-ssh-keygen -t ed25519 -C "your@email" -f ~/.ssh/id_ed25519 -N ""
+./scripts/setup_github_ssh.sh
+./scripts/add_github_ssh_key.sh
+```
+
+Скрипт `add_github_ssh_key.sh` копирует ключ в буфер и открывает страницу добавления.
+
+**Полностью без браузера** (нужен [Personal Access Token](https://github.com/settings/tokens) с правом `admin:public_key`):
+
+```bash
+export TERMIT_GITHUB_TOKEN='ghp_...'
+./scripts/add_github_ssh_key.sh
+```
+
+Или вручную:
+
+```bash
 cat ~/.ssh/id_ed25519.pub
 ```
 

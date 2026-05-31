@@ -2,6 +2,8 @@
 
 Open-source AI coding orchestrator MVP with task-based model routing.
 
+**Русский старт:** [START_HERE_RU.md](START_HERE_RU.md)
+
 ## What is included
 
 - FastAPI backend with `/api/chat`, `/api/chat/stream` and `/api/providers`

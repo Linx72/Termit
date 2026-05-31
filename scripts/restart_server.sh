@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Restart Termit API (stop port + start in background).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PORT="${TERMIT_PORT:-8765}"
+HOST="${TERMIT_HOST:-127.0.0.1}"
+LOG="${ROOT}/.tools/termit-server.log"
+
+"$ROOT/scripts/stop_server.sh"
+
+mkdir -p "${ROOT}/.tools"
+# shellcheck disable=SC1091
+source "${ROOT}/.venv/bin/activate"
+
+echo "Starting Termit on ${HOST}:${PORT}..."
+cd "$ROOT"
+if command -v setsid >/dev/null 2>&1; then
+  setsid nohup uvicorn app.main:app --host "$HOST" --port "$PORT" >>"$LOG" 2>&1 < /dev/null &
+else
+  nohup uvicorn app.main:app --host "$HOST" --port "$PORT" >>"$LOG" 2>&1 < /dev/null &
+fi
+SERVER_PID=$!
+disown "$SERVER_PID" 2>/dev/null || true
+echo "Server PID: ${SERVER_PID} (log: ${LOG})"
+
+for _ in $(seq 1 30); do
+  if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+    echo "Termit ready: http://127.0.0.1:${PORT}"
+    curl -s "http://127.0.0.1:${PORT}/healthz" | python3 -m json.tool 2>/dev/null | head -8 || true
+    exit 0
+  fi
+  sleep 0.3
+done
+
+echo "error: server did not start. Log: ${LOG}" >&2
+tail -20 "$LOG" 2>/dev/null || true
+exit 1

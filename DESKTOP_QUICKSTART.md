@@ -12,6 +12,35 @@ chmod +x scripts/*.sh
 
 Скрипт: venv, тесты, Node в `.tools/`, сборка SDK и desktop, push на GitHub (если SSH настроен).
 
+## Запуск API (без desktop)
+
+**Рекомендуется на macOS — LaunchAgent (сервер при входе в систему):**
+
+```bash
+cd /path/to/Termit
+./scripts/install_launch_agent.sh
+# или: TERMIT_INSTALL_LAUNCH_AGENT=1 ./scripts/do_all_setup.sh
+```
+
+Логи LaunchAgent: `.tools/termit-launchd.log`, `.tools/termit-launchd.err.log`.
+
+**Вручную (разработка или без LaunchAgent):**
+
+```bash
+cd /path/to/Termit
+./scripts/start_server.sh          # если порт занят и сервер жив — просто сообщит и выйдет
+./scripts/restart_server.sh        # остановить :8765 и поднять заново в фоне
+./scripts/stop_server.sh           # освободить порт
+```
+
+Проверка моделей Ollama:
+
+```bash
+./scripts/check_ollama_models.sh
+```
+
+Не используйте `uvicorn ... on http://...` — нужны флаги `--host` и `--port`.
+
 ## Один скрипт (разработка)
 
 ```bash
@@ -35,7 +64,25 @@ cd /path/to/Termit
 4. **Connect** (или включите **Connect on launch**).
 5. Вкладки: Chat, Composer, Editor, Tasks, Agents.
 
-## Собрать .app (macOS)
+## Собрать .app / .dmg (macOS)
+
+```bash
+./scripts/generate_desktop_icon.sh
+cd clients/termit-desktop
+npm run package:dmg
+open release/*.dmg
+```
+
+Без подписи Apple сборка может не открыться двойным кликом. Обход для локальной разработки:
+
+```bash
+xattr -cr release/mac-arm64/Termit.app
+# или: System Settings → Privacy & Security → Open Anyway
+```
+
+Подпись и notarization для распространения — отдельный шаг (не входит в MVP).
+
+Альтернатива без DMG:
 
 ```bash
 ./scripts/package_desktop.sh

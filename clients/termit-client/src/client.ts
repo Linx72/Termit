@@ -176,6 +176,35 @@ export class TermitClient {
     yield* parseAgentRunSseStream(response.body);
   }
 
+  health(): Promise<{ status: string }> {
+    return this.request<{ status: string }>("/health");
+  }
+
+  healthz(): Promise<{ status: string; version: string }> {
+    return this.request<{ status: string; version: string }>("/healthz");
+  }
+
+  reindexRetrieval(): Promise<{
+    indexed_files: number;
+    indexed_chunks: number;
+    retrieval_mode?: string;
+  }> {
+    return this.request<{
+      indexed_files: number;
+      indexed_chunks: number;
+      retrieval_mode?: string;
+    }>("/api/retrieval/reindex", { method: "POST", body: "{}" });
+  }
+
+  localRuntimeStatus(): Promise<{
+    providers: ProviderStatus[];
+    required_ollama_models?: string[];
+    missing_ollama_models?: string[];
+    retrieval_mode?: string;
+  }> {
+    return this.request("/api/local/status");
+  }
+
   providersStatus(): Promise<ProviderStatus[]> {
     return this.request<ProviderStatus[]>("/api/providers/status");
   }

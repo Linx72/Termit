@@ -246,7 +246,7 @@ class ChatService:
             use_memory=False,
             use_retrieval=False,
             temperature=payload.temperature,
-            max_tokens=payload.max_tokens,
+            max_tokens=max(64, payload.max_tokens),
         )
         result = await self.chat(chat_payload)
         insert_text = result.response.strip()

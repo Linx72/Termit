@@ -1,0 +1,99 @@
+# Termit — начните здесь
+
+Своё приложение **Termit** + свой AI (Ollama). Cursor не нужен.
+
+## 1. Один раз: настройка
+
+```bash
+cd /path/to/Termit
+chmod +x scripts/*.sh
+./scripts/do_all_setup.sh
+```
+
+## 2. Сервер API (порт 8765) — по умолчанию LaunchAgent
+
+**Рекомендуется (macOS): API поднимается при каждом входе в систему:**
+
+```bash
+./scripts/install_launch_agent.sh
+# или вместе с полной настройкой:
+TERMIT_INSTALL_LAUNCH_AGENT=1 ./scripts/do_all_setup.sh
+```
+
+Логи: `.tools/termit-launchd.log` и `.tools/termit-launchd.err.log` в корне репозитория.
+
+**Альтернатива — вручную в терминале (вкладка всегда открыта):**
+
+```bash
+./scripts/start_server.sh
+```
+
+**Проверка моделей Ollama** (из `.env.example`):
+
+```bash
+./scripts/check_ollama_models.sh
+```
+
+Проверка: http://127.0.0.1:8765/health → `{"status":"ok"}`
+
+Если `Address already in use` → `./scripts/restart_server.sh`  
+Если браузер `ERR_CONNECTION_REFUSED` → сервер не запущен, см. выше.
+
+## 3. Ollama (модели)
+
+```bash
+./scripts/start_ollama_local.sh   # или системный ollama serve
+ollama pull deepseek-coder
+ollama pull nomic-embed-text      # для semantic retrieval
+```
+
+## 4. Приложение Termit (desktop)
+
+```bash
+open clients/termit-desktop/release/mac-arm64/Termit.app
+# или разработка:
+./scripts/run_termit_stack.sh
+```
+
+В приложении:
+
+1. **Choose repo** → папка клона Termit  
+2. **Start server on launch** (опционально)  
+3. **Choose folder** → ваш код  
+4. **Connect** — индикатор API / Ollama в сайдбаре  
+
+## 5. GitHub (несколько Mac)
+
+```bash
+./scripts/setup_github_ssh.sh
+# ключ → https://github.com/settings/keys
+# создать репо Termit на GitHub
+./scripts/first_push.sh
+```
+
+Ежедневно: `./scripts/sync_start.sh` → работа → `./scripts/sync_finish.sh "описание"`
+
+## 6. Semantic поиск по коду
+
+В `.env`:
+
+```bash
+TERMIT_RETRIEVAL_MODE=semantic
+TERMIT_RETRIEVAL_EMBED_MODEL=nomic-embed-text
+```
+
+Переиндекс: UI или `POST /api/retrieval/reindex`. Без Ollama embeddings — fallback на keyword.
+
+## Шпаргалка скриптов
+
+| Скрипт | Назначение |
+|--------|------------|
+| `start_server.sh` | Сервер в foreground |
+| `restart_server.sh` | Перезапуск в фоне |
+| `stop_server.sh` | Освободить :8765 |
+| `run_termit_stack.sh` | Ollama + API + desktop dev |
+| `package_desktop.sh` | Собрать Termit.app |
+| `install_launch_agent.sh` | **По умолчанию:** API при входе в macOS (LaunchAgent) |
+| `check_ollama_models.sh` | Проверка моделей из `.env` / embed |
+
+Подробнее: [DESKTOP_QUICKSTART.md](DESKTOP_QUICKSTART.md), [GITHUB_SETUP_RU.md](GITHUB_SETUP_RU.md), [SYNC_WORKFLOW.md](SYNC_WORKFLOW.md).

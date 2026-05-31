@@ -4,8 +4,12 @@ __pycache__/
 *.pyc
 .env
 *.db
+*.db-shm
+*.db-wal
 *.db-journal
 *.db.corrupt*
+.stage1_result.json
+clients/termit-desktop/build/icon.iconset/
 
 # Client builds
 clients/*/node_modules/

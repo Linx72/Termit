@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { LauncherConfig, TermitDesktopApi } from "../shared/ipc";
+import type { DesktopNotificationPayload, LauncherConfig, TermitDesktopApi } from "../shared/ipc";
 
 const api: TermitDesktopApi = {
   pickWorkspace: () => ipcRenderer.invoke("dialog:pickWorkspace") as Promise<string | null>,
@@ -11,6 +11,12 @@ const api: TermitDesktopApi = {
     ipcRenderer.invoke("launcher:setConfig", config) as Promise<void>,
   ensureServer: (baseUrl: string) =>
     ipcRenderer.invoke("server:ensure", baseUrl) as Promise<{ ok: boolean; message: string }>,
+  restartServer: () =>
+    ipcRenderer.invoke("server:restart") as Promise<{ ok: boolean; message: string }>,
+  openLogs: () => ipcRenderer.invoke("logs:open") as Promise<{ ok: boolean; path: string }>,
+  showNotification: (payload: DesktopNotificationPayload) => {
+    ipcRenderer.send("notify:show", payload);
+  },
 };
 
 contextBridge.exposeInMainWorld("termitDesktop", api);

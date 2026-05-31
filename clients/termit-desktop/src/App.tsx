@@ -9,11 +9,31 @@ import {
   type AgentProfile,
   type AgentRunRecord,
   type ApplyPatchRequest,
+  type ApplyPatchResponse,
   type ComposerFileContext,
   type TaskStatusResponse,
   type TaskType,
 } from "@termit/client";
 import { EditorPanel } from "./EditorPanel";
+import { FirstRunWizard } from "./FirstRunWizard";
+import {
+  createEmptySession,
+  deriveSessionSummary,
+  deriveSessionTitle,
+  loadActiveLocalId,
+  loadChatSessions,
+  saveActiveLocalId,
+  saveChatSessions,
+  upsertSession,
+  type StoredChatSession,
+} from "./chatSessions";
+import {
+  isFirstRunComplete,
+  loadSettings,
+  markFirstRunComplete,
+  saveSettings,
+  type StoredSettings,
+} from "./settings";
 
 type Tab = "chat" | "composer" | "editor" | "tasks" | "agents";
 
@@ -22,56 +42,9 @@ type ChatBlock =
   | { id: string; kind: "assistant"; text: string }
   | { id: string; kind: "meta" | "error"; text: string };
 
-const STORAGE_KEY = "termit-app-settings";
-
-interface StoredSettings {
-  baseUrl: string;
-  apiKey: string;
-  sessionId: string;
-  workspace: string;
-  repoRoot: string;
-  autoStartServer: boolean;
-  autoConnect: boolean;
-  taskType: TaskType;
-  useRetrieval: boolean;
-  selectedModel: string;
-  repoProfile: string;
-  inlineCompletionEnabled: boolean;
-}
-
 interface ContextAttachment {
   path: string;
   excerpt: string;
-}
-
-function loadSettings(): StoredSettings {
-  const defaults: StoredSettings = {
-    baseUrl: "http://127.0.0.1:8765",
-    apiKey: "",
-    sessionId: "",
-    workspace: "",
-    repoRoot: "",
-    autoStartServer: false,
-    autoConnect: true,
-    taskType: "coding",
-    useRetrieval: false,
-    selectedModel: "",
-    repoProfile: "",
-    inlineCompletionEnabled: false,
-  };
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return defaults;
-    }
-    return { ...defaults, ...JSON.parse(raw) };
-  } catch {
-    return defaults;
-  }
-}
-
-function saveSettings(settings: StoredSettings): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }
 
 function blockId(): string {
@@ -100,9 +73,18 @@ export function App() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
   const [tab, setTab] = useState<Tab>("chat");
   const [connected, setConnected] = useState(false);
+  const [apiReachable, setApiReachable] = useState(false);
+  const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [statusLine, setStatusLine] = useState("Not connected");
-  const [blocks, setBlocks] = useState<ChatBlock[]>([]);
+  const [chatSessions, setChatSessions] = useState<StoredChatSession[]>(() => loadChatSessions());
+  const [activeLocalId, setActiveLocalId] = useState(() => loadActiveLocalId());
+  const [blocks, setBlocks] = useState<ChatBlock[]>(() => {
+    const sessions = loadChatSessions();
+    const activeId = loadActiveLocalId();
+    const active = sessions.find((session) => session.localId === activeId) ?? sessions[0];
+    return active?.blocks ?? [];
+  });
   const [draft, setDraft] = useState("");
   const [tasks, setTasks] = useState<TaskStatusResponse[]>([]);
   const [taskDetail, setTaskDetail] = useState("Select a task.");
@@ -122,8 +104,18 @@ export function App() {
   const [composerInput, setComposerInput] = useState("");
   const [composerLog, setComposerLog] = useState("Describe a multi-file change.");
   const [composerPatches, setComposerPatches] = useState<ApplyPatchRequest[]>([]);
+  const [composerPatchPreviews, setComposerPatchPreviews] = useState<
+    Record<string, ApplyPatchResponse>
+  >({});
+  const [composerBackups, setComposerBackups] = useState<Record<string, string>>({});
   const [composerBusy, setComposerBusy] = useState(false);
   const [composerPatchDetail, setComposerPatchDetail] = useState("Select a patch to preview (dry run).");
+  const [showWizard, setShowWizard] = useState(() => !isFirstRunComplete());
+  const [wizardHealth, setWizardHealth] = useState("");
+  const [termitVersion, setTermitVersion] = useState("");
+  const [missingOllamaModels, setMissingOllamaModels] = useState<string[]>([]);
+  const [retrievalMode, setRetrievalMode] = useState("keyword");
+  const [reindexBusy, setReindexBusy] = useState(false);
 
   const client = useMemo(
     () =>
@@ -137,6 +129,50 @@ export function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    let sessions = loadChatSessions();
+    let activeId = loadActiveLocalId();
+    if (sessions.length === 0) {
+      const created = createEmptySession();
+      sessions = [created];
+      activeId = created.localId;
+      saveChatSessions(sessions);
+      saveActiveLocalId(activeId);
+    } else if (!activeId || !sessions.some((session) => session.localId === activeId)) {
+      activeId = sessions[0].localId;
+      saveActiveLocalId(activeId);
+    }
+    setChatSessions(sessions);
+    setActiveLocalId(activeId);
+    const active = sessions.find((session) => session.localId === activeId);
+    if (active) {
+      setBlocks(active.blocks);
+      if (active.sessionId !== settings.sessionId) {
+        setSettings((prev) => ({ ...prev, sessionId: active.sessionId }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap chat sessions once
+  }, []);
+
+  useEffect(() => {
+    if (!activeLocalId) {
+      return;
+    }
+    setChatSessions((prev) => {
+      const updated: StoredChatSession = {
+        localId: activeLocalId,
+        sessionId: settings.sessionId,
+        title: deriveSessionTitle(blocks),
+        summary: deriveSessionSummary(blocks),
+        blocks,
+        updatedAt: Date.now(),
+      };
+      const next = upsertSession(prev, updated);
+      saveChatSessions(next);
+      return next;
+    });
+  }, [blocks, activeLocalId, settings.sessionId]);
 
   const updateSettings = (patch: Partial<StoredSettings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
@@ -180,12 +216,18 @@ export function App() {
   const connect = async () => {
     try {
       setStatusLine("Connecting...");
-      const [statuses, providers, profiles, adaptersResponse] = await Promise.all([
-        client.providersStatus(),
-        client.listProviders(),
-        client.listRepoProfiles().catch(() => []),
-        client.listFinetuneAdapters().catch(() => ({ adapters: [] })),
-      ]);
+      const [statuses, providers, profiles, adaptersResponse, healthz, localStatus] =
+        await Promise.all([
+          client.providersStatus(),
+          client.listProviders(),
+          client.listRepoProfiles().catch(() => []),
+          client.listFinetuneAdapters().catch(() => ({ adapters: [] })),
+          client.healthz().catch(() => ({ status: "unknown", version: "" })),
+          client.localRuntimeStatus().catch(() => ({
+            providers: [],
+            missing_ollama_models: [],
+          })),
+        ]);
       const ok = statuses.filter((item) => item.ok).length;
       const modelSet = new Set<string>(providers.flatMap((item) => item.models));
       for (const profile of profiles) {
@@ -201,6 +243,11 @@ export function App() {
       const modelList = [...modelSet].sort();
       setModels(modelList);
       setRepoProfiles(profiles);
+      setTermitVersion(healthz.version || "");
+      setMissingOllamaModels(localStatus.missing_ollama_models ?? []);
+      setRetrievalMode(localStatus.retrieval_mode ?? "keyword");
+      const ollama = localStatus.providers?.find((item) => item.provider === "ollama");
+      setOllamaOk(Boolean(ollama?.ok));
       if (!settings.selectedModel && modelList.length > 0) {
         updateSettings({ selectedModel: modelList[0] });
       }
@@ -208,7 +255,21 @@ export function App() {
         updateSettings({ repoProfile: profiles[0].profile_id });
       }
       setConnected(true);
-      setStatusLine(`Termit · ${ok}/${statuses.length} providers OK · ${modelList.length} models`);
+      setApiReachable(true);
+      const modelLabel = settings.selectedModel || "auto";
+      setStatusLine(
+        `Termit v${healthz.version || "?"} · ${ok}/${statuses.length} providers · ${modelLabel}`
+      );
+      setWizardHealth(
+        [
+          `API: ${healthz.status}`,
+          `version: ${healthz.version || "?"}`,
+          `Ollama: ${ollama?.ok ? "ok" : ollama?.detail ?? "down"}`,
+          localStatus.missing_ollama_models?.length
+            ? `missing models: ${localStatus.missing_ollama_models.join(", ")}`
+            : "models: ok",
+        ].join("\n")
+      );
       setBlocks((prev) => [
         ...prev,
         { id: blockId(), kind: "meta", text: `Connected to ${settings.baseUrl}` },
@@ -247,6 +308,12 @@ export function App() {
       ({ run, events }) => {
         setAgentTimeline(formatAgentTimeline(run, events));
         if (["completed", "failed", "cancelled"].includes(run.state)) {
+          if (run.state === "completed" || run.state === "failed") {
+            window.termitDesktop.showNotification({
+              title: run.state === "completed" ? "Agent run completed" : "Agent run failed",
+              body: `${run.run_id} · ${selectedAgentId ?? "agent"}`,
+            });
+          }
           setWatchedRunId(null);
         }
       },
@@ -267,11 +334,50 @@ export function App() {
   useEffect(() => {
     if (tab === "tasks" && connected) {
       void refreshTasks();
+      const timer = window.setInterval(() => void refreshTasks(), 5000);
+      return () => window.clearInterval(timer);
     }
     if (tab === "agents" && connected) {
       void refreshAgents();
     }
+    return undefined;
   }, [tab, connected]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const probe = async () => {
+      try {
+        await client.health();
+        if (!cancelled) {
+          setApiReachable(true);
+        }
+        if (connected) {
+          const local = await client.localRuntimeStatus();
+          const ollama = local.providers.find((item) => item.provider === "ollama");
+          const healthz = await client.healthz().catch(() => ({ status: "unknown", version: "" }));
+          if (!cancelled) {
+            setOllamaOk(Boolean(ollama?.ok));
+            setMissingOllamaModels(local.missing_ollama_models ?? []);
+            setRetrievalMode(local.retrieval_mode ?? "keyword");
+            if (healthz.version) {
+              setTermitVersion(healthz.version);
+            }
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setApiReachable(false);
+          setOllamaOk(null);
+        }
+      }
+    };
+    void probe();
+    const timer = window.setInterval(() => void probe(), 8000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [client, connected, settings.baseUrl, settings.apiKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -381,6 +487,27 @@ export function App() {
       }
       const patches = parseComposerPatches(responseText);
       setComposerPatches(patches);
+      setComposerPatchPreviews({});
+      setComposerBackups({});
+      const previews: Record<string, ApplyPatchResponse> = {};
+      for (const patch of patches) {
+        try {
+          previews[patch.path] = await client.applyPatch({
+            ...patch,
+            dry_run: true,
+            confirmed: false,
+          });
+        } catch (error) {
+          const text = error instanceof Error ? error.message : String(error);
+          previews[patch.path] = {
+            path: patch.path,
+            risk_level: "blocked",
+            policy_reason: text,
+            applied: false,
+          };
+        }
+      }
+      setComposerPatchPreviews(previews);
       const prose = stripComposerJsonBlock(responseText);
       setComposerLog(
         `${prose}\n\n---\nParsed ${patches.length} patch(es). Click a file to dry-run preview.`
@@ -416,6 +543,20 @@ export function App() {
     if (composerPatches.length === 0) {
       return;
     }
+    const backups: Record<string, string> = { ...composerBackups };
+    for (const patch of composerPatches) {
+      if (backups[patch.path] !== undefined) {
+        continue;
+      }
+      try {
+        const existing = await client.readFile({ path: patch.path, max_bytes: 500_000 });
+        backups[patch.path] = existing.content;
+      } catch {
+        backups[patch.path] = "";
+      }
+    }
+    setComposerBackups(backups);
+
     let applied = 0;
     const errors: string[] = [];
     for (const patch of composerPatches) {
@@ -434,6 +575,110 @@ export function App() {
     if (errors.length > 0) {
       setComposerPatchDetail(errors.join("\n"));
     }
+  };
+
+  const rollbackComposerPatches = async () => {
+    if (Object.keys(composerBackups).length === 0) {
+      setComposerPatchDetail("No backups — apply patches first.");
+      return;
+    }
+    let restored = 0;
+    const errors: string[] = [];
+    for (const [path, content] of Object.entries(composerBackups)) {
+      try {
+        const result = await client.applyPatch({
+          path,
+          content,
+          confirmed: true,
+          dry_run: false,
+        });
+        if (result.applied) {
+          restored += 1;
+        } else {
+          errors.push(`${path}: ${result.policy_reason ?? "skipped"}`);
+        }
+      } catch (error) {
+        errors.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    setComposerLog((prev) => `${prev}\n\nRolled back ${restored} file(s).`);
+    if (errors.length > 0) {
+      setComposerPatchDetail(errors.join("\n"));
+    } else {
+      setComposerBackups({});
+    }
+  };
+
+  const reindexCodebase = async () => {
+    if (!connected || reindexBusy) {
+      return;
+    }
+    setReindexBusy(true);
+    try {
+      const result = await client.reindexRetrieval();
+      if (result.retrieval_mode) {
+        setRetrievalMode(result.retrieval_mode);
+      }
+      setStatusLine(
+        `Reindexed ${result.indexed_files} files · ${result.indexed_chunks} chunks · mode ${result.retrieval_mode ?? retrievalMode}`
+      );
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setStatusLine(text);
+    } finally {
+      setReindexBusy(false);
+    }
+  };
+
+  const switchChatSession = (localId: string) => {
+    if (localId === activeLocalId) {
+      return;
+    }
+    const target = chatSessions.find((session) => session.localId === localId);
+    if (!target) {
+      return;
+    }
+    saveActiveLocalId(localId);
+    setActiveLocalId(localId);
+    setBlocks(target.blocks);
+    updateSettings({ sessionId: target.sessionId });
+    setDraft("");
+    setAttachments([]);
+  };
+
+  const deleteChatSession = (localId: string) => {
+    let next = chatSessions.filter((session) => session.localId !== localId);
+    if (next.length === 0) {
+      const created = createEmptySession();
+      next = [created];
+      saveActiveLocalId(created.localId);
+      setActiveLocalId(created.localId);
+      setBlocks([]);
+      updateSettings({ sessionId: "" });
+    } else if (localId === activeLocalId) {
+      const first = next[0];
+      saveActiveLocalId(first.localId);
+      setActiveLocalId(first.localId);
+      setBlocks(first.blocks);
+      updateSettings({ sessionId: first.sessionId });
+    }
+    saveChatSessions(next);
+    setChatSessions(next);
+    setDraft("");
+    setAttachments([]);
+  };
+
+  const newChatSession = () => {
+    const created = createEmptySession();
+    const next = upsertSession(chatSessions, created);
+    saveChatSessions(next);
+    saveActiveLocalId(created.localId);
+    setChatSessions(next);
+    setActiveLocalId(created.localId);
+    setBlocks([]);
+    updateSettings({ sessionId: "" });
+    setDraft("");
+    setAttachments([]);
   };
 
   const sendChat = async () => {
@@ -535,13 +780,45 @@ export function App() {
 
   return (
     <div className="app">
+      {showWizard && (
+        <FirstRunWizard
+          settings={settings}
+          healthLine={wizardHealth}
+          busy={busy}
+          onUpdate={updateSettings}
+          onPickRepo={() => void pickRepoRoot()}
+          onPickWorkspace={() => void pickWorkspace()}
+          onConnect={() => void connect()}
+          onComplete={() => {
+            markFirstRunComplete();
+            setShowWizard(false);
+          }}
+        />
+      )}
       <aside className="sidebar">
         <h1>Termit</h1>
         <p>Your AI coding app — chat, composer, editor, tasks, agents via Termit + Ollama.</p>
 
-        <div className={`status-pill ${connected ? "connected" : ""}`}>
-          {connected ? statusLine : "Offline"}
+        <div className={`status-pill ${connected ? "connected" : apiReachable ? "reachable" : ""}`}>
+          {connected ? statusLine : apiReachable ? "API up — click Connect" : "API offline"}
         </div>
+        <div className="health-indicators" aria-label="Service health">
+          <span className={`health-dot ${apiReachable ? "ok" : "bad"}`} title="Termit API" />
+          API {apiReachable ? "online" : "offline"}
+          <span className={`health-dot ${ollamaOk === true ? "ok" : ollamaOk === false ? "bad" : "unknown"}`} title="Ollama" />
+          Ollama {ollamaOk === true ? "ok" : ollamaOk === false ? "down" : "—"}
+          {termitVersion && <span className="version-tag">v{termitVersion}</span>}
+          {settings.selectedModel && (
+            <span className="model-tag" title="Selected model">
+              {settings.selectedModel.replace(/^ollama:/, "")}
+            </span>
+          )}
+        </div>
+        {missingOllamaModels.length > 0 && (
+          <p className="hint error-text">
+            Missing Ollama: {missingOllamaModels.join(", ")} — run ollama pull …
+          </p>
+        )}
 
         <div className="field">
           <label htmlFor="baseUrl">Termit API URL</label>
@@ -628,6 +905,17 @@ export function App() {
           />
           @codebase retrieval
         </label>
+        <div className="row retrieval-row">
+          <span className="badge">{retrievalMode}</span>
+          <button
+            type="button"
+            className="secondary compact"
+            disabled={!connected || reindexBusy}
+            onClick={() => void reindexCodebase()}
+          >
+            {reindexBusy ? "Reindex…" : "Reindex"}
+          </button>
+        </div>
 
         <label className="checkbox-row">
           <input
@@ -677,6 +965,20 @@ export function App() {
           <button type="button" className="primary" onClick={() => void connect()}>
             {connected ? "Refresh connection" : "Connect"}
           </button>
+          <button
+            type="button"
+            className="secondary compact"
+            title="Open server logs"
+            onClick={() =>
+              void window.termitDesktop.openLogs().then((result) => {
+                if (result.path) {
+                  setStatusLine(`Log: ${result.path}`);
+                }
+              })
+            }
+          >
+            Logs
+          </button>
         </div>
       </aside>
 
@@ -695,7 +997,62 @@ export function App() {
         </div>
 
         {tab === "chat" && (
-          <>
+          <div className="chat-layout">
+            <aside className="chat-sessions" aria-label="Chat sessions">
+              <div className="chat-sessions-header">
+                <strong>Sessions</strong>
+                <button type="button" className="secondary compact" onClick={newChatSession}>
+                  New
+                </button>
+              </div>
+              <div className="chat-sessions-list">
+                {chatSessions.length === 0 ? (
+                  <div className="chat-session-item muted">No sessions yet.</div>
+                ) : (
+                  chatSessions.map((session) => (
+                    <div
+                      key={session.localId}
+                      className={`chat-session-item ${activeLocalId === session.localId ? "active" : ""}`}
+                    >
+                      <button
+                        type="button"
+                        className="chat-session-select"
+                        onClick={() => switchChatSession(session.localId)}
+                      >
+                        <strong>{session.title}</strong>
+                        {session.summary && <span className="muted">{session.summary}</span>}
+                        {session.sessionId && (
+                          <span className="muted session-id">{session.sessionId.slice(0, 8)}…</span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="chat-session-delete"
+                        aria-label={`Delete ${session.title}`}
+                        onClick={() => deleteChatSession(session.localId)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </aside>
+            <div className="chat-main">
+            {settings.repoProfile && (
+              <p className="hint repo-hint">
+                Repo profile: <strong>{settings.repoProfile}</strong>
+                {repoProfiles.find((p) => p.profile_id === settings.repoProfile)?.preferred_model
+                  ? ` → ${repoProfiles.find((p) => p.profile_id === settings.repoProfile)?.preferred_model}`
+                  : ""}
+              </p>
+            )}
+            <div className="row chat-session-row">
+              <button type="button" className="secondary compact" onClick={newChatSession}>
+                New session
+              </button>
+              <span className="muted">session: {settings.sessionId || "auto"}</span>
+            </div>
             <div className="chat-log">
               {blocks.length === 0 ? (
                 <div className="message-block meta">
@@ -773,11 +1130,20 @@ export function App() {
               </div>
               <p className="hint">Cmd/Ctrl+Enter to send · session: {settings.sessionId || "auto"}</p>
             </div>
-          </>
+            </div>
+          </div>
         )}
 
         {tab === "composer" && (
           <div className="panel-body">
+            {settings.repoProfile && (
+              <p className="hint repo-hint">
+                Repo profile: <strong>{settings.repoProfile}</strong>
+                {repoProfiles.find((p) => p.profile_id === settings.repoProfile)?.preferred_model
+                  ? ` → ${repoProfiles.find((p) => p.profile_id === settings.repoProfile)?.preferred_model}`
+                  : ""}
+              </p>
+            )}
             <p className="hint">
               Composer: attach several @files, describe a multi-file change, review patches, apply all.
             </p>
@@ -824,9 +1190,33 @@ export function App() {
                 disabled={!connected || composerPatches.length === 0}
                 onClick={() => void applyAllComposerPatches()}
               >
-                Apply all
+                Apply all ({composerPatches.length})
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={!connected || Object.keys(composerBackups).length === 0}
+                onClick={() => void rollbackComposerPatches()}
+              >
+                Rollback
               </button>
             </div>
+            {composerPatches.length > 0 && (
+              <div className="composer-preview-list">
+                <strong>Preview before apply:</strong>
+                <ul>
+                  {composerPatches.map((patch) => {
+                    const preview = composerPatchPreviews[patch.path];
+                    return (
+                      <li key={patch.path}>
+                        {patch.path}
+                        {preview ? ` · risk ${preview.risk_level} · dry-run ok` : " · pending"}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
             <pre className="detail-box composer-log">{composerLog}</pre>
             <div className="list">
               {composerPatches.length === 0 ? (
@@ -841,9 +1231,11 @@ export function App() {
                   >
                     <strong>{patch.path}</strong>
                     <span className="muted">
-                      {patch.content !== undefined
-                        ? "full file"
-                        : `${patch.hunks?.length ?? 0} hunk(s)`}
+                      {composerPatchPreviews[patch.path]
+                        ? `risk ${composerPatchPreviews[patch.path].risk_level}`
+                        : patch.content !== undefined
+                          ? "full file"
+                          : `${patch.hunks?.length ?? 0} hunk(s)`}
                     </span>
                   </button>
                 ))
@@ -914,6 +1306,31 @@ export function App() {
               <button type="button" className="secondary" disabled={!connected} onClick={() => void refreshAgents()}>
                 Refresh agents
               </button>
+            </div>
+            <div className="field">
+              <label htmlFor="agentPicker">Agent profile</label>
+              <select
+                id="agentPicker"
+                value={selectedAgentId ?? ""}
+                onChange={(event) => {
+                  const id = event.target.value || null;
+                  setSelectedAgentId(id);
+                  const agent = agents.find((item) => item.agent_id === id);
+                  if (agent) {
+                    setAgentDetail(
+                      `${agent.name}\n${agent.description ?? ""}\nTools: ${(agent.enabled_tools ?? []).join(", ") || "none"}`
+                    );
+                    void refreshAgentRuns(agent.agent_id);
+                  }
+                }}
+              >
+                <option value="">Select agent…</option>
+                {agents.map((agent) => (
+                  <option key={agent.agent_id} value={agent.agent_id}>
+                    {agent.name} ({agent.agent_id})
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="list">
               {agents.length === 0 ? (

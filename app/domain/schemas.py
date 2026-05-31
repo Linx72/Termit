@@ -126,6 +126,7 @@ class RetrievalSearchResponse(BaseModel):
 class RetrievalIndexResponse(BaseModel):
     indexed_files: int
     indexed_chunks: int
+    retrieval_mode: str = "keyword"
 
 
 class ProviderInfo(BaseModel):
@@ -165,6 +166,9 @@ class LocalModelPullResponse(BaseModel):
 
 class LocalRuntimeStatusResponse(BaseModel):
     providers: list[ProviderStatus] = Field(default_factory=list)
+    required_ollama_models: list[str] = Field(default_factory=list)
+    missing_ollama_models: list[str] = Field(default_factory=list)
+    retrieval_mode: str = "keyword"
 
 
 class SessionHistoryResponse(BaseModel):
@@ -930,6 +934,8 @@ class FinetuneStage1RunRequest(BaseModel):
     run_post_eval: bool = True
     eval_category: Optional[str] = None
     eval_limit: Optional[int] = Field(default=24, ge=1, le=100)
+    curate_deduplicate: bool = True
+    curate_stratified_balance: bool = True
     notes: str = Field(default="", max_length=2000)
     auto_register_adapter: bool = False
     adapter_name: Optional[str] = Field(default=None, max_length=120)

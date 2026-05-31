@@ -10,7 +10,8 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "start": "electron .",
     "package": "npm run build && electron-builder --dir",
-    "package:mac": "npm run build && electron-builder --mac --dir"
+    "package:mac": "npm run build && electron-builder --mac --dir",
+    "package:dmg": "npm run build && electron-builder --mac dmg"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -42,7 +43,9 @@
       "dist-electron/**/*"
     ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "target": ["dir", "dmg"]
     }
   }
 }

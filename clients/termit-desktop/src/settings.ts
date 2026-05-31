@@ -1,0 +1,57 @@
+export type TaskType = "coding" | "review" | "debug" | "explain" | "general";
+
+export interface StoredSettings {
+  baseUrl: string;
+  apiKey: string;
+  sessionId: string;
+  workspace: string;
+  repoRoot: string;
+  autoStartServer: boolean;
+  autoConnect: boolean;
+  taskType: TaskType;
+  useRetrieval: boolean;
+  selectedModel: string;
+  repoProfile: string;
+  inlineCompletionEnabled: boolean;
+}
+
+export const STORAGE_KEY = "termit-app-settings";
+export const FIRST_RUN_KEY = "termit-first-run-done";
+
+export function loadSettings(): StoredSettings {
+  const defaults: StoredSettings = {
+    baseUrl: "http://127.0.0.1:8765",
+    apiKey: "",
+    sessionId: "",
+    workspace: "",
+    repoRoot: "",
+    autoStartServer: false,
+    autoConnect: true,
+    taskType: "coding",
+    useRetrieval: false,
+    selectedModel: "",
+    repoProfile: "",
+    inlineCompletionEnabled: false,
+  };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return defaults;
+    }
+    return { ...defaults, ...JSON.parse(raw) };
+  } catch {
+    return defaults;
+  }
+}
+
+export function saveSettings(settings: StoredSettings): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+}
+
+export function isFirstRunComplete(): boolean {
+  return localStorage.getItem(FIRST_RUN_KEY) === "1";
+}
+
+export function markFirstRunComplete(): void {
+  localStorage.setItem(FIRST_RUN_KEY, "1");
+}

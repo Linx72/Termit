@@ -123,6 +123,40 @@ button.danger {
   font-size: 0.8rem;
 }
 
+.status-pill.reachable {
+  border-color: #d29922;
+  color: #e3b341;
+}
+
+.health-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 0.75rem;
+  color: #8b949e;
+}
+
+.health-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6e7681;
+}
+
+.health-dot.ok {
+  background: #3fb950;
+}
+
+.health-dot.bad {
+  background: #f85149;
+}
+
+.health-dot.unknown {
+  background: #6e7681;
+}
+
 .status-pill.connected {
   background: rgba(35, 134, 54, 0.2);
   color: #3fb950;
@@ -443,4 +477,225 @@ textarea {
 .patch-detail {
   max-height: 100px;
   min-height: 48px;
+}
+
+.version-tag,
+.model-tag,
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #21262d;
+  font-size: 0.72rem;
+  color: #8b949e;
+}
+
+.error-text {
+  color: #f85149;
+}
+
+.wizard-backdrop {
+  z-index: 1000;
+}
+
+.wizard-modal {
+  width: min(520px, 100%);
+}
+
+.wizard-health {
+  min-height: 72px;
+  font-size: 0.8rem;
+}
+
+button.compact {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+.retrieval-row {
+  align-items: center;
+}
+
+.composer-preview-list {
+  font-size: 0.85rem;
+  margin: 8px 0;
+}
+
+.composer-preview-list ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.chat-session-row {
+  align-items: center;
+  padding: 8px 12px 0;
+}
+
+.chat-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 0;
+  height: 100%;
+}
+
+.chat-sessions {
+  border-right: 1px solid #30363d;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #010409;
+}
+
+.chat-sessions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #30363d;
+}
+
+.chat-sessions-list {
+  flex: 1;
+  overflow: auto;
+  padding: 4px;
+}
+
+.chat-session-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.chat-session-item.active .chat-session-select {
+  border-color: #388bfd;
+  background: #161b22;
+}
+
+.chat-session-select {
+  flex: 1;
+  text-align: left;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0d1117;
+  color: #e6edf3;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-session-select strong {
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-session-select .session-id {
+  font-size: 0.72rem;
+}
+
+.chat-session-delete {
+  flex: 0 0 auto;
+  width: 28px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0d1117;
+  color: #8b949e;
+  cursor: pointer;
+}
+
+.chat-session-delete:hover {
+  color: #f85149;
+  border-color: #f85149;
+}
+
+.chat-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-main .chat-log {
+  flex: 1;
+}
+
+.repo-hint {
+  padding: 8px 12px 0;
+  margin: 0;
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 0;
+  height: 100%;
+}
+
+.file-tree {
+  border-right: 1px solid #30363d;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #010409;
+}
+
+.file-tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #30363d;
+}
+
+.file-tree-filter {
+  margin: 8px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0d1117;
+  color: #e6edf3;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+}
+
+.file-tree-list {
+  flex: 1;
+  overflow: auto;
+  padding: 0 4px 8px;
+}
+
+.file-tree-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: #8b949e;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-item:hover,
+.file-tree-item.selected {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.file-tree-empty {
+  padding: 8px;
+  font-size: 0.8rem;
+}
+
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
