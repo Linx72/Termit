@@ -3,6 +3,11 @@
 set -euo pipefail
 
 PUB="${HOME}/.ssh/id_ed25519.pub"
+if [[ -f "${HOME}/.ssh/config" ]] && grep -A5 '^Host github.com' "${HOME}/.ssh/config" | grep -q 'IdentityFile'; then
+  CFG_KEY="$(grep -A5 '^Host github.com' "${HOME}/.ssh/config" | awk '/IdentityFile/ {print $2; exit}' | sed "s|^~|${HOME}|")"
+  [[ -f "${CFG_KEY}.pub" ]] && PUB="${CFG_KEY}.pub"
+  [[ -f "$CFG_KEY" && "$CFG_KEY" == *.pub ]] && PUB="$CFG_KEY"
+fi
 KEY_TITLE="${TERMIT_GITHUB_KEY_TITLE:-Termit $(hostname -s 2>/dev/null || echo Mac)}"
 
 if [[ ! -f "$PUB" ]]; then
