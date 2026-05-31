@@ -348,6 +348,9 @@ Use model naming format `provider:model_name`, e.g.:
   - Chat flag: `use_retrieval=true` (+ optional `retrieval_path_prefix`)
   - Optional semantic mode: `TERMIT_RETRIEVAL_MODE=semantic` (Ollama `/api/embeddings`, SQLite cache in `data/`, keyword fallback)
 - Agent tool loop can run post-patch verify: `TERMIT_AGENT_VERIFY_AFTER_PATCH`, `TERMIT_AGENT_VERIFY_CMD` (events: `patch_verify`, `tool_loop_step`)
+- Dual-pass chat: `TERMIT_DUAL_PASS_ENABLED`, `TERMIT_DUAL_PASS_TASK_TYPES` (draft + review validator)
+- Fast tab completion: `POST /api/completion/fim` (used by `@termit/client` `fimComplete`)
+- Tasks auto → agent: `TERMIT_TASK_USE_AGENT`, `TERMIT_TASK_AGENT_ID`
 - Telemetry retention configuration:
   - `TERMIT_TELEMETRY_MAX_LATENCY_POINTS`
 - Telemetry quality signals now include empty response rate, code response rate, fallback rate,

@@ -1,6 +1,6 @@
 {
   "name": "termit",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Termit — desktop AI coding assistant (Termit API + local Ollama)",
   "private": true,
   "main": "dist-electron/main.js",

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.2] - 2026-05-31
+
+### Added
+- **Dual-pass chat** (`TERMIT_DUAL_PASS_ENABLED`): draft model + review validator for coding/review/debug
+- **FIM completion API** `POST /api/completion/fim` — fast tab completion path for clients
+- **Tasks → agent bridge** (`TERMIT_TASK_USE_AGENT`, `TERMIT_TASK_AGENT_ID`): auto tasks delegate to agent run
+- Eval scenarios C4–C5 (patch dry-run / verify failure cases)
+- `@termit/client`: `fimComplete()`, `requestTabCompletion` prefers FIM endpoint
+
+### Changed
+- Phase 1 brain roadmap items documented; semantic retrieval + agent verify already in 0.3.1
+
 ## [0.3.1] - 2026-05-31
 
 ### Added

@@ -122,7 +122,7 @@ class TaskAgentBridgeTests(unittest.TestCase):
         tooling = ToolingService(root_path=".")
         store = InMemoryTaskStore()
 
-        def runner(input_text: str, task_type: TaskType, session_id: str | None) -> str:
+        def runner(input_text: str, task_type: TaskType, session_id) -> str:
             self.assertEqual(input_text, "Implement retry helper")
             self.assertEqual(task_type, TaskType.coding)
             return "Agent finished with patch and tests."

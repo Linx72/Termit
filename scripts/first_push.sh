@@ -11,9 +11,16 @@ BRANCH="$(git branch --show-current)"
 echo "==> push origin $BRANCH"
 git push -u origin "$BRANCH"
 
-if git rev-parse v0.2.0 >/dev/null 2>&1; then
-  echo "==> push tag v0.2.0"
-  git push origin v0.2.0
+VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION" 2>/dev/null || true)"
+if [[ -n "$VERSION" ]] && git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+  echo "==> push tag v${VERSION}"
+  git push origin "v${VERSION}"
 fi
+
+for tag in v0.2.0 v0.3.0 v0.3.1; do
+  if git rev-parse "$tag" >/dev/null 2>&1; then
+    git push origin "$tag" 2>/dev/null || true
+  fi
+done
 
 echo "Done. Remote: https://github.com/orosam/Termit"

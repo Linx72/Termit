@@ -113,15 +113,27 @@ export async function requestTabCompletion(
   after: string,
   options: Pick<ChatRequest, "model" | "task_type"> = {}
 ): Promise<string | undefined> {
-  const response = await client.chat({
-    message: buildTabCompletionMessage(before, after),
-    task_type: options.task_type ?? "coding",
-    model: options.model,
-    max_tokens: 120,
-    temperature: 0.1,
-    use_memory: false,
-  });
-  return parseTabCompletionResponse(response.response);
+  try {
+    const result = await client.fimComplete({
+      prefix: before,
+      suffix: after,
+      model: options.model,
+      task_type: options.task_type ?? "coding",
+      max_tokens: 64,
+      temperature: 0.1,
+    });
+    return parseTabCompletionResponse(result.insert_text);
+  } catch {
+    const response = await client.chat({
+      message: buildTabCompletionMessage(before, after),
+      task_type: options.task_type ?? "coding",
+      model: options.model,
+      max_tokens: 120,
+      temperature: 0.1,
+      use_memory: false,
+    });
+    return parseTabCompletionResponse(response.response);
+  }
 }
 
 export interface AgentRunWatchOptions {

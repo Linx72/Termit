@@ -137,6 +137,22 @@ export class TermitClient {
     );
   }
 
+  fimComplete(payload: {
+    prefix: string;
+    suffix?: string;
+    path?: string;
+    language?: string;
+    model?: string;
+    task_type?: import("./types").TaskType;
+    max_tokens?: number;
+    temperature?: number;
+  }): Promise<{ insert_text: string; provider: string; model: string; attempted_models: string[] }> {
+    return this.request("/api/completion/fim", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
   async *agentRunStream(
     runId: string,
     options: { pollMs?: number; timeoutSeconds?: number } = {}

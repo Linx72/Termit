@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 
 from app.core.config import get_settings
 from app.services.agent_registry_store import AgentRegistryStore
@@ -237,7 +238,7 @@ def _build_task_service() -> TaskService:
     )
 
 
-def _task_agent_runner(input_text: str, task_type, session_id: str | None) -> str:
+def _task_agent_runner(input_text: str, task_type, session_id: Optional[str]) -> str:
     import asyncio
 
     from app.domain.schemas import AgentRunRequest, TaskType

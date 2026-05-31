@@ -63,6 +63,7 @@ class EvalScenario:
     patch_dry_run: bool = True
     patch_confirmed: bool = False
     verify_command: str = ""
+    expect_verify_failure: bool = False
 
 
 class EvalService:
@@ -122,6 +123,7 @@ class EvalService:
                     patch_dry_run=bool(item.get("patch_dry_run", True)),
                     patch_confirmed=bool(item.get("patch_confirmed", False)),
                     verify_command=str(item.get("verify_command", "")),
+                    expect_verify_failure=bool(item.get("expect_verify_failure", False)),
                 )
             )
         return scenarios
@@ -296,7 +298,7 @@ class EvalService:
             raise RuntimeError("Tooling service is not configured for eval runs.")
         if not scenario.patch_path:
             raise ValueError("tool_patch runner requires patch_path.")
-        if scenario.patch_path == _EVAL_PATCH_FIXTURE and not scenario.patch_dry_run:
+        if scenario.patch_path == _EVAL_PATCH_FIXTURE:
             self._reset_patch_fixture()
         hunks = []
         if scenario.patch_old or scenario.patch_new:
@@ -350,8 +352,13 @@ class EvalService:
                 confirmed=True,
             )
         )
-        passed = verify_result.executed and verify_result.exit_code == 0
-        failure_class = None if passed else "verification_error"
+        verify_ok = verify_result.executed and verify_result.exit_code == 0
+        if scenario.expect_verify_failure:
+            passed = verify_result.executed and verify_result.exit_code != 0
+            failure_class = None if passed else "verification_error"
+        else:
+            passed = verify_ok
+            failure_class = None if passed else "verification_error"
         return (
             f"{patch_result.path}|{verify_result.command}",
             passed,

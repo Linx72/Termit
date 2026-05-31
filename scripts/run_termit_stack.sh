@@ -44,6 +44,14 @@ if [[ "${1:-}" == "--server-only" ]]; then
   exit 0
 fi
 
+if ! command -v npm >/dev/null 2>&1; then
+  export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo "error: npm required for desktop. Install Node 20+ or run server only: $0 --server-only" >&2
+  exit 1
+fi
+
 cd "$ROOT/clients/termit-client"
 npm install
 npm run build
