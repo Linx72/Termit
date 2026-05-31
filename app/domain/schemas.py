@@ -433,6 +433,10 @@ class FeedbackRequest(BaseModel):
     message: str = Field(min_length=3, max_length=5000)
     rating: Optional[int] = Field(default=None, ge=1, le=5)
     contact: Optional[str] = Field(default=None, max_length=200)
+    session_id: Optional[str] = Field(default=None, max_length=120)
+    task_id: Optional[str] = Field(default=None, max_length=120)
+    run_id: Optional[str] = Field(default=None, max_length=120)
+    instruction: Optional[str] = Field(default=None, max_length=8000)
 
 
 class FeedbackResponse(BaseModel):
@@ -792,9 +796,17 @@ class FinetuneDatasetExportRequest(BaseModel):
     include_feedback: bool = True
     include_tasks: bool = True
     include_agent_runs: bool = True
+    include_chat_sessions: bool = True
+    include_trajectory: bool = True
     min_rating: int = Field(default=4, ge=1, le=5)
     min_samples: int = Field(default=1, ge=1, le=10000)
     limit: int = Field(default=500, ge=1, le=5000)
+    curate_deduplicate: bool = True
+    curate_min_output_chars: int = Field(default=12, ge=1, le=5000)
+    curate_max_output_chars: int = Field(default=12000, ge=100, le=100000)
+    curate_skip_error_patterns: bool = True
+    curate_stratified_balance: bool = False
+    curate_max_per_category: Optional[int] = Field(default=None, ge=1, le=5000)
 
 
 class FinetuneDatasetExportResponse(BaseModel):
@@ -803,6 +815,7 @@ class FinetuneDatasetExportResponse(BaseModel):
     sample_count: int
     format: str
     fields: list[str] = Field(default_factory=list)
+    curation: dict[str, int] = Field(default_factory=dict)
 
 
 class FinetuneJobCreateRequest(BaseModel):

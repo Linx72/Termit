@@ -1063,11 +1063,18 @@
           responseMeta.textContent = "Feedback message is required";
           return;
         }
+        const sessionId = sessionIdEl.value.trim();
+        const instruction = promptEl.value.trim();
         try {
           const resp = await fetch("/api/feedback", {
             method: "POST",
             headers: authHeaders({ "Content-Type": "application/json" }),
-            body: JSON.stringify({ message, rating: 5 }),
+            body: JSON.stringify({
+              message,
+              rating: 5,
+              session_id: sessionId || undefined,
+              instruction: instruction || undefined,
+            }),
           });
           const data = await resp.json();
           if (!resp.ok) {

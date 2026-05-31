@@ -16,7 +16,15 @@ class FinetuneServiceTests(unittest.TestCase):
     def _build_service(self, root: Path) -> FinetuneService:
         feedback_path = root / "feedback.jsonl"
         feedback_path.write_text(
-            json.dumps({"rating": 5, "message": "Great routing suggestion"}) + "\n",
+            json.dumps(
+                {
+                    "rating": 5,
+                    "message": "Great routing suggestion",
+                    "instruction": "Route this coding task",
+                    "session_id": "sess-1",
+                }
+            )
+            + "\n",
             encoding="utf-8",
         )
         task_db = root / "tasks.db"
@@ -63,6 +71,25 @@ class FinetuneServiceTests(unittest.TestCase):
                     1,
                     2,
                 ),
+            )
+            conn.execute(
+                """
+                CREATE TABLE task_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    timestamp TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO task_events(task_id, event_type, state, message, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("t1", "plan_ready", "running", "Prepared 3 steps", "2026-05-30T00:00:30Z"),
             )
             conn.commit()
         agent_db = root / "agent_runs.db"
@@ -116,6 +143,27 @@ class FinetuneServiceTests(unittest.TestCase):
                     None,
                 ),
             )
+            conn.execute(
+                """
+                CREATE TABLE agent_run_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    attempt INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO agent_run_events(
+                    run_id, event_type, state, message, timestamp, attempt
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("r1", "tool_call", "running", "read_file app/core/auth.py", "2026-05-30T00:01:30Z", 1),
+            )
             conn.commit()
         profiles_path = root / "repo_model_profiles.json"
         profiles_path.write_text(
@@ -151,8 +199,31 @@ class FinetuneServiceTests(unittest.TestCase):
                 FinetuneDatasetExportRequest(name="termit-beta", min_samples=2)
             )
             self.assertGreaterEqual(result["sample_count"], 2)
+            self.assertIn("curation", result)
             dataset_path = Path(str(result["dataset_path"]))
             self.assertTrue(dataset_path.exists())
+            lines = dataset_path.read_text(encoding="utf-8").strip().splitlines()
+            payload = json.loads(lines[0])
+            self.assertIn("quality_score", payload)
+
+    def test_export_uses_feedback_instruction_and_trajectory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(Path(tmp))
+            result = service.export_dataset(
+                FinetuneDatasetExportRequest(
+                    name="rich-export",
+                    min_samples=1,
+                    include_chat_sessions=False,
+                )
+            )
+            dataset_path = Path(str(result["dataset_path"]))
+            rows = [json.loads(line) for line in dataset_path.read_text(encoding="utf-8").splitlines()]
+            feedback_rows = [row for row in rows if row.get("source") == "feedback"]
+            agent_rows = [row for row in rows if row.get("source") == "agent_run"]
+            self.assertTrue(feedback_rows)
+            self.assertEqual(feedback_rows[0]["instruction"], "Route this coding task")
+            self.assertTrue(agent_rows)
+            self.assertIn("read_file", agent_rows[0].get("input", ""))
 
     def test_job_lifecycle_and_adapter_registration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

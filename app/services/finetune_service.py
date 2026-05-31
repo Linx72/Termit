@@ -15,6 +15,11 @@ from app.domain.schemas import (
     FinetuneStage1RunRequest,
 )
 from app.services.finetune_trainer_service import FinetuneTrainerService
+from app.services.finetune_dataset_curator import (
+    CuratorConfig,
+    curate_samples,
+    export_row,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,7 @@ class FinetuneService:
         feedback_file_path: str = "./data/feedback.jsonl",
         task_sqlite_path: str = "./termit_tasks.db",
         agent_run_sqlite_path: str = "./termit_agent_runs.db",
+        memory_sqlite_path: str = "./termit_memory.db",
         repo_profiles_path: str = "./data/repo_model_profiles.json",
         pipelines_path: str = "./data/finetune/pipelines.json",
         pipeline_max_concurrency: int = 1,
@@ -67,6 +73,7 @@ class FinetuneService:
         self.feedback_file_path = Path(feedback_file_path)
         self.task_sqlite_path = Path(task_sqlite_path)
         self.agent_run_sqlite_path = Path(agent_run_sqlite_path)
+        self.memory_sqlite_path = Path(memory_sqlite_path)
         self.repo_profiles_path = Path(repo_profiles_path)
         self.pipelines_path = Path(pipelines_path)
         self._pipeline_max_concurrency = max(1, pipeline_max_concurrency)
@@ -87,32 +94,66 @@ class FinetuneService:
             self._write_pipeline_runs([])
 
     def export_dataset(self, payload: FinetuneDatasetExportRequest) -> dict[str, object]:
-        samples: list[dict[str, str]] = []
+        raw_samples: list[dict[str, str]] = []
         if payload.include_feedback:
-            samples.extend(self._load_feedback_samples(payload.min_rating))
+            raw_samples.extend(self._load_feedback_samples(payload.min_rating))
         if payload.include_tasks:
-            samples.extend(self._load_task_samples(payload.limit))
+            raw_samples.extend(
+                self._load_task_samples(payload.limit, include_trajectory=payload.include_trajectory)
+            )
         if payload.include_agent_runs:
-            samples.extend(self._load_agent_run_samples(payload.limit))
+            raw_samples.extend(
+                self._load_agent_run_samples(
+                    payload.limit,
+                    include_trajectory=payload.include_trajectory,
+                )
+            )
+        if payload.include_chat_sessions:
+            raw_samples.extend(self._load_chat_session_samples(payload.limit))
 
-        if len(samples) < payload.min_samples:
+        curated, curation_stats = curate_samples(
+            raw_samples,
+            CuratorConfig(
+                deduplicate=payload.curate_deduplicate,
+                min_output_chars=payload.curate_min_output_chars,
+                max_output_chars=payload.curate_max_output_chars,
+                skip_error_patterns=payload.curate_skip_error_patterns,
+                stratified_balance=payload.curate_stratified_balance,
+                max_per_category=payload.curate_max_per_category,
+            ),
+        )
+
+        if len(curated) < payload.min_samples:
             raise ValueError(
-                f"Dataset has {len(samples)} samples; minimum required is {payload.min_samples}."
+                f"Dataset has {len(curated)} curated samples "
+                f"(raw={curation_stats.raw_count}); minimum required is {payload.min_samples}."
             )
 
         slug = payload.name.strip().replace(" ", "_").lower()[:40] or "dataset"
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         dataset_path = self.datasets_dir / f"{slug}_{timestamp}.jsonl"
         with dataset_path.open("w", encoding="utf-8") as handle:
-            for row in samples:
-                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+            for row in curated:
+                handle.write(json.dumps(export_row(row), ensure_ascii=False) + "\n")
 
         return {
             "name": payload.name,
             "dataset_path": str(dataset_path),
-            "sample_count": len(samples),
+            "sample_count": len(curated),
             "format": "jsonl",
-            "fields": ["instruction", "input", "output", "source"],
+            "fields": [
+                "instruction",
+                "input",
+                "output",
+                "source",
+                "category",
+                "session_id",
+                "task_id",
+                "run_id",
+                "rating",
+                "quality_score",
+            ],
+            "curation": curation_stats.as_dict(),
         }
 
     def create_job(
@@ -412,6 +453,8 @@ class FinetuneService:
                 include_feedback=payload.include_feedback,
                 include_tasks=payload.include_tasks,
                 include_agent_runs=payload.include_agent_runs,
+                include_chat_sessions=True,
+                include_trajectory=True,
                 min_rating=payload.min_rating,
                 min_samples=payload.min_samples,
                 limit=payload.limit,
@@ -706,17 +749,26 @@ class FinetuneService:
             message = str(item.get("message", "")).strip()
             if len(message) < 8:
                 continue
-            rows.append(
-                {
-                    "instruction": "Improve Termit based on user feedback",
-                    "input": "",
-                    "output": message,
-                    "source": "feedback",
-                }
-            )
+            instruction = str(item.get("instruction", "")).strip()
+            if not instruction:
+                instruction = "Respond to the user request for the Termit project"
+            row: dict[str, str] = {
+                "instruction": instruction,
+                "input": "",
+                "output": message,
+                "source": "feedback",
+                "category": "feedback",
+            }
+            if rating is not None:
+                row["rating"] = str(rating)
+            for key in ("session_id", "task_id", "run_id"):
+                value = item.get(key)
+                if value:
+                    row[key] = str(value)
+            rows.append(row)
         return rows
 
-    def _load_task_samples(self, limit: int) -> list[dict[str, str]]:
+    def _load_task_samples(self, limit: int, *, include_trajectory: bool = True) -> list[dict[str, str]]:
         if not self.task_sqlite_path.exists():
             return []
         rows: list[dict[str, str]] = []
@@ -725,9 +777,9 @@ class FinetuneService:
             try:
                 result = conn.execute(
                     """
-                    SELECT input, report, state
+                    SELECT task_id, input, report, state, task_type, error, session_id
                     FROM tasks
-                    WHERE state = 'completed' AND report IS NOT NULL
+                    WHERE state = 'completed' AND report IS NOT NULL AND (error IS NULL OR error = '')
                     ORDER BY updated_at DESC
                     LIMIT ?
                     """,
@@ -735,21 +787,73 @@ class FinetuneService:
                 ).fetchall()
             except sqlite3.Error:
                 return []
-        for row in result:
-            report = str(row["report"] or "").strip()
-            if not report:
-                continue
-            rows.append(
-                {
-                    "instruction": str(row["input"] or ""),
-                    "input": "",
+            for row in result:
+                report = str(row["report"] or "").strip()
+                if not report:
+                    continue
+                instruction = str(row["input"] or "").strip()
+                context_parts: list[str] = []
+                if include_trajectory:
+                    context_parts.extend(
+                        self._load_task_event_lines(str(row["task_id"]), conn=conn)
+                    )
+                sample: dict[str, str] = {
+                    "instruction": instruction,
+                    "input": "\n".join(context_parts).strip(),
                     "output": report,
                     "source": "task",
+                    "category": str(row["task_type"] or "general"),
+                    "task_id": str(row["task_id"]),
                 }
-            )
+                session_id = row["session_id"]
+                if session_id:
+                    sample["session_id"] = str(session_id)
+                rows.append(sample)
         return rows
 
-    def _load_agent_run_samples(self, limit: int) -> list[dict[str, str]]:
+    def _load_task_event_lines(self, task_id: str, conn: Optional[sqlite3.Connection] = None) -> list[str]:
+        lines: list[str] = []
+        try:
+            if conn is not None:
+                events = conn.execute(
+                    """
+                    SELECT event_type, message
+                    FROM task_events
+                    WHERE task_id = ?
+                    ORDER BY id ASC
+                    LIMIT 40
+                    """,
+                    (task_id,),
+                ).fetchall()
+            else:
+                with sqlite3.connect(self.task_sqlite_path) as local_conn:
+                    local_conn.row_factory = sqlite3.Row
+                    events = local_conn.execute(
+                        """
+                        SELECT event_type, message
+                        FROM task_events
+                        WHERE task_id = ?
+                        ORDER BY id ASC
+                        LIMIT 40
+                        """,
+                        (task_id,),
+                    ).fetchall()
+        except sqlite3.Error:
+            return lines
+        for event in events:
+            message = str(event["message"] or "").strip()
+            if not message:
+                continue
+            event_type = str(event["event_type"] or "event")
+            lines.append(f"[{event_type}] {message}")
+        return lines
+
+    def _load_agent_run_samples(
+        self,
+        limit: int,
+        *,
+        include_trajectory: bool = True,
+    ) -> list[dict[str, str]]:
         if not self.agent_run_sqlite_path.exists():
             return []
         rows: list[dict[str, str]] = []
@@ -758,9 +862,12 @@ class FinetuneService:
             try:
                 result = conn.execute(
                     """
-                    SELECT input, response, status
+                    SELECT run_id, agent_id, input, response, state, failure_class, error, session_id
                     FROM agent_runs
-                    WHERE status = 'completed' AND response IS NOT NULL
+                    WHERE state = 'completed'
+                      AND response IS NOT NULL
+                      AND (error IS NULL OR error = '')
+                      AND (failure_class IS NULL OR failure_class = '')
                     ORDER BY updated_at DESC
                     LIMIT ?
                     """,
@@ -768,19 +875,115 @@ class FinetuneService:
                 ).fetchall()
             except sqlite3.Error:
                 return []
-        for row in result:
-            response = str(row["response"] or "").strip()
-            if not response:
-                continue
-            rows.append(
-                {
-                    "instruction": str(row["input"] or ""),
-                    "input": "",
+            for row in result:
+                response = str(row["response"] or "").strip()
+                if not response:
+                    continue
+                instruction = str(row["input"] or "").strip()
+                trajectory = ""
+                if include_trajectory:
+                    trajectory = self._load_agent_run_trajectory(str(row["run_id"]), conn)
+                sample: dict[str, str] = {
+                    "instruction": instruction,
+                    "input": trajectory,
                     "output": response,
                     "source": "agent_run",
+                    "category": "agent",
+                    "run_id": str(row["run_id"]),
                 }
-            )
+                session_id = row["session_id"]
+                if session_id:
+                    sample["session_id"] = str(session_id)
+                if trajectory:
+                    sample["trajectory"] = trajectory
+                rows.append(sample)
         return rows
+
+    def _load_agent_run_trajectory(self, run_id: str, conn: sqlite3.Connection) -> str:
+        try:
+            events = conn.execute(
+                """
+                SELECT event_type, message
+                FROM agent_run_events
+                WHERE run_id = ?
+                ORDER BY id ASC
+                LIMIT 80
+                """,
+                (run_id,),
+            ).fetchall()
+        except sqlite3.Error:
+            return ""
+        lines: list[str] = []
+        for event in events:
+            message = str(event["message"] or "").strip()
+            if not message:
+                continue
+            event_type = str(event["event_type"] or "event")
+            lines.append(f"[{event_type}] {message}")
+        return "\n".join(lines).strip()
+
+    def _load_chat_session_samples(self, limit: int) -> list[dict[str, str]]:
+        if not self.memory_sqlite_path.exists():
+            return []
+        rows: list[dict[str, str]] = []
+        with sqlite3.connect(self.memory_sqlite_path) as conn:
+            conn.row_factory = sqlite3.Row
+            try:
+                sessions = conn.execute(
+                    """
+                    SELECT session_id, COUNT(*) AS message_count
+                    FROM session_messages
+                    GROUP BY session_id
+                    HAVING message_count >= 2
+                    ORDER BY MAX(id) DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+            except sqlite3.Error:
+                return []
+            for session in sessions:
+                session_id = str(session["session_id"])
+                messages = conn.execute(
+                    """
+                    SELECT role, content
+                    FROM session_messages
+                    WHERE session_id = ?
+                    ORDER BY id ASC
+                    LIMIT 80
+                    """,
+                    (session_id,),
+                ).fetchall()
+                pair = self._pair_chat_messages(messages)
+                if pair is None:
+                    continue
+                instruction, assistant_output = pair
+                rows.append(
+                    {
+                        "instruction": instruction,
+                        "input": "",
+                        "output": assistant_output,
+                        "source": "chat_session",
+                        "category": "chat",
+                        "session_id": session_id,
+                    }
+                )
+        return rows
+
+    @staticmethod
+    def _pair_chat_messages(messages: list[sqlite3.Row]) -> Optional[tuple[str, str]]:
+        last_user: Optional[str] = None
+        for message in messages:
+            role = str(message["role"] or "").strip().lower()
+            content = str(message["content"] or "").strip()
+            if not content:
+                continue
+            if role == "user":
+                last_user = content
+                continue
+            if role == "assistant" and last_user:
+                return last_user, content
+        return None
 
     def _read_jobs(self) -> list[FinetuneJobRecord]:
         raw = json.loads(self.jobs_path.read_text(encoding="utf-8"))

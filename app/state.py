@@ -382,6 +382,7 @@ def _build_finetune_service() -> FinetuneService:
         feedback_file_path=settings.feedback_file_path,
         task_sqlite_path=settings.task_sqlite_path,
         agent_run_sqlite_path=settings.agent_run_sqlite_path,
+        memory_sqlite_path=settings.memory_sqlite_path,
         repo_profiles_path=settings.repo_model_profiles_path,
         pipeline_max_concurrency=settings.finetune_pipeline_max_concurrency,
         trainer=_build_finetune_trainer_service(),

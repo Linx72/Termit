@@ -23,5 +23,9 @@ async def submit_feedback(
         rating=payload.rating,
         contact=payload.contact,
         api_key=api_key,
+        session_id=payload.session_id,
+        task_id=payload.task_id,
+        run_id=payload.run_id,
+        instruction=payload.instruction,
     )
     return FeedbackResponse(status="accepted", timestamp=timestamp)

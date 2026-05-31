@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.1] - 2026-05-31
+
+### Added
+- Finetune dataset curator (dedupe, quality filter, stratified export)
+- `scripts/release_all.sh` — one-shot tests, smoke, push, GitHub release
+- VS Code extension publishing guide (`clients/vscode-extension/PUBLISHING.md`)
+
+### Changed
+- Dataset export pulls from feedback, tasks, agent runs, and chat sessions with curation stats
+
 ## [0.3.0] - 2026-05-31
 
 ### Added

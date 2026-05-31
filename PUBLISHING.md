@@ -49,3 +49,13 @@ Document image coordinates in the GitHub release notes.
 - `docker compose up --build -d` starts Termit + Caddy on port **8080** (HTTP).
 - Set `TERMIT_PUBLIC_DOMAIN` for automatic HTTPS on 443.
 - See `HOSTED_DEPLOYMENT.md` for auth, volumes, and ops checks.
+
+## VS Code extension
+
+See [`clients/vscode-extension/PUBLISHING.md`](clients/vscode-extension/PUBLISHING.md).
+
+## One-shot release script
+
+```bash
+./scripts/release_all.sh   # tests, smoke, git push, gh release (when tools available)
+```

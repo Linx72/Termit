@@ -35,6 +35,7 @@ def main() -> int:
         task_sqlite_path=settings.task_sqlite_path,
         agent_run_sqlite_path=settings.agent_run_sqlite_path,
         repo_profiles_path=settings.repo_model_profiles_path,
+        memory_sqlite_path=settings.memory_sqlite_path,
     )
     try:
         result = service.export_dataset(

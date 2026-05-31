@@ -368,6 +368,7 @@ Use model naming format `provider:model_name`, e.g.:
   - Full loop script: `./scripts/stage1_full_loop.sh` (enqueue → wait → train → eval)
   - Post-train only: `./scripts/post_stage1_train.sh RUN_ID --wait --auto-register-adapter`
   - Trainer modes: `ollama` (auto), `modelfile` (write Modelfile only), `off`
+  - Dataset export auto-curation (non-destructive): dedupe by instruction, quality filters, optional chat sessions + tool trajectories; source SQLite/feedback files are never modified
 - Metrics snapshot export file:
   - `TERMIT_METRICS_SNAPSHOT_FILE`
 - Beta feedback endpoint:
