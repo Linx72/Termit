@@ -112,6 +112,7 @@ class Settings:
     agent_run_retry_backoff_ms: int = 250
     agent_run_max_events_per_run: int = 500
     agent_run_max_response_chars: int = 12000
+    agent_shutdown_grace_seconds: int = 10
     agent_run_retention_days: int = 14
     agent_memory_sqlite_path: str = "./termit_agent_memory.db"
     agent_memory_max_entries: int = 50
@@ -272,6 +273,9 @@ def get_settings() -> Settings:
         agent_run_retry_backoff_ms=int(os.getenv("TERMIT_AGENT_RUN_RETRY_BACKOFF_MS", "250")),
         agent_run_max_events_per_run=int(os.getenv("TERMIT_AGENT_RUN_MAX_EVENTS_PER_RUN", "500")),
         agent_run_max_response_chars=int(os.getenv("TERMIT_AGENT_RUN_MAX_RESPONSE_CHARS", "12000")),
+        agent_shutdown_grace_seconds=max(
+            1, min(int(os.getenv("TERMIT_AGENT_SHUTDOWN_GRACE_SECONDS", "10")), 120)
+        ),
         agent_run_retention_days=int(os.getenv("TERMIT_AGENT_RUN_RETENTION_DAYS", "14")),
         agent_memory_sqlite_path=os.getenv(
             "TERMIT_AGENT_MEMORY_SQLITE_PATH",

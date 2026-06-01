@@ -1,17 +1,22 @@
 import { TermitClient, type TermitClientOptions } from "./client";
 import { TermitRunError, TermitStartupError } from "./errors";
+import { buildAgentRunScope } from "./repoProfile";
 import type {
   AgentProfile,
   AgentRunRecord,
   AgentRunRequest,
   AgentRunStreamEvent,
+  RepoModelProfile,
 } from "./types";
 
 export interface TermitAgentCreateOptions extends TermitClientOptions {
   profileId?: string;
   profileName?: string;
-  /** Workspace root or path prefix scoped to agent runs (retrieval_path_prefix). */
+  /** Workspace root or path prefix scoped to agent runs. */
   workspace?: string;
+  repoRoot?: string;
+  repoProfile?: string;
+  repoProfiles?: RepoModelProfile[];
 }
 
 export interface TermitAgentSendOptions {
@@ -53,7 +58,7 @@ export class TermitRun {
         throw new TermitRunError("Run wait timeout", this.runId, "timeout");
       }
       if (event.event === "status") {
-        latest = event.data as AgentRunRecord;
+        latest = event.data as unknown as AgentRunRecord;
         if (latest.state === "completed") {
           return latest;
         }
@@ -89,19 +94,41 @@ export class TermitRun {
 export class TermitAgent {
   readonly agentId: string;
   readonly workspace?: string;
+  readonly repoRoot?: string;
+  readonly repoProfile?: string;
+  readonly repoProfiles?: RepoModelProfile[];
   private readonly client: TermitClient;
 
-  private constructor(client: TermitClient, agentId: string, workspace?: string) {
+  private constructor(
+    client: TermitClient,
+    agentId: string,
+    options: Pick<TermitAgentCreateOptions, "workspace" | "repoRoot" | "repoProfile" | "repoProfiles"> = {}
+  ) {
     this.client = client;
     this.agentId = agentId;
-    this.workspace = workspace;
+    this.workspace = options.workspace;
+    this.repoRoot = options.repoRoot;
+    this.repoProfile = options.repoProfile;
+    this.repoProfiles = options.repoProfiles;
   }
 
   static async create(options: TermitAgentCreateOptions = {}): Promise<TermitAgent> {
     const client = new TermitClient(options);
-    const workspace = options.workspace?.trim() || undefined;
+    const scopeOptions = {
+      workspace: options.workspace?.trim() || undefined,
+      repoRoot: options.repoRoot?.trim() || undefined,
+      repoProfile: options.repoProfile?.trim() || undefined,
+      repoProfiles: options.repoProfiles,
+    };
+    if (!scopeOptions.repoProfiles?.length) {
+      try {
+        scopeOptions.repoProfiles = await client.listRepoProfiles();
+      } catch {
+        scopeOptions.repoProfiles = undefined;
+      }
+    }
     if (options.profileId) {
-      return new TermitAgent(client, options.profileId, workspace);
+      return new TermitAgent(client, options.profileId, scopeOptions);
     }
     const agents = await client.listAgents();
     if (options.profileName) {
@@ -112,12 +139,12 @@ export class TermitAgent {
           404
         );
       }
-      return new TermitAgent(client, match.agent_id, workspace);
+      return new TermitAgent(client, match.agent_id, scopeOptions);
     }
     if (agents.length === 0) {
       throw new TermitStartupError("No agent profiles configured", 404);
     }
-    return new TermitAgent(client, agents[0].agent_id, workspace);
+    return new TermitAgent(client, agents[0].agent_id, scopeOptions);
   }
 
   static async prompt(
@@ -131,7 +158,7 @@ export class TermitAgent {
 
   static async resume(
     runId: string,
-    options: TermitClientOptions = {}
+    options: TermitAgentCreateOptions = {}
   ): Promise<TermitAgent> {
     const client = new TermitClient(options);
     let record = await client.getAgentRun(runId);
@@ -139,13 +166,24 @@ export class TermitAgent {
       await client.resumeAgentRun(runId);
       record = await client.getAgentRun(runId);
     }
-    return new TermitAgent(client, record.agent_id, options.workspace?.trim() || undefined);
+    return new TermitAgent(client, record.agent_id, {
+      workspace: options.workspace?.trim() || undefined,
+      repoRoot: options.repoRoot?.trim() || undefined,
+      repoProfile: options.repoProfile?.trim() || undefined,
+      repoProfiles: options.repoProfiles,
+    });
   }
 
   async send(message: string, options: TermitAgentSendOptions = {}): Promise<TermitRun> {
+    const scope = buildAgentRunScope({
+      workspace: this.workspace,
+      repoRoot: this.repoRoot,
+      repoProfile: this.repoProfile,
+      profiles: this.repoProfiles,
+    });
     const payload: AgentRunRequest = {
       input: message,
-      ...(this.workspace ? { retrieval_path_prefix: this.workspace } : {}),
+      ...scope,
       ...(options.payload ?? {}),
     };
     let created;

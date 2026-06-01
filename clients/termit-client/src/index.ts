@@ -22,3 +22,11 @@ export type {
   InlineEditResult,
   AgentRunWatchOptions,
 } from "./workflows";
+export {
+  buildAgentRunScope,
+  inferRepoProfileId,
+  inferRetrievalPathPrefix,
+  resolvedAgentModel,
+  primaryAttemptedModel,
+  DEFAULT_REPO_PROFILES,
+} from "./repoProfile";

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   TermitClient,
+  buildAgentRunScope,
   buildComposerMessage,
   parseComposerPatches,
   stripComposerJsonBlock,
@@ -1165,6 +1166,12 @@ export function App() {
       session_id: settings.sessionId || undefined,
       project_id: projectId || undefined,
       changed_files: attachmentPaths(attachments),
+      ...buildAgentRunScope({
+        workspace: settings.workspace,
+        repoRoot: settings.repoRoot,
+        repoProfile: settings.repoProfile || undefined,
+        profiles: repoProfiles,
+      }),
     });
     setAgentDetail(`Run queued: ${run.run_id} (${run.state})`);
     setAgentInput("");

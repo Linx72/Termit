@@ -842,6 +842,9 @@ class AgentEvalRunRequest(BaseModel):
 
 class AgentEvalSuiteRunRequest(BaseModel):
     category: Optional[str] = Field(default=None, max_length=64)
+    tool_loop_only: bool = False
+    retrieval_path_prefix: Optional[str] = Field(default=None, max_length=500)
+    repo_profile: Optional[str] = Field(default=None, max_length=64)
 
 
 class AgentMemoryListResponse(BaseModel):
@@ -1141,6 +1144,8 @@ class FinetunePipelineCancelResponse(BaseModel):
 class FinetuneTrainRequest(BaseModel):
     output_model: Optional[str] = Field(default=None, max_length=200)
     trainer_mode: Optional[str] = Field(default=None, max_length=32)
+    training_mode: Optional[str] = Field(default="sft", max_length=16)
+    dpo_dataset_path: Optional[str] = Field(default=None, max_length=500)
     auto_register_adapter: bool = False
     adapter_name: Optional[str] = Field(default=None, max_length=120)
     adapter_model: Optional[str] = Field(default=None, max_length=200)

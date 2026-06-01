@@ -353,6 +353,8 @@ class FinetuneService:
         *,
         output_model: Optional[str] = None,
         trainer_mode: Optional[str] = None,
+        training_mode: str = "sft",
+        dpo_dataset_path: Optional[str] = None,
         auto_register_adapter: bool = False,
         adapter_name: Optional[str] = None,
         adapter_model: Optional[str] = None,
@@ -372,6 +374,8 @@ class FinetuneService:
             base_model=base_model or job.base_model,
             output_model=output_model,
             trainer_mode=trainer_mode,
+            training_mode=training_mode,
+            dpo_dataset_path=dpo_dataset_path,
             job_id=job.job_id,
             repo_profile_id=repo_profile_id,
         )
@@ -401,6 +405,8 @@ class FinetuneService:
         *,
         output_model: Optional[str] = None,
         trainer_mode: Optional[str] = None,
+        training_mode: str = "sft",
+        dpo_dataset_path: Optional[str] = None,
         auto_register_adapter: bool = False,
         adapter_name: Optional[str] = None,
         adapter_model: Optional[str] = None,
@@ -418,6 +424,8 @@ class FinetuneService:
             request=FinetuneStage1RunRequest(**run["request"]),
             output_model=output_model,
             trainer_mode=trainer_mode,
+            training_mode=training_mode,
+            dpo_dataset_path=dpo_dataset_path,
             auto_register_adapter=auto_register_adapter,
             adapter_name=adapter_name,
             adapter_model=adapter_model,
@@ -433,6 +441,8 @@ class FinetuneService:
         request: FinetuneStage1RunRequest,
         output_model: Optional[str] = None,
         trainer_mode: Optional[str] = None,
+        training_mode: str = "sft",
+        dpo_dataset_path: Optional[str] = None,
         auto_register_adapter: bool = False,
         adapter_name: Optional[str] = None,
         adapter_model: Optional[str] = None,
@@ -445,15 +455,23 @@ class FinetuneService:
             raise ValueError("Stage1 run result has no job_id.")
         trajectory = result.get("trajectory_sft")
         dataset_override: Optional[str] = None
+        dpo_override = dpo_dataset_path
         active_mode = (trainer_mode or (self._trainer.trainer_mode if self._trainer else "")).lower()
         if active_mode == "hf" and isinstance(trajectory, dict):
             path = trajectory.get("dataset_path")
             if path:
                 dataset_override = str(path)
+        dpo_export = result.get("dpo")
+        if dpo_override is None and isinstance(dpo_export, dict):
+            dpo_path = dpo_export.get("dataset_path")
+            if dpo_path:
+                dpo_override = str(dpo_path)
         train_payload = self.train_job(
             job_id,
             output_model=output_model,
             trainer_mode=trainer_mode,
+            training_mode=training_mode,
+            dpo_dataset_path=dpo_override,
             auto_register_adapter=(
                 (auto_register_adapter or request.auto_register_adapter)
                 and not self._should_defer_adapter_registration(request)

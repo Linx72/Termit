@@ -4,6 +4,7 @@
 
 | Файл | Дата | Содержание |
 |------|------|------------|
+| `generated-from-transcripts.md` | 2026-06-01 | Автосводка из `agent-transcripts` (скрипт rebuild) |
 | `reference-sessions-baseline.md` | до 2026-06 | Milestones и API surface до Platform v2 (фазы 1–2, platform routes, SDK Agent API) |
 
 Актуальная документация: [`../SKILL.md`](../SKILL.md), [`../reference.md`](../reference.md).

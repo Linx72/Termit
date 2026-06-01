@@ -12,6 +12,7 @@ import type {
   ChatRequest,
   TaskType,
 } from "./types";
+import { resolvedAgentModel } from "./repoProfile";
 
 const STOP_WATCH_STATES = new Set([
   "completed",
@@ -35,11 +36,41 @@ export interface InlineEditResult {
   sessionId?: string;
 }
 
+export function extractCitationsFromEvents(events: AgentRunEvent[]): string[] {
+  const citations: string[] = [];
+  for (const ev of events) {
+    if (ev.event_type !== "tool_loop_trace") {
+      continue;
+    }
+    try {
+      const trace = JSON.parse(ev.message) as { observation?: string };
+      const obsRaw = trace.observation;
+      if (!obsRaw) {
+        continue;
+      }
+      const obs = JSON.parse(obsRaw) as { citations?: unknown };
+      if (Array.isArray(obs.citations)) {
+        for (const item of obs.citations) {
+          if (typeof item === "string" && item.trim()) {
+            citations.push(item.trim());
+          }
+        }
+      }
+    } catch {
+      // ignore malformed trace rows
+    }
+  }
+  return [...new Set(citations)];
+}
+
 export function formatAgentTimeline(run: AgentRunRecord, events: AgentRunEvent[]): string {
+  const resolvedModel = resolvedAgentModel(run);
+  const citations = extractCitationsFromEvents(events);
   const lines = [
     `run: ${run.run_id}`,
     `state: ${run.state}`,
-    run.model ? `model: ${run.model}` : "",
+    resolvedModel ? `model: ${resolvedModel}` : "",
+    run.repo_profile ? `repo_profile: ${run.repo_profile}` : "",
     run.error ? `error: ${run.error}` : "",
     "",
     "--- timeline ---",
@@ -47,6 +78,12 @@ export function formatAgentTimeline(run: AgentRunRecord, events: AgentRunEvent[]
   events.forEach((ev) => {
     lines.push(`[${ev.timestamp}] ${ev.state} · ${ev.event_type}: ${ev.message}`);
   });
+  if (citations.length > 0) {
+    lines.push("", "--- citations ---");
+    citations.forEach((url, index) => {
+      lines.push(`${index + 1}. ${url}`);
+    });
+  }
   return lines.join("\n");
 }
 
@@ -174,13 +211,13 @@ export async function watchAgentRun(
       break;
     }
     if (event.event === "status") {
-      run = event.data as AgentRunRecord;
+      run = event.data as unknown as AgentRunRecord;
       emit();
       if (run && STOP_WATCH_STATES.has(run.state)) {
         break;
       }
     } else if (event.event === "timeline") {
-      events = [...events, event.data as AgentRunEvent];
+      events = [...events, event.data as unknown as AgentRunEvent];
       emit();
     } else if (event.event === "done" || event.event === "timeout") {
       if (!run || !STOP_WATCH_STATES.has(run.state)) {

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionEnd": [
+      {
+        "command": ".cursor/hooks/rebuild_agent_context.py",
+        "timeout": 60
+      }
+    ]
+  }
+}

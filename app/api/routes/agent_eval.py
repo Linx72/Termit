@@ -30,4 +30,9 @@ async def run_agent_eval_suite(
     payload: AgentEvalSuiteRunRequest,
     service: AgentEvalService = Depends(get_agent_eval_service),
 ) -> dict[str, object]:
-    return await service.run_suite(category=payload.category)
+    return await service.run_suite(
+        category=payload.category,
+        tool_loop_only=payload.tool_loop_only,
+        retrieval_path_prefix=payload.retrieval_path_prefix,
+        repo_profile=payload.repo_profile,
+    )

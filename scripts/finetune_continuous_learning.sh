@@ -24,7 +24,8 @@ if [[ -n "${API_KEY}" ]]; then
   AUTH=(-H "X-API-Key: ${API_KEY}")
 fi
 
-echo "[finetune_continuous_learning] bootstrap signals (if empty)..."
+echo "[finetune_continuous_learning] seed dev training data (signals + trajectories)..."
+"${PYTHON}" "${ROOT}/scripts/finetune_seed_dev_data.py" || true
 "${PYTHON}" "${ROOT}/scripts/finetune_bootstrap_signals.py" || true
 
 echo "[finetune_continuous_learning] export dataset..."

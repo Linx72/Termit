@@ -30,6 +30,8 @@ class AgentEvalScenario:
     online_url: Optional[str] = None
     memory_seed: Optional[str] = None
     expect_substrings: list[str] | None = None
+    retrieval_path_prefix: Optional[str] = None
+    repo_profile: Optional[str] = None
 
 
 class AgentEvalService:
@@ -80,12 +82,21 @@ class AgentEvalService:
             )
         return result
 
-    async def run_scenario(self, scenario_id: str) -> dict[str, object]:
+    async def run_scenario(
+        self,
+        scenario_id: str,
+        *,
+        retrieval_path_prefix: str | None = None,
+        repo_profile: str | None = None,
+    ) -> dict[str, object]:
         if self._agent_service is None:
             raise RuntimeError("AgentEvalService requires AgentService.")
         scenario = next((item for item in self._scenarios if item.id == scenario_id), None)
         if scenario is None:
             raise ValueError(f"Unknown agent eval scenario: {scenario_id}")
+
+        path_prefix = retrieval_path_prefix or scenario.retrieval_path_prefix
+        profile_id = repo_profile or scenario.repo_profile
 
         agent = self._agent_service.create_agent(
             AgentProfileCreateRequest(
@@ -106,6 +117,8 @@ class AgentEvalService:
             input=scenario.input,
             online_url=scenario.online_url,
             use_tool_loop=scenario.use_tool_loop,
+            retrieval_path_prefix=path_prefix,
+            repo_profile=profile_id,
         )
         try:
             result = await self._agent_service.run_agent(agent.agent_id, payload)
@@ -129,13 +142,28 @@ class AgentEvalService:
             "error": error,
         }
 
-    async def run_suite(self, category: str | None = None) -> dict[str, object]:
+    async def run_suite(
+        self,
+        category: str | None = None,
+        *,
+        tool_loop_only: bool = False,
+        retrieval_path_prefix: str | None = None,
+        repo_profile: str | None = None,
+    ) -> dict[str, object]:
         selected = self._scenarios
         if category:
             selected = [item for item in self._scenarios if item.category == category]
+        if tool_loop_only:
+            selected = [item for item in selected if item.use_tool_loop]
         results = []
         for scenario in selected:
-            results.append(await self.run_scenario(scenario.id))
+            results.append(
+                await self.run_scenario(
+                    scenario.id,
+                    retrieval_path_prefix=retrieval_path_prefix,
+                    repo_profile=repo_profile,
+                )
+            )
         passed = sum(1 for item in results if item.get("success"))
         total = len(results)
         return {

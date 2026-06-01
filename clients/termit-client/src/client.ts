@@ -151,6 +151,42 @@ export class TermitClient {
     });
   }
 
+  listDlqRuns(limit = 20): Promise<import("./types").AgentRunListResponse> {
+    return this.request(`/api/agents/runs/dlq?limit=${encodeURIComponent(String(limit))}`);
+  }
+
+  replayDlqRuns(limit = 5): Promise<import("./types").AgentRunDlqReplayResponse> {
+    return this.request(`/api/agents/runs/dlq/replay?limit=${encodeURIComponent(String(limit))}`, {
+      method: "POST",
+      body: "{}",
+    });
+  }
+
+  replayAgentRun(runId: string): Promise<import("./types").AgentRunCreateResponse> {
+    return this.request(`/api/agents/runs/${encodeURIComponent(runId)}/replay`, {
+      method: "POST",
+      body: "{}",
+    });
+  }
+
+  getQuotaSummary(): Promise<import("./types").QuotaSummaryResponse> {
+    return this.request("/api/ops/quota-summary");
+  }
+
+  runEvalSuite(payload: { limit?: number; category?: string } = {}): Promise<import("./types").EvalSuiteRunResponse> {
+    return this.request("/api/eval/run-suite", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  runAgentEvalSuite(category?: string): Promise<Record<string, unknown>> {
+    return this.request("/api/agents/eval/suite", {
+      method: "POST",
+      body: JSON.stringify(category ? { category } : {}),
+    });
+  }
+
   fimComplete(payload: {
     prefix: string;
     suffix?: string;

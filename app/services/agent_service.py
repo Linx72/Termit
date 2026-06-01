@@ -4,7 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from queue import Empty, Full
-from threading import Event, Lock, Thread
+from threading import Condition, Event, Lock, Thread
 import time
 from typing import Optional
 from uuid import uuid4
@@ -122,6 +122,7 @@ class AgentService:
         context_enrichment: Optional[ContextEnrichmentService] = None,
         guardrails_enabled: bool = True,
         default_repo_profile_id: Optional[str] = None,
+        shutdown_grace_seconds: int = 10,
     ) -> None:
         self._chat_service = chat_service
         self._registry = registry
@@ -151,10 +152,14 @@ class AgentService:
         self._trace_spans = trace_span_store
         self._context_enrichment = context_enrichment
         self._default_repo_profile_id = (default_repo_profile_id or "").strip() or None
+        self._shutdown_grace_seconds = max(1, shutdown_grace_seconds)
         self._notifier = AgentRunNotifier.get()
         self._queue_capacity = max(1, max_queue_size)
         self._worker_count = max(1, max_concurrency)
         self._lock = Lock()
+        self._inflight_lock = Lock()
+        self._inflight_done = Condition(self._inflight_lock)
+        self._inflight = 0
         self._workers: list[Thread] = []
         self._stop = Event()
         self.start()
@@ -178,8 +183,13 @@ class AgentService:
 
     def stop(self) -> None:
         self._stop.set()
+        deadline = time.monotonic() + self._shutdown_grace_seconds
         for worker in list(self._workers):
-            worker.join(timeout=2)
+            remaining = max(0.0, deadline - time.monotonic())
+            worker.join(timeout=remaining)
+        with self._inflight_lock:
+            while self._inflight > 0 and time.monotonic() < deadline:
+                self._inflight_done.wait(timeout=max(0.0, deadline - time.monotonic()))
         self._workers = []
 
     def create_agent(self, payload: AgentProfileCreateRequest) -> AgentProfileResponse:
@@ -1053,8 +1063,14 @@ class AgentService:
             except Empty:
                 continue
             try:
+                with self._inflight_lock:
+                    self._inflight += 1
                 self._process_run(run_id, agent_id, payload)
             finally:
+                with self._inflight_lock:
+                    self._inflight = max(0, self._inflight - 1)
+                    if self._inflight == 0:
+                        self._inflight_done.notify_all()
                 self._run_queue.task_done()
 
     def _process_run(self, run_id: str, agent_id: str, payload: AgentRunRequest) -> None:

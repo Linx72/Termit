@@ -5,6 +5,7 @@ import {
   parseComposerPatches,
   stripComposerJsonBlock,
   watchAgentRun,
+  buildAgentRunScope,
 } from "@termit/client";
 import { applyAllComposerPatches, previewComposerPatch } from "./composerWorkflow";
 import { appendContextToMessage, buildEditorContext } from "./editorContext";
@@ -284,9 +285,13 @@ export class TermitSidebarProvider implements vscode.WebviewViewProvider, vscode
       }
 
       if (message.type === "agentRun") {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const workspacePath = workspaceFolder?.uri.fsPath ?? "";
+        const scope = buildAgentRunScope({ workspace: workspacePath });
         const run = await client.createAgentRun(message.agentId, {
           input: message.input,
           session_id: getSessionId(this.context),
+          ...scope,
         });
         this.postMessage({
           type: "agentRunCreated",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -122,6 +123,114 @@ class PatchOutcomeStore:
                     "path": normalized,
                     "original_hash": record.content_hash,
                     "new_hash": current_hash,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        return captured
+
+    def scan_git_worktree(
+        self,
+        root_path: str,
+        *,
+        training_signals: Optional["TrainingSignalStore"] = None,
+    ) -> int:
+        """Proactively detect git reverts and file edits for pending agent patches."""
+        root = Path(root_path).resolve()
+        captured = 0
+        pending_paths = self._pending_paths()
+        for rel_path in pending_paths:
+            if self.handle_file_changed(
+                rel_path,
+                root_path=str(root),
+                training_signals=training_signals,
+            ):
+                captured += 1
+                continue
+            if not (root / ".git").is_dir():
+                continue
+            if self._capture_git_head_revert(
+                rel_path,
+                root=root,
+                training_signals=training_signals,
+            ):
+                captured += 1
+        return captured
+
+    def _pending_paths(self) -> list[str]:
+        if not self.file_path.exists():
+            return []
+        paths: set[str] = set()
+        with self._lock:
+            lines = self.file_path.read_text(encoding="utf-8").splitlines()
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if str(item.get("event", "")) == "applied":
+                path = str(item.get("path", "")).strip()
+                if path:
+                    paths.add(path)
+        return sorted(paths)
+
+    def _git_head_file_hash(self, root: Path, rel_path: str) -> Optional[str]:
+        try:
+            completed = subprocess.run(
+                ["git", "-C", str(root), "show", f"HEAD:{rel_path}"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if completed.returncode != 0:
+            return None
+        return hashlib.sha256(completed.stdout.encode("utf-8")).hexdigest()
+
+    def _capture_git_head_revert(
+        self,
+        rel_path: str,
+        *,
+        root: Path,
+        training_signals: Optional["TrainingSignalStore"],
+    ) -> bool:
+        target = root / rel_path
+        if not target.exists() or not target.is_file():
+            return False
+        try:
+            current_hash = self.file_hash(target)
+        except OSError:
+            return False
+        head_hash = self._git_head_file_hash(root, rel_path)
+        if not head_hash or head_hash != current_hash:
+            return False
+
+        pending = self._pending_for_path(rel_path)
+        captured = False
+        for record in pending:
+            if record.content_hash == current_hash:
+                continue
+            if training_signals is not None:
+                captured = training_signals.try_capture_patch_revert(
+                    run_id=record.run_id,
+                    path=rel_path,
+                    instruction=record.instruction,
+                    original_hash=record.content_hash,
+                    new_hash=current_hash,
+                    chosen_output=record.chosen_patch,
+                ) or captured
+            self._append_event(
+                {
+                    "event": "reverted",
+                    "run_id": record.run_id,
+                    "path": rel_path,
+                    "original_hash": record.content_hash,
+                    "new_hash": current_hash,
+                    "source": "git_head",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )

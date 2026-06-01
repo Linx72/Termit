@@ -128,4 +128,6 @@ Auth: `X-API-Key` из `.env` (`dev-key`, `viewer-key`).
 
 ## Архив skill
 
+Автосводка из чатов (пересборка при `sessionEnd`): [archive/generated-from-transcripts.md](archive/generated-from-transcripts.md). Промпт нового агента: [../../agent/projects/termit/new-agent-prompt.md](../../agent/projects/termit/new-agent-prompt.md).
+
 Снимок milestones до platform v2: [archive/reference-sessions-baseline.md](archive/reference-sessions-baseline.md).

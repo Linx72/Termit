@@ -8,9 +8,17 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.services.eval_report_store import EvalReportStore
 
 
 def api_request(
@@ -131,16 +139,43 @@ def main() -> int:
         )
         print(json.dumps(train_result, indent=2, ensure_ascii=True))
 
+        eval_result: dict[str, object] | None = None
         if args.run_post_eval and str(train_result.get("status")) == "completed":
             eval_result = api_request(
                 method="POST",
                 base_url=args.base_url,
                 path="/api/eval/run-suite",
                 api_key=args.api_key,
-                body={"limit": args.eval_limit},
+                body={"limit": args.eval_limit, "persist_report": True, "tag": "finetune-post"},
                 timeout=max(args.timeout_seconds, 120.0),
             )
             print(json.dumps(eval_result, indent=2, ensure_ascii=True))
+
+            baseline_rate = None
+            run_meta = api_request(
+                method="GET",
+                base_url=args.base_url,
+                path=f"/api/finetune/pipeline/stage1-runs/{run_id}",
+                api_key=args.api_key,
+            )
+            result = run_meta.get("result") if isinstance(run_meta.get("result"), dict) else {}
+            if isinstance(result, dict) and result.get("baseline_pass_rate") is not None:
+                baseline_rate = float(result["baseline_pass_rate"])
+
+            post_rate = float(eval_result.get("pass_rate", 0.0))
+            delta_payload: dict[str, object] = {
+                "kind": "finetune_eval_delta",
+                "run_id": run_id,
+                "train_status": train_result.get("status"),
+                "baseline_pass_rate": baseline_rate,
+                "post_pass_rate": post_rate,
+                "delta": (post_rate - baseline_rate) if baseline_rate is not None else None,
+                "post_total": eval_result.get("total"),
+                "post_passed": eval_result.get("passed"),
+            }
+            reports_path = os.getenv("TERMIT_EVAL_REPORTS_PATH", str(ROOT / "data" / "eval_reports.jsonl"))
+            EvalReportStore(reports_path).append_suite_report(delta_payload)
+            print(json.dumps({"finetune_eval_delta": delta_payload, "timestamp": datetime.now(timezone.utc).isoformat()}, indent=2))
     except HTTPError as exc:
         print(exc.read().decode("utf-8", errors="replace"), file=sys.stderr)
         return 1

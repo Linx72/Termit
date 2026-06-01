@@ -103,10 +103,15 @@ export interface AgentRunRequest {
   session_id?: string;
   project_id?: string;
   changed_files?: string[];
+  retrieval_path_prefix?: string;
+  workspace_scope?: string;
+  repo_profile?: string;
+  use_tool_loop?: boolean;
 }
 
 export interface AgentRunCreateResponse {
   run_id: string;
+  agent_id?: string;
   state: string;
   queued_position?: number;
 }
@@ -122,6 +127,8 @@ export interface AgentRunRecord {
   session_id?: string;
   provider?: string;
   model?: string;
+  attempted_models?: string[];
+  repo_profile?: string;
   response?: string;
   error?: string;
 }
@@ -129,6 +136,34 @@ export interface AgentRunRecord {
 export interface AgentRunListResponse {
   runs: AgentRunRecord[];
   total: number;
+}
+
+export interface AgentRunDlqReplayResponse {
+  replayed: AgentRunCreateResponse[];
+  count: number;
+}
+
+export interface QuotaEntrySummary {
+  key_hint: string;
+  role: string;
+  team: string;
+  used: number;
+  limit: number;
+  remaining: number;
+  usage_percent: number;
+}
+
+export interface QuotaSummaryResponse {
+  auth_enabled: boolean;
+  entries: QuotaEntrySummary[];
+}
+
+export interface EvalSuiteRunResponse {
+  run_id: string;
+  total: number;
+  passed: number;
+  failed: number;
+  pass_rate: number;
 }
 
 export interface AgentRunEvent {
