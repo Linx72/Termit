@@ -63,6 +63,69 @@ class TrainingSignalStoreTests(unittest.TestCase):
             rows = [json.loads(line) for line in after.splitlines()]
             self.assertEqual(len(rows), 1)
 
+    def test_capture_negative_tool_step(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = TrainingSignalStore(
+                str(Path(tmp) / "signals.jsonl"),
+                min_output_chars=8,
+            )
+            observation = json.dumps(
+                {
+                    "applied": True,
+                    "verify": {"executed": True, "exit_code": 1},
+                }
+            )
+            captured = store.try_capture_negative_tool_step(
+                run_id="r9",
+                step=3,
+                action="tool",
+                tool="apply_patch",
+                observation=observation,
+                instruction="Fix auth bug",
+                reason="verify_failed",
+            )
+            self.assertTrue(captured)
+            dpo = store.load_dpo_samples(limit=10)
+            self.assertEqual(len(dpo), 1)
+            self.assertEqual(dpo[0]["rejected"], observation)
+
+    def test_capture_tool_step_on_verified_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = TrainingSignalStore(
+                str(Path(tmp) / "signals.jsonl"),
+                min_output_chars=8,
+            )
+            observation = json.dumps(
+                {
+                    "applied": True,
+                    "verify": {"executed": True, "exit_code": 0},
+                }
+            )
+            captured = store.try_capture_tool_step(
+                run_id="r9",
+                step=2,
+                action="tool",
+                tool="apply_patch",
+                observation=observation,
+                instruction="Fix auth bug",
+                verified=True,
+            )
+            self.assertTrue(captured)
+            self.assertFalse(
+                store.try_capture_tool_step(
+                    run_id="r9",
+                    step=2,
+                    action="tool",
+                    tool="apply_patch",
+                    observation=observation,
+                    instruction="Fix auth bug",
+                    verified=True,
+                )
+            )
+            samples = store.load_samples(limit=10)
+            self.assertEqual(len(samples), 1)
+            self.assertEqual(samples[0]["category"], "tool_loop")
+
 
 if __name__ == "__main__":
     unittest.main()

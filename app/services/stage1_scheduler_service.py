@@ -106,6 +106,19 @@ class Stage1SchedulerService:
                     if existing is not None:
                         return existing
 
+            signal_count = len(
+                self._finetune_service.training_signal_store.load_samples(5000)
+            )
+            min_signals = max(
+                self._settings.stage1_schedule_min_samples,
+                self._settings.finetune_min_signals_for_train,
+            )
+            if source == "builtin_scheduler" and signal_count < min_signals:
+                return {
+                    "status": "skipped",
+                    "detail": f"Need at least {min_signals} training signals (have {signal_count}).",
+                }
+
             payload = FinetuneStage1RunRequest(
                 name=self._settings.stage1_schedule_name,
                 base_model=self._resolve_base_model(),

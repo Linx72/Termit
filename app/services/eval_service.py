@@ -21,7 +21,11 @@ from app.domain.schemas import (
     WebAutomationRequest,
 )
 from app.services.browser_workflow_service import BrowserWorkflowService, WebWorkflowError
+from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.eval_report_store import EvalReportStore
+from app.services.mcp_registry_service import McpRegistryService
+from app.services.search_provider import StubSearchProvider
+from app.services.agent_tool_schema import TOOL_DEFINITIONS
 from app.services.task_service import TaskService
 from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingError, ToolingService
@@ -54,6 +58,7 @@ class EvalScenario:
     tool_pattern: str = "*"
     tool_command: str = ""
     tool_dry_run: bool = False
+    tool_steps: tuple[dict[str, object], ...] = ()
     web_url: str = "https://example.com"
     web_max_steps: int = 4
     patch_path: str = ""
@@ -64,6 +69,9 @@ class EvalScenario:
     patch_confirmed: bool = False
     verify_command: str = ""
     expect_verify_failure: bool = False
+    retrieval_query: str = ""
+    retrieval_expect: str = ""
+    platform_tool: str = ""
 
 
 class EvalService:
@@ -76,6 +84,7 @@ class EvalService:
         telemetry: Optional[TelemetryStore] = None,
         report_store: Optional[EvalReportStore] = None,
         web_fetcher: Optional[Callable[[str, int], tuple[int, str, str]]] = None,
+        retrieval_service: Optional[CodeRetrievalService] = None,
     ) -> None:
         self._scenarios = self._load_scenarios(scenarios_path)
         self._task_service = task_service
@@ -84,6 +93,7 @@ class EvalService:
         self._telemetry = telemetry
         self._report_store = report_store
         self._web_fetcher = web_fetcher
+        self._retrieval = retrieval_service
 
     def _load_scenarios(self, scenarios_path: str) -> list[EvalScenario]:
         path = Path(scenarios_path)
@@ -114,6 +124,7 @@ class EvalService:
                     tool_pattern=str(item.get("tool_pattern", "*")),
                     tool_command=str(item.get("tool_command", "")),
                     tool_dry_run=bool(item.get("tool_dry_run", False)),
+                    tool_steps=tuple(item.get("tool_steps") or []),
                     web_url=str(item.get("web_url", "https://example.com")),
                     web_max_steps=int(item.get("web_max_steps", 4)),
                     patch_path=str(item.get("patch_path", "")),
@@ -124,6 +135,9 @@ class EvalService:
                     patch_confirmed=bool(item.get("patch_confirmed", False)),
                     verify_command=str(item.get("verify_command", "")),
                     expect_verify_failure=bool(item.get("expect_verify_failure", False)),
+                    retrieval_query=str(item.get("retrieval_query", "")),
+                    retrieval_expect=str(item.get("retrieval_expect", "")),
+                    platform_tool=str(item.get("platform_tool", "")),
                 )
             )
         return scenarios
@@ -194,6 +208,12 @@ class EvalService:
         failed = len(results) - passed
         finished_at = time.time()
         metrics = self._telemetry.snapshot() if self._telemetry else None
+        durations = sorted(int(item.get("duration_ms", 0)) for item in results)
+        latency_p95_ms = self._percentile(durations, 95) if durations else 0
+        estimated_cost_usd = round(
+            sum(len(str(item.get("prompt", ""))) for item in results) * 0.000002,
+            6,
+        )
 
         report = {
             "run_id": run_id,
@@ -203,6 +223,8 @@ class EvalService:
             "passed": passed,
             "failed": failed,
             "pass_rate": round(passed / len(results), 4) if results else 0.0,
+            "latency_p95_ms": latency_p95_ms,
+            "estimated_cost_usd": estimated_cost_usd,
             "category_filter": category,
             "results": results,
             "metrics": metrics.model_dump() if metrics else None,
@@ -215,6 +237,37 @@ class EvalService:
         if self._report_store is None:
             return []
         return self._report_store.list_recent(limit=limit)
+
+    def build_dashboard(self, *, report_limit: int = 10) -> dict[str, object]:
+        reports = self.list_reports(limit=report_limit)
+        latest = reports[0] if reports else None
+        metrics = self._telemetry.snapshot() if self._telemetry else None
+        chat_p95_ms = None
+        if metrics is not None:
+            chat_p95_ms = getattr(metrics, "p95_latency_ms", None)
+        suite_p95_ms = int(latest.get("latency_p95_ms", 0)) if latest else 0
+        pass_rate = float(latest.get("pass_rate", 0.0)) if latest else 0.0
+        cost_usd = float(latest.get("estimated_cost_usd", 0.0)) if latest else 0.0
+        return {
+            "pass_rate": pass_rate,
+            "latency_p95_ms": suite_p95_ms or chat_p95_ms or 0,
+            "chat_latency_p95_ms": chat_p95_ms,
+            "estimated_cost_usd": cost_usd,
+            "latest_run_id": str(latest.get("run_id", "")) if latest else None,
+            "latest_total": int(latest.get("total", 0)) if latest else 0,
+            "latest_passed": int(latest.get("passed", 0)) if latest else 0,
+            "scenario_count": len(self._scenarios),
+            "recent_reports": reports,
+        }
+
+    @staticmethod
+    def _percentile(values: list[int], pct: int) -> int:
+        if not values:
+            return 0
+        if len(values) == 1:
+            return values[0]
+        rank = max(0, min(len(values) - 1, int(round((pct / 100.0) * (len(values) - 1)))))
+        return values[rank]
 
     def _get_scenario(self, scenario_id: str) -> EvalScenario:
         scenario = next((item for item in self._scenarios if item.id == scenario_id), None)
@@ -238,8 +291,18 @@ class EvalService:
             return self._run_tool_patch(scenario)
         if runner == "tool_patch_verify":
             return self._run_tool_patch_verify(scenario)
+        if runner == "tool_sequence":
+            return self._run_tool_sequence(scenario)
         if runner == "web":
             return self._run_web_scenario(scenario)
+        if runner == "retrieval":
+            return self._run_retrieval_scenario(scenario)
+        if runner == "platform_web_search":
+            return self._run_platform_web_search(scenario)
+        if runner == "platform_mcp":
+            return self._run_platform_mcp(scenario)
+        if runner == "platform_spawn_tool":
+            return self._run_platform_spawn_tool(scenario)
         raise ValueError(f"Unsupported runner: {runner}")
 
     def _run_task_scenario(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
@@ -367,6 +430,79 @@ class EvalService:
             "semi-auto",
         )
 
+    def _run_tool_sequence(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
+        if self._tooling is None:
+            raise RuntimeError("Tooling service is not configured for eval runs.")
+        if not scenario.tool_steps:
+            raise ValueError("tool_sequence runner requires tool_steps.")
+        refs: list[str] = []
+        for index, step in enumerate(scenario.tool_steps):
+            if not isinstance(step, dict):
+                raise ValueError(f"tool_steps[{index}] must be an object.")
+            op = str(step.get("op", "")).strip().lower()
+            if op == "list":
+                listing = self._tooling.list_files(
+                    ListFilesRequest(
+                        path=str(step.get("path", ".")),
+                        pattern=str(step.get("pattern", "*")),
+                    )
+                )
+                if not listing.files:
+                    return f"step-{index}:list", False, "verification_error", 1, "semi-auto"
+                refs.append(f"list:{len(listing.files)}")
+            elif op == "read":
+                content = self._tooling.read_file(
+                    ReadFileRequest(path=str(step.get("path", ".")), max_bytes=8000)
+                )
+                if not content.content.strip():
+                    return f"step-{index}:read", False, "verification_error", 1, "semi-auto"
+                refs.append(f"read:{content.path}")
+            elif op == "exec":
+                command = str(step.get("command", "")).strip()
+                if not command:
+                    raise ValueError(f"tool_steps[{index}] exec requires command.")
+                result = self._tooling.execute_command(
+                    ExecuteCommandRequest(
+                        command=command,
+                        path=str(step.get("path", ".")),
+                        dry_run=bool(step.get("dry_run", False)),
+                        confirmed=bool(step.get("confirmed", False)),
+                    )
+                )
+                blocked = result.risk_level.value == "blocked" and not result.executed
+                dry_run = bool(step.get("dry_run", False))
+                if blocked or (not result.executed and not dry_run):
+                    return f"step-{index}:exec", False, "tool_error", 0 if blocked else 1, "semi-auto"
+                refs.append(f"exec:{result.exit_code}")
+            elif op == "patch":
+                patch_path = str(step.get("patch_path", "")).strip()
+                if not patch_path:
+                    raise ValueError(f"tool_steps[{index}] patch requires patch_path.")
+                if patch_path == _EVAL_PATCH_FIXTURE:
+                    self._reset_patch_fixture()
+                hunks = []
+                patch_old = str(step.get("patch_old", ""))
+                patch_new = str(step.get("patch_new", ""))
+                if patch_old or patch_new:
+                    hunks = [ApplyPatchHunk(old_text=patch_old, new_text=patch_new)]
+                patch_result = self._tooling.apply_patch(
+                    ApplyPatchRequest(
+                        path=patch_path,
+                        hunks=hunks,
+                        create=bool(step.get("patch_create", False)),
+                        dry_run=bool(step.get("patch_dry_run", True)),
+                        confirmed=bool(step.get("patch_confirmed", False)),
+                    )
+                )
+                blocked = patch_result.risk_level.value == "blocked"
+                dry_run = bool(step.get("patch_dry_run", True))
+                if blocked or (not patch_result.applied and not dry_run):
+                    return f"step-{index}:patch", False, "safety_block" if blocked else "verification_error", 0 if blocked else 1, "semi-auto"
+                refs.append(f"patch:{patch_result.path}")
+            else:
+                raise ValueError(f"Unsupported tool_sequence op: {op}")
+        return " -> ".join(refs), True, None, 1, "semi-auto"
+
     def _reset_patch_fixture(self) -> None:
         if self._tooling is None:
             return
@@ -377,7 +513,7 @@ class EvalService:
     def _run_web_scenario(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
         url = scenario.web_url
         fetcher = self._web_fetcher or self._eval_stub_fetcher
-        browser = self._browser or BrowserWorkflowService(fetcher=fetcher)
+        browser = BrowserWorkflowService(fetcher=fetcher)
         try:
             result = browser.run(
                 WebAutomationRequest(
@@ -400,6 +536,51 @@ class EvalService:
             passed = result.success and not result.blocker_detected
             failure_class = None if passed else "external_error"
         return url, passed, failure_class, 1, "full-auto"
+
+    def _run_retrieval_scenario(
+        self, scenario: EvalScenario
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        if self._retrieval is None:
+            raise RuntimeError("Retrieval service is not configured for eval runs.")
+        query = scenario.retrieval_query or scenario.prompt
+        expect = scenario.retrieval_expect.strip()
+        if not expect:
+            raise ValueError("retrieval runner requires retrieval_expect.")
+        hits = self._retrieval.search(query, limit=8)
+        matched_paths = [hit.path for hit in hits if expect in hit.path.replace("\\", "/")]
+        passed = len(matched_paths) > 0
+        ref = matched_paths[0] if matched_paths else (hits[0].path if hits else query)
+        return ref, passed, None if passed else "verification_error", 1, "semi-auto"
+
+    def _run_platform_web_search(
+        self, scenario: EvalScenario
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        provider = StubSearchProvider()
+        result = provider.search(scenario.prompt, max_results=3)
+        passed = bool(result.citations) and len(result.hits) > 0
+        return result.provider, passed, None if passed else "verification_error", 1, "semi-auto"
+
+    def _run_platform_mcp(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = McpRegistryService(str(Path(tmp) / "mcp.json"))
+            server = registry.upsert_server(
+                name="eval",
+                command="stub",
+                allowed_tools=["ping"],
+            )
+            payload = registry.invoke_tool(server.server_id, "ping", {"probe": True})
+        passed = "stub_ok" in payload
+        return server.server_id, passed, None if passed else "verification_error", 1, "semi-auto"
+
+    def _run_platform_spawn_tool(
+        self, scenario: EvalScenario
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        tool_name = scenario.platform_tool or "spawn_agent"
+        passed = tool_name in TOOL_DEFINITIONS
+        return tool_name, passed, None if passed else "verification_error", 1, "semi-auto"
 
     def _eval_stub_fetcher(self, url: str, timeout_seconds: int) -> tuple[int, str, str]:
         del timeout_seconds

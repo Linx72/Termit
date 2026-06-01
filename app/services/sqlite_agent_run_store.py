@@ -6,6 +6,7 @@ from threading import Lock
 from typing import Optional
 
 from app.domain.schemas import AgentRunEvent, AgentRunRecordResponse, AgentRunState
+from app.services.tool_loop_metrics import aggregate_tool_loop_events, empty_tool_loop_metrics
 
 
 class SQLiteAgentRunStore:
@@ -40,7 +41,8 @@ class SQLiteAgentRunStore:
                     failure_class TEXT,
                     attempted_models TEXT NOT NULL,
                     response TEXT NOT NULL,
-                    error TEXT
+                    error TEXT,
+                    checkpoint_json TEXT
                 )
                 """
             )
@@ -67,6 +69,8 @@ class SQLiteAgentRunStore:
             self._ensure_column(conn, "agent_runs", "attempts", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "agent_runs", "max_attempts", "INTEGER NOT NULL DEFAULT 1")
             self._ensure_column(conn, "agent_runs", "failure_class", "TEXT")
+            self._ensure_column(conn, "agent_runs", "checkpoint_json", "TEXT")
+            self._ensure_column(conn, "agent_runs", "parent_run_id", "TEXT")
             conn.commit()
 
     def put_run(self, run: AgentRunRecordResponse) -> None:
@@ -77,8 +81,8 @@ class SQLiteAgentRunStore:
                 INSERT INTO agent_runs(
                     run_id, agent_id, agent_name, state, created_at, updated_at,
                     input, session_id, provider, model, attempts, max_attempts, failure_class,
-                    attempted_models, response, error
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    attempted_models, response, error, checkpoint_json, parent_run_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
                     agent_id=excluded.agent_id,
                     agent_name=excluded.agent_name,
@@ -94,7 +98,9 @@ class SQLiteAgentRunStore:
                     failure_class=excluded.failure_class,
                     attempted_models=excluded.attempted_models,
                     response=excluded.response,
-                    error=excluded.error
+                    error=excluded.error,
+                    checkpoint_json=excluded.checkpoint_json,
+                    parent_run_id=excluded.parent_run_id
                 """,
                 (
                     run.run_id,
@@ -113,6 +119,8 @@ class SQLiteAgentRunStore:
                     attempted,
                     run.response,
                     run.error,
+                    run.checkpoint_json,
+                    run.parent_run_id,
                 ),
             )
             conn.commit()
@@ -223,6 +231,27 @@ class SQLiteAgentRunStore:
             ).fetchall()
         return {str(row["state"]): int(row["c"]) for row in rows}
 
+    def tool_loop_event_metrics(self) -> dict[str, object]:
+        with self._lock, self._connect() as conn:
+            event_rows = conn.execute(
+                """
+                SELECT run_id, event_type, message
+                FROM agent_run_events
+                WHERE event_type LIKE 'tool_loop_%'
+                """
+            ).fetchall()
+            completed_rows = conn.execute(
+                """
+                SELECT run_id FROM agent_runs WHERE state = ?
+                """,
+                (AgentRunState.completed.value,),
+            ).fetchall()
+        if not event_rows:
+            return empty_tool_loop_metrics()
+        completed_run_ids = {str(row["run_id"]) for row in completed_rows}
+        rows = [(str(row["run_id"]), str(row["event_type"]), str(row["message"])) for row in event_rows]
+        return aggregate_tool_loop_events(rows, completed_run_ids)
+
     def cleanup_old_runs(
         self,
         cutoff_iso: str,
@@ -288,6 +317,8 @@ class SQLiteAgentRunStore:
             attempted_models=attempted,
             response=row["response"] or "",
             error=row["error"],
+            checkpoint_json=row["checkpoint_json"] if "checkpoint_json" in row.keys() else None,
+            parent_run_id=row["parent_run_id"] if "parent_run_id" in row.keys() else None,
         )
 
     @staticmethod

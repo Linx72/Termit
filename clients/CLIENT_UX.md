@@ -23,7 +23,13 @@ They do **not** use Cursor's AI, billing, or `@cursor/sdk`.
 | **Composer (multi-file)** | **Desktop + VS Code** | chat + JSON patches + `apply_patch` |
 | Session memory | Both | `session_id` |
 | @ file context | `@ file` buttons; Editor tab | `read_file`, editor context |
+| @ folder / @ symbol | Desktop chat `@ folder`, `@ symbol` | `list_files`, `/api/retrieval/symbols/search` |
+| @ docs / @ web | Desktop `@ docs`, `@ web` | `read_file`, `POST /api/platform/search` |
 | @ codebase | Retrieval checkbox | `use_retrieval` |
+| Plan mode | Desktop **Plan** tab → Build → Composer | chat stream (plan-only prompt) |
+| Terminal | Desktop **Terminal** tab | `execute_command` |
+| Health / queue / index | Desktop sidebar | `/api/ops/*`, `/api/retrieval/stats` |
+| Model pull (Ollama) | Wizard + sidebar Model manager | `POST /api/local/models/pull` |
 | Model picker | Both (after Connect) | `GET /api/providers` |
 | Task queue | Both | `POST /api/tasks` |
 | Custom agents | Both | `POST /api/agents/{id}/runs` |

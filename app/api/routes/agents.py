@@ -9,7 +9,9 @@ from app.domain.schemas import (
     AgentProfileCreateRequest,
     AgentProfileResponse,
     AgentRunCancelResponse,
-    AgentRunCreateResponse,
+    AgentRunConfirmRequest,
+    AgentRunConfirmResponse,
+    AgentRunResumeResponse,
     AgentRunCreateResponse,
     AgentRunDlqReplayResponse,
     AgentRunEvent,
@@ -37,7 +39,9 @@ from app.services.agent_service import (
     AgentQueueFullError,
     AgentRunNotFoundError,
     AgentService,
+    GuardrailBlockedError,
 )
+from app.services.agent_run_notifier import AgentRunNotifier
 from app.services.tooling_service import ToolingError
 from app.services.providers.base import ProviderError
 from app.state import get_agent_service
@@ -112,6 +116,8 @@ async def create_agent_run(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AgentQueueFullError as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except GuardrailBlockedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{agent_id}/runs", response_model=AgentRunListResponse)
@@ -191,6 +197,37 @@ async def cancel_agent_run(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/runs/{run_id}/confirm", response_model=AgentRunConfirmResponse)
+async def confirm_agent_run(
+    run_id: str,
+    payload: AgentRunConfirmRequest,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRunConfirmResponse:
+    try:
+        return service.confirm_run(run_id, approved=payload.approved)
+    except AgentRunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AgentQueueFullError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/runs/{run_id}/resume", response_model=AgentRunResumeResponse)
+async def resume_agent_run(
+    run_id: str,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRunResumeResponse:
+    try:
+        return service.resume_run(run_id)
+    except AgentRunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AgentQueueFullError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/runs/{run_id}/stream")
 async def stream_agent_run(
     run_id: str,
@@ -198,39 +235,69 @@ async def stream_agent_run(
     timeout_seconds: int = 120,
     service: AgentService = Depends(get_agent_service),
 ) -> StreamingResponse:
-    safe_poll_seconds = max(0.1, min(poll_ms, 5000) / 1000.0)
+    safe_poll_seconds = max(0.5, min(poll_ms, 5000) / 1000.0)
     safe_timeout = max(5, min(timeout_seconds, 600))
+    notifier = AgentRunNotifier.get()
 
     async def event_generator() -> AsyncIterator[str]:
-        last_state: str | None = None
-        last_updated_at: str | None = None
+        try:
+            run = service.get_run(run_id)
+        except AgentRunNotFoundError:
+            payload = {"detail": f"Agent run not found: {run_id}"}
+            yield f"event: error\ndata: {json.dumps(payload, ensure_ascii=True)}\n\n"
+            yield "event: done\ndata: {}\n\n"
+            return
+
+        events = service.get_run_events(run_id, limit=500)
+        yield f"event: status\ndata: {json.dumps(run.model_dump(mode='json'), ensure_ascii=True)}\n\n"
+        for event in events:
+            yield f"event: timeline\ndata: {json.dumps(event.model_dump(mode='json'), ensure_ascii=True)}\n\n"
+
+        if run.state in {
+            AgentRunState.completed,
+            AgentRunState.failed,
+            AgentRunState.cancelled,
+            AgentRunState.awaiting_confirmation,
+        }:
+            yield "event: done\ndata: {}\n\n"
+            return
+
+        queue = notifier.subscribe(run_id)
         deadline = asyncio.get_running_loop().time() + safe_timeout
-        while True:
-            now = asyncio.get_running_loop().time()
-            if now >= deadline:
-                yield "event: timeout\ndata: {}\n\n"
-                yield "event: done\ndata: {}\n\n"
-                break
-            try:
-                run = service.get_run(run_id)
-            except AgentRunNotFoundError:
-                payload = {"detail": f"Agent run not found: {run_id}"}
-                yield f"event: error\ndata: {json.dumps(payload, ensure_ascii=True)}\n\n"
-                yield "event: done\ndata: {}\n\n"
-                break
+        try:
+            while True:
+                now = asyncio.get_running_loop().time()
+                if now >= deadline:
+                    yield "event: timeout\ndata: {}\n\n"
+                    yield "event: done\ndata: {}\n\n"
+                    break
+                try:
+                    kind, payload = await asyncio.wait_for(queue.get(), timeout=safe_poll_seconds)
+                except asyncio.TimeoutError:
+                    try:
+                        run = service.get_run(run_id)
+                    except AgentRunNotFoundError:
+                        break
+                    if run.state in {
+                        AgentRunState.completed,
+                        AgentRunState.failed,
+                        AgentRunState.cancelled,
+                        AgentRunState.awaiting_confirmation,
+                    }:
+                        yield f"event: status\ndata: {json.dumps(run.model_dump(mode='json'), ensure_ascii=True)}\n\n"
+                        yield "event: done\ndata: {}\n\n"
+                        break
+                    continue
 
-            state_value = run.state.value
-            changed = (state_value != last_state) or (run.updated_at != last_updated_at)
-            if changed:
-                payload = run.model_dump(mode="json")
-                yield f"event: status\ndata: {json.dumps(payload, ensure_ascii=True)}\n\n"
-                last_state = state_value
-                last_updated_at = run.updated_at
-
-            if run.state in {AgentRunState.completed, AgentRunState.failed, AgentRunState.cancelled}:
-                yield "event: done\ndata: {}\n\n"
-                break
-            await asyncio.sleep(safe_poll_seconds)
+                if kind == "status":
+                    yield f"event: status\ndata: {json.dumps(payload, ensure_ascii=True)}\n\n"
+                    if payload.get("terminal"):
+                        yield "event: done\ndata: {}\n\n"
+                        break
+                elif kind == "timeline":
+                    yield f"event: timeline\ndata: {json.dumps(payload, ensure_ascii=True)}\n\n"
+        finally:
+            notifier.unsubscribe(run_id, queue)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

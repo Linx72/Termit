@@ -5,6 +5,7 @@ from threading import Lock
 from typing import Optional, Protocol
 
 from app.domain.schemas import AgentRunEvent, AgentRunRecordResponse, AgentRunState
+from app.services.tool_loop_metrics import aggregate_tool_loop_events, empty_tool_loop_metrics
 
 
 class AgentRunStore(Protocol):
@@ -33,6 +34,9 @@ class AgentRunStore(Protocol):
         ...
 
     def count_runs_by_state(self) -> dict[str, int]:
+        ...
+
+    def tool_loop_event_metrics(self) -> dict[str, object]:
         ...
 
     def cleanup_old_runs(
@@ -106,6 +110,20 @@ class InMemoryAgentRunStore:
             key = run.state.value
             counts[key] = counts.get(key, 0) + 1
         return counts
+
+    def tool_loop_event_metrics(self) -> dict[str, object]:
+        with self._lock:
+            rows: list[tuple[str, str, str]] = []
+            completed_run_ids: set[str] = set()
+            for run_id, events in self._events.items():
+                run = self._runs.get(run_id)
+                if run and run.state == AgentRunState.completed:
+                    completed_run_ids.add(run_id)
+                for event in events:
+                    rows.append((run_id, event.event_type, event.message))
+        if not rows:
+            return empty_tool_loop_metrics()
+        return aggregate_tool_loop_events(rows, completed_run_ids)
 
     def cleanup_old_runs(
         self,

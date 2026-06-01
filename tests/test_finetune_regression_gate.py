@@ -16,7 +16,7 @@ class FinetuneRegressionGateTests(unittest.TestCase):
         decision = evaluate_training_regression(
             baseline_pass_rate=0.80,
             post_pass_rate=0.70,
-            max_regression=0.02,
+            max_regression=0.05,
         )
         self.assertFalse(decision.promote)
         self.assertTrue(decision.use_shadow)
@@ -27,6 +27,14 @@ class FinetuneRegressionGateTests(unittest.TestCase):
             post_pass_rate=0.60,
         )
         self.assertTrue(decision.promote)
+
+    def test_block_promote_when_post_eval_required_but_missing(self) -> None:
+        decision = evaluate_training_regression(
+            baseline_pass_rate=0.80,
+            post_pass_rate=None,
+            require_post_eval=True,
+        )
+        self.assertFalse(decision.promote)
 
 
 if __name__ == "__main__":

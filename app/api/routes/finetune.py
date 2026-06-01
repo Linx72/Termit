@@ -10,6 +10,10 @@ from app.domain.schemas import (
     FinetuneAdapterResponse,
     FinetuneDatasetExportRequest,
     FinetuneDatasetExportResponse,
+    FinetuneDpoExportRequest,
+    FinetuneDpoExportResponse,
+    FinetuneTrajectoryExportRequest,
+    FinetuneTrajectoryExportResponse,
     FinetuneJobCreateRequest,
     FinetuneJobListResponse,
     FinetuneJobResponse,
@@ -24,11 +28,12 @@ from app.domain.schemas import (
     FinetuneTrainRequest,
     FinetuneTrainResponse,
     FinetuneTrainingDashboardResponse,
+    FinetuneTuningReportResponse,
 )
 from app.services.eval_service import EvalService
 from app.services.finetune_service import FinetuneJobRecord, FinetuneService
 from app.services.stage1_scheduler_service import Stage1SchedulerService
-from app.state import get_eval_service, get_finetune_service, get_stage1_scheduler_service
+from app.state import get_eval_service, get_finetune_adapter_resolver, get_finetune_service, get_stage1_scheduler_service
 
 router = APIRouter(prefix="/api/finetune", tags=["finetune"])
 
@@ -73,12 +78,66 @@ async def export_dataset(
     return FinetuneDatasetExportResponse(**result)
 
 
+@router.post("/datasets/export-trajectory-sft", response_model=FinetuneTrajectoryExportResponse)
+async def export_trajectory_sft_dataset(
+    payload: FinetuneTrajectoryExportRequest,
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneTrajectoryExportResponse:
+    try:
+        result = service.export_trajectory_sft(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FinetuneTrajectoryExportResponse(**result)
+
+
+@router.post("/datasets/export-dpo", response_model=FinetuneDpoExportResponse)
+async def export_dpo_dataset(
+    payload: FinetuneDpoExportRequest,
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneDpoExportResponse:
+    try:
+        result = service.export_dpo_dataset(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FinetuneDpoExportResponse(**result)
+
+
+@router.get("/adapters/resolve")
+async def resolve_adapter_for_profile(
+    repo_profile_id: str = Query(min_length=1, max_length=120),
+    resolver=Depends(get_finetune_adapter_resolver),
+) -> dict[str, object]:
+    model = resolver.resolve_model(repo_profile_id)
+    adapters = resolver.list_for_profile(repo_profile_id)
+    return {
+        "repo_profile_id": repo_profile_id,
+        "model": model,
+        "adapters": adapters,
+    }
+
+
 @router.get("/training/dashboard", response_model=FinetuneTrainingDashboardResponse)
 async def training_dashboard(
     limit: int = Query(default=10, ge=1, le=50),
     service: FinetuneService = Depends(get_finetune_service),
 ) -> FinetuneTrainingDashboardResponse:
     return FinetuneTrainingDashboardResponse(**service.training_dashboard(limit=limit))
+
+
+@router.get("/training/tuning-report", response_model=FinetuneTuningReportResponse)
+async def training_tuning_report(
+    event_limit: int = Query(default=5000, ge=100, le=50000),
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneTuningReportResponse:
+    return FinetuneTuningReportResponse(**service.tuning_report(event_limit=event_limit))
+
+
+@router.post("/training/apply-tuning")
+async def apply_training_tuning(
+    project_id: str = Query(default="termit-core"),
+    service: FinetuneService = Depends(get_finetune_service),
+) -> dict[str, object]:
+    return service.apply_tuning_recommendations(project_id.strip() or "termit-core")
 
 
 @router.post("/jobs", response_model=FinetuneJobResponse)
@@ -343,6 +402,7 @@ async def train_job(
         status=str(result.get("status", "failed")),
         output_model=result.get("output_model"),
         modelfile_path=result.get("modelfile_path"),
+        adapter_path=result.get("adapter_path"),
         command=result.get("command"),
         detail=str(result.get("detail", "")),
         duration_ms=int(result.get("duration_ms") or 0),
@@ -377,6 +437,7 @@ async def train_stage1_pipeline_run(
         status=str(result.get("status", "failed")),
         output_model=result.get("output_model"),
         modelfile_path=result.get("modelfile_path"),
+        adapter_path=result.get("adapter_path"),
         command=result.get("command"),
         detail=str(result.get("detail", "")),
         duration_ms=int(result.get("duration_ms") or 0),

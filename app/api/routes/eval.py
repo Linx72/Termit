@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.schemas import (
+    EvalDashboardResponse,
     EvalReportSummaryResponse,
     EvalRunRequest,
     EvalRunResponse,
@@ -79,6 +80,15 @@ async def run_suite(
         category_filter=str(report["category_filter"]) if report.get("category_filter") else None,
         results=[_to_run_response(item) for item in report["results"]],
     )
+
+
+@router.get("/dashboard", response_model=EvalDashboardResponse)
+async def eval_dashboard(
+    limit: int = 10,
+    service: EvalService = Depends(get_eval_service),
+) -> EvalDashboardResponse:
+    payload = service.build_dashboard(report_limit=max(1, min(limit, 50)))
+    return EvalDashboardResponse(**payload)
 
 
 @router.get("/reports", response_model=EvalReportSummaryResponse)

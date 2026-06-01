@@ -90,3 +90,17 @@ export function upsertSession(
   next.unshift(session);
   return next.slice(0, 50);
 }
+
+export function renameSession(
+  sessions: StoredChatSession[],
+  localId: string,
+  title: string
+): StoredChatSession[] {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    return sessions;
+  }
+  return sessions.map((session) =>
+    session.localId === localId ? { ...session, title: trimmed, updatedAt: Date.now() } : session
+  );
+}

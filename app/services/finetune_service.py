@@ -12,8 +12,11 @@ from uuid import uuid4
 from app.domain.schemas import (
     FinetuneAdapterRegisterRequest,
     FinetuneDatasetExportRequest,
+    FinetuneDpoExportRequest,
     FinetuneStage1RunRequest,
+    FinetuneTrajectoryExportRequest,
 )
+from app.services.finetune_dpo_export import build_dpo_pairs, write_dpo_jsonl
 from app.services.finetune_trainer_service import FinetuneTrainerService
 from app.services.finetune_dataset_curator import (
     CuratorConfig,
@@ -21,6 +24,11 @@ from app.services.finetune_dataset_curator import (
     export_row,
 )
 from app.services.finetune_regression_gate import evaluate_training_regression
+from app.services.finetune_trajectory_export import (
+    load_trajectory_sft_rows,
+    write_sft_jsonl,
+)
+from app.services.tool_loop_tuning_service import build_tool_loop_tuning_report
 from app.services.training_signal_store import TrainingSignalStore
 
 
@@ -74,6 +82,7 @@ class FinetuneService:
         post_eval_runner: Optional[Callable[[FinetuneStage1RunRequest], dict[str, object]]] = None,
         training_signal_store: Optional[TrainingSignalStore] = None,
         regression_gate_enabled: bool = True,
+        regression_require_post_eval: bool = True,
         max_train_regression: float = 0.02,
         shadow_traffic_percent: float = 10.0,
     ) -> None:
@@ -97,6 +106,7 @@ class FinetuneService:
             training_signals_path
         )
         self._regression_gate_enabled = regression_gate_enabled
+        self._regression_require_post_eval = regression_require_post_eval
         self._max_train_regression = max(0.0, max_train_regression)
         self._shadow_traffic_percent = max(0.0, min(shadow_traffic_percent, 100.0))
         self._lock = Lock()
@@ -131,6 +141,8 @@ class FinetuneService:
             raw_samples.extend(self._load_chat_session_samples(payload.limit))
         if payload.include_training_signals:
             raw_samples.extend(self._training_signal_store.load_samples(payload.limit))
+        if payload.include_dpo_negatives:
+            raw_samples.extend(self._training_signal_store.load_dpo_samples(payload.limit))
 
         sources_manifest = self._count_sources(raw_samples)
 
@@ -145,6 +157,7 @@ class FinetuneService:
             raw_samples,
             CuratorConfig(
                 deduplicate=payload.curate_deduplicate,
+                dedup_output_prefix_len=payload.curate_dedup_output_prefix_len,
                 min_output_chars=payload.curate_min_output_chars,
                 max_output_chars=payload.curate_max_output_chars,
                 skip_error_patterns=payload.curate_skip_error_patterns,
@@ -185,6 +198,62 @@ class FinetuneService:
             ],
             "curation": curation_stats.as_dict(),
             "sources": sources_manifest,
+        }
+
+    def export_trajectory_sft(self, payload: FinetuneTrajectoryExportRequest) -> dict[str, object]:
+        rows, stats = load_trajectory_sft_rows(
+            self.agent_run_sqlite_path,
+            limit=payload.limit,
+            success_only=payload.success_only,
+            min_messages=payload.min_messages,
+            system_prompt=payload.system_prompt,
+        )
+        if stats.exported < payload.min_samples:
+            raise ValueError(
+                f"Trajectory SFT export has {stats.exported} samples; "
+                f"minimum required is {payload.min_samples}."
+            )
+        slug = payload.name.strip().replace(" ", "_").lower()[:40] or "trajectory"
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        dataset_path = self.datasets_dir / f"{slug}_sft_{timestamp}.jsonl"
+        write_sft_jsonl(dataset_path, rows)
+        return {
+            "name": payload.name,
+            "dataset_path": str(dataset_path),
+            "sample_count": stats.exported,
+            "format": "sft_chat_jsonl",
+            "stats": stats.as_dict(),
+        }
+
+    def export_dpo_dataset(self, payload: FinetuneDpoExportRequest) -> dict[str, object]:
+        negatives = self._training_signal_store.load_dpo_samples(payload.limit)
+        positives = [
+            row
+            for row in self._training_signal_store.load_samples(payload.limit)
+            if str(row.get("origin", "")) not in {"tool_step_negative", "patch_revert"}
+        ]
+        pairs = build_dpo_pairs(
+            negatives,
+            positives,
+            min_chosen_chars=payload.min_chosen_chars,
+        )
+        if len(pairs) < payload.min_pairs:
+            raise ValueError(
+                f"DPO export has {len(pairs)} pairs "
+                f"(negatives={len(negatives)}, positive_pool={len(positives)}); "
+                f"minimum required is {payload.min_pairs}."
+            )
+        slug = payload.name.strip().replace(" ", "_").lower()[:40] or "dpo"
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        dataset_path = self.datasets_dir / f"{slug}_dpo_{timestamp}.jsonl"
+        write_dpo_jsonl(dataset_path, pairs)
+        return {
+            "name": payload.name,
+            "dataset_path": str(dataset_path),
+            "pair_count": len(pairs),
+            "format": "dpo_jsonl",
+            "negative_count": len(negatives),
+            "positive_pool": len(positives),
         }
 
     def create_job(
@@ -266,7 +335,13 @@ class FinetuneService:
             self._write_adapters(adapters)
             if payload.repo_profile_id:
                 self._upsert_repo_profile_model(payload.repo_profile_id, payload.model)
+                self._write_repo_adapter_snapshot(payload.repo_profile_id, adapter)
         return adapter
+
+    def _write_repo_adapter_snapshot(self, repo_profile_id: str, adapter: dict[str, object]) -> None:
+        repo_dir = self.datasets_dir.parent / "adapters" / repo_profile_id
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / "latest.json").write_text(json.dumps(adapter, indent=2), encoding="utf-8")
 
     def list_adapters(self) -> list[dict[str, object]]:
         with self._lock:
@@ -284,18 +359,21 @@ class FinetuneService:
         base_model: Optional[str] = None,
         repo_profile_id: Optional[str] = None,
         adapter_description: str = "",
+        dataset_path: Optional[str] = None,
     ) -> dict[str, object]:
         if self._trainer is None:
             raise ValueError("Finetune trainer is not configured.")
         job = self.get_job(job_id)
         if job is None:
             raise ValueError(f"Unknown finetune job: {job_id}")
+        resolved_dataset = dataset_path or job.dataset_path
         train_result = self._trainer.train_dataset(
-            dataset_path=job.dataset_path,
+            dataset_path=resolved_dataset,
             base_model=base_model or job.base_model,
             output_model=output_model,
             trainer_mode=trainer_mode,
             job_id=job.job_id,
+            repo_profile_id=repo_profile_id,
         )
         adapter: Optional[dict[str, object]] = None
         if train_result.status == "completed" and train_result.output_model:
@@ -365,6 +443,13 @@ class FinetuneService:
         job_id = str(job_info.get("job_id", ""))
         if not job_id:
             raise ValueError("Stage1 run result has no job_id.")
+        trajectory = result.get("trajectory_sft")
+        dataset_override: Optional[str] = None
+        active_mode = (trainer_mode or (self._trainer.trainer_mode if self._trainer else "")).lower()
+        if active_mode == "hf" and isinstance(trajectory, dict):
+            path = trajectory.get("dataset_path")
+            if path:
+                dataset_override = str(path)
         train_payload = self.train_job(
             job_id,
             output_model=output_model,
@@ -378,6 +463,7 @@ class FinetuneService:
             base_model=str(job_info.get("base_model") or request.base_model),
             repo_profile_id=repo_profile_id or request.repo_profile_id,
             adapter_description=adapter_description or request.adapter_description,
+            dataset_path=dataset_override,
         )
         train_payload["run_id"] = run_id
         if self._should_defer_adapter_registration(request):
@@ -526,8 +612,15 @@ class FinetuneService:
             post_pass_rate=post_rate,
             max_regression=self._max_train_regression,
             shadow_on_regression=True,
+            require_post_eval=self._regression_require_post_eval,
         )
         training["regression"] = decision.as_dict()
+        if decision.delta is not None:
+            training["eval_improvement_delta"] = decision.delta
+            if decision.delta < 0.05:
+                training["eval_improvement_warning"] = (
+                    f"Eval improvement {decision.delta:+.2%} below +5% target after finetune."
+                )
 
         output_model = training.get("output_model")
         repo_profile_id = request.repo_profile_id
@@ -626,6 +719,49 @@ class FinetuneService:
             "eval_trend": list(reversed(eval_trend)),
             "regression_gate_enabled": self._regression_gate_enabled,
             "shadow_traffic_percent": self._shadow_traffic_percent,
+            "tuning_report": self.tuning_report(),
+        }
+
+    def tuning_report(self, *, event_limit: int = 5000) -> dict[str, object]:
+        return build_tool_loop_tuning_report(
+            agent_run_sqlite_path=self.agent_run_sqlite_path,
+            training_signals_path=self._training_signal_store.file_path,
+            event_limit=event_limit,
+        )
+
+    def apply_tuning_recommendations(self, project_id: str) -> dict[str, object]:
+        from app.services.project_rules_store import ProjectRulesStore
+
+        report = self.tuning_report()
+        recommendations = [
+            str(item).strip()
+            for item in report.get("recommendations", [])
+            if str(item).strip()
+        ]
+        if not recommendations:
+            return {"applied": False, "recommendations": [], "detail": "No recommendations."}
+
+        store = ProjectRulesStore()
+        current = store.get_rules(project_id)
+        block = "\n".join(f"- {item}" for item in recommendations)
+        marker = "[Tool loop tuning]"
+        existing = str(current.get("project_rules", "")).strip()
+        if marker in existing:
+            head, _, _tail = existing.partition(marker)
+            merged = f"{head.strip()}\n\n{marker}\n{block}".strip()
+        else:
+            merged = f"{existing}\n\n{marker}\n{block}".strip() if existing else f"{marker}\n{block}"
+        store.save_rules(
+            project_id,
+            project_rules=merged,
+            user_rules=str(current.get("user_rules", "")),
+            skills=list(current.get("skills", [])) if isinstance(current.get("skills"), list) else [],
+        )
+        return {
+            "applied": True,
+            "project_id": project_id,
+            "recommendations": recommendations,
+            "detail": f"Appended {len(recommendations)} tuning notes to project rules.",
         }
 
     @staticmethod
@@ -674,6 +810,7 @@ class FinetuneService:
                     refs.add(str(execution_ref))
         return refs
 
+    @property
     def training_signal_store(self) -> TrainingSignalStore:
         return self._training_signal_store
 
@@ -734,6 +871,36 @@ class FinetuneService:
                 "detail": f"Exported {export['sample_count']} samples to {export['dataset_path']}",
             }
         )
+
+        trajectory_sft: Optional[dict[str, object]] = None
+        if payload.export_trajectory_sft:
+            try:
+                trajectory_sft = self.export_trajectory_sft(
+                    FinetuneTrajectoryExportRequest(
+                        name=f"{payload.name}-trajectory",
+                        limit=min(payload.limit, 300),
+                        min_samples=1,
+                        success_only=True,
+                    )
+                )
+                stages.append(
+                    {
+                        "stage": "trajectory_sft_export",
+                        "status": "completed",
+                        "detail": (
+                            f"Exported {trajectory_sft['sample_count']} trajectory SFT rows "
+                            f"to {trajectory_sft['dataset_path']}"
+                        ),
+                    }
+                )
+            except ValueError as exc:
+                stages.append(
+                    {
+                        "stage": "trajectory_sft_export",
+                        "status": "skipped",
+                        "detail": str(exc)[:300],
+                    }
+                )
 
         if payload.run_eval_baseline and baseline_report is not None:
             pass_rate = float(baseline_report.get("pass_rate", 0.0))
@@ -861,6 +1028,7 @@ class FinetuneService:
             },
             "recipe": recipe,
             "adapter": adapter,
+            "trajectory_sft": trajectory_sft,
             "stages": stages,
         }
 

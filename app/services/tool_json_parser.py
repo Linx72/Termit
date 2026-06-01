@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 from typing import Optional
@@ -57,6 +58,53 @@ def _find_balanced_json_objects(text: str) -> list[str]:
     return objects
 
 
+def repair_json_text(text: str) -> str:
+    """Best-effort fixes for common malformed JSON from local LLMs."""
+    repaired = text.strip()
+    repaired = repaired.replace("\u201c", '"').replace("\u201d", '"')
+    repaired = repaired.replace("\u2018", "'").replace("\u2019", "'")
+    repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+    repaired = re.sub(r"\bTrue\b", "true", repaired)
+    repaired = re.sub(r"\bFalse\b", "false", repaired)
+    repaired = re.sub(r"\bNone\b", "null", repaired)
+    repaired = re.sub(r"(\{|,)\s*([A-Za-z_][A-Za-z0-9_]*)\s*:", r'\1 "\2":', repaired)
+    return repaired
+
+
+def _normalize_action_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    if "action" not in normalized and "type" in normalized:
+        normalized["action"] = normalized["type"]
+    action = str(normalized.get("action", "final")).lower()
+    normalized["action"] = action
+    if action == "tool" and "tool" not in normalized and "name" in normalized:
+        normalized["tool"] = normalized["name"]
+    if action == "tool" and "arguments" not in normalized and "args" in normalized:
+        arguments = normalized["args"]
+        if isinstance(arguments, dict):
+            normalized["arguments"] = arguments
+    return normalized
+
+
+def _loads_json_object(candidate: str) -> Optional[dict[str, object]]:
+    attempts = (candidate, repair_json_text(candidate))
+    for attempt in attempts:
+        try:
+            payload = json.loads(attempt)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            return _normalize_action_payload(payload)
+    for attempt in attempts:
+        try:
+            payload = ast.literal_eval(attempt)
+        except (SyntaxError, ValueError):
+            continue
+        if isinstance(payload, dict):
+            return _normalize_action_payload(payload)
+    return None
+
+
 def _iter_json_candidates(text: str) -> list[str]:
     candidates: list[str] = []
     seen: set[str] = set()
@@ -78,11 +126,8 @@ def _iter_json_candidates(text: str) -> list[str]:
 
 def extract_json_object(text: str) -> Optional[dict[str, object]]:
     for candidate in _iter_json_candidates(text):
-        try:
-            payload = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict):
+        payload = _loads_json_object(candidate)
+        if payload is not None:
             return payload
     return None
 
@@ -91,11 +136,8 @@ def extract_json_objects(text: str) -> list[dict[str, object]]:
     found: list[dict[str, object]] = []
     seen: set[str] = set()
     for candidate in _iter_json_candidates(text):
-        try:
-            payload = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, dict):
+        payload = _loads_json_object(candidate)
+        if payload is None:
             continue
         fingerprint = json.dumps(payload, sort_keys=True, ensure_ascii=True)
         if fingerprint in seen:

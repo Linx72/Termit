@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from app.services.code_retrieval_service import CodeRetrievalService
+from app.services.context_compaction import ContextCompactor
+from app.services.symbol_index_service import SymbolIndexService
+
+
+class ContextPackingService:
+    def __init__(
+        self,
+        root_path: str = ".",
+        max_file_chars: int = 2500,
+        max_total_chars: int = 9000,
+    ) -> None:
+        self.root = Path(root_path).resolve()
+        self.max_file_chars = max(256, max_file_chars)
+        self.max_total_chars = max(1024, max_total_chars)
+
+    def pack(
+        self,
+        *,
+        query: str,
+        changed_files: list[str],
+        retrieval: CodeRetrievalService | None,
+        symbol_index: SymbolIndexService | None,
+        retrieval_limit: int = 5,
+        path_prefix: str = "",
+    ) -> str:
+        sections: list[str] = []
+        used_chars = 0
+
+        def append_section(title: str, body: str) -> None:
+            nonlocal used_chars
+            chunk = f"### {title}\n{body.strip()}\n"
+            if used_chars + len(chunk) > self.max_total_chars:
+                remaining = self.max_total_chars - used_chars
+                if remaining < 128:
+                    return
+                chunk = chunk[:remaining] + "\n...(truncated)\n"
+            sections.append(chunk)
+            used_chars += len(chunk)
+
+        normalized_changed = [item.strip().replace("\\", "/") for item in changed_files if item.strip()]
+        for rel_path in normalized_changed[:8]:
+            excerpt = self._read_excerpt(rel_path)
+            if excerpt:
+                append_section(f"Changed file: {rel_path}", excerpt)
+
+        if retrieval is not None:
+            hits = retrieval.search(query, limit=retrieval_limit, path_prefix=path_prefix)
+            if hits:
+                append_section(
+                    "Retrieval hits",
+                    ContextCompactor.format_retrieval_context(
+                        [(item.path, item.excerpt, item.score) for item in hits]
+                    ),
+                )
+
+        if symbol_index is not None and normalized_changed:
+            neighbors = symbol_index.neighbor_paths(normalized_changed, limit=6)
+            for rel_path in neighbors:
+                excerpt = self._read_excerpt(rel_path, max_chars=1200)
+                if excerpt:
+                    append_section(f"Related file: {rel_path}", excerpt)
+
+        if not sections:
+            return ""
+        return "[Context packing]\n" + "\n".join(sections).strip()
+
+    def _read_excerpt(self, rel_path: str, max_chars: int | None = None) -> str:
+        limit = max_chars or self.max_file_chars
+        target = (self.root / rel_path).resolve()
+        if target != self.root and self.root not in target.parents:
+            return ""
+        if not target.is_file():
+            return ""
+        try:
+            text = target.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+        if len(text) > limit:
+            return text[: limit - 3] + "..."
+        return text

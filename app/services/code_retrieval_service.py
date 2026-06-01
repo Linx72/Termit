@@ -96,6 +96,30 @@ class CodeRetrievalService:
             self._warm_semantic_cache(chunks)
         return indexed_files, len(chunks)
 
+    def reindex_path(self, rel_path: str) -> int:
+        normalized = rel_path.strip().replace("\\", "/")
+        if not normalized:
+            return 0
+        file_path = self._resolve_in_root(normalized)
+        if not file_path.exists() or not file_path.is_file():
+            with self._lock:
+                self._chunks = [chunk for chunk in self._chunks if chunk.path != normalized]
+            return 0
+
+        new_chunks = self._chunk_file(file_path)
+        with self._lock:
+            self._chunks = [chunk for chunk in self._chunks if chunk.path != normalized]
+            self._chunks.extend(new_chunks)
+        if self.mode == "semantic":
+            self._warm_semantic_cache(new_chunks)
+        return len(new_chunks)
+
+    def _resolve_in_root(self, rel_path: str) -> Path:
+        candidate = (self.root / rel_path).resolve()
+        if candidate != self.root and self.root not in candidate.parents:
+            raise ValueError("Path escapes workspace root.")
+        return candidate
+
     def search(
         self,
         query: str,

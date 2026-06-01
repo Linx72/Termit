@@ -7,7 +7,9 @@ from pathlib import Path
 from app.domain.schemas import (
     FinetuneAdapterRegisterRequest,
     FinetuneDatasetExportRequest,
+    FinetuneDpoExportRequest,
     FinetuneStage1RunRequest,
+    FinetuneTrajectoryExportRequest,
 )
 from app.services.finetune_service import FinetuneService
 
@@ -243,6 +245,79 @@ class FinetuneServiceTests(unittest.TestCase):
             self.assertTrue(agent_rows)
             self.assertIn("read_file", agent_rows[0].get("input", ""))
 
+    def test_export_trajectory_sft(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = self._build_service(root)
+            with sqlite3.connect(root / "agent_runs.db") as conn:
+                conn.execute(
+                    """
+                    INSERT INTO agent_run_events(run_id, event_type, state, message, timestamp, attempt)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "r1",
+                        "tool_loop_trace",
+                        "running",
+                        json.dumps(
+                            {
+                                "step": 1,
+                                "action": "tool",
+                                "tool": "read_file",
+                                "observation": "middleware source",
+                                "assistant": '{"action":"tool","tool":"read_file"}',
+                            }
+                        ),
+                        "2026-05-30T00:01:31Z",
+                        1,
+                    ),
+                )
+                conn.commit()
+            result = service.export_trajectory_sft(
+                FinetuneTrajectoryExportRequest(name="agent-traces", min_samples=1, min_messages=3)
+            )
+            self.assertEqual(result["format"], "sft_chat_jsonl")
+            self.assertGreaterEqual(result["sample_count"], 1)
+            row = json.loads(Path(str(result["dataset_path"])).read_text(encoding="utf-8").splitlines()[0])
+            self.assertIn("messages", row)
+
+    def test_export_dpo_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = self._build_service(root)
+            from app.services.training_signal_store import TrainingSignalStore
+
+            instruction = "Fix routing for finetune adapter"
+            store = TrainingSignalStore(
+                str(root / "training_signals.jsonl"),
+                min_output_chars=8,
+                enabled=True,
+            )
+            store.try_capture_tool_step(
+                run_id="dpo-pos",
+                step=1,
+                action="tool",
+                tool="apply_patch",
+                observation="Adapter resolver wired into routing policy successfully.",
+                instruction=instruction,
+                verified=True,
+            )
+            store.try_capture_negative_tool_step(
+                run_id="dpo-neg",
+                step=2,
+                action="tool",
+                tool="apply_patch",
+                observation="Tool error: adapter resolver returned empty model name.",
+                instruction=instruction,
+                reason="tool_error",
+            )
+            service._training_signal_store = store
+            result = service.export_dpo_dataset(
+                FinetuneDpoExportRequest(name="dpo-test", min_pairs=1, min_chosen_chars=8)
+            )
+            self.assertEqual(result["format"], "dpo_jsonl")
+            self.assertGreaterEqual(result["pair_count"], 1)
+
     def test_export_boosts_eval_passed_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -279,6 +354,57 @@ class FinetuneServiceTests(unittest.TestCase):
             task_rows = [row for row in rows if row.get("source") == "task"]
             self.assertTrue(task_rows)
             self.assertEqual(task_rows[0].get("eval_passed"), "1")
+
+    def test_export_dedup_preserves_diverse_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = self._build_service(root)
+            signals_path = root / "training_signals.jsonl"
+            signals_path.write_text(
+                "\n".join(
+                    json.dumps(
+                        {
+                            "instruction": "Implement retry logic",
+                            "output": "Use exponential backoff with jitter for HTTP retries",
+                            "source": "training_signal",
+                            "category": "coding",
+                        }
+                    )
+                    for _ in range(1)
+                )
+                + "\n"
+                + json.dumps(
+                    {
+                        "instruction": "Implement retry logic",
+                        "output": "Wrap requests in tenacity retry decorator with max 3 attempts",
+                        "source": "training_signal",
+                        "category": "coding",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            service.training_signals_path = signals_path
+            from app.services.training_signal_store import TrainingSignalStore
+
+            service._training_signal_store = TrainingSignalStore(str(signals_path), min_output_chars=12)
+            result = service.export_dataset(
+                FinetuneDatasetExportRequest(
+                    name="dedup-diverse",
+                    min_samples=2,
+                    include_feedback=False,
+                    include_tasks=False,
+                    include_agent_runs=False,
+                    include_chat_sessions=False,
+                    include_training_signals=True,
+                    curate_deduplicate=True,
+                )
+            )
+            dataset_path = Path(str(result["dataset_path"]))
+            rows = [json.loads(line) for line in dataset_path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(len(rows), 2)
+            outputs = {row["output"] for row in rows}
+            self.assertEqual(len(outputs), 2)
 
     def test_job_lifecycle_and_adapter_registration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

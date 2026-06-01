@@ -5,9 +5,15 @@ from app.domain.schemas import (
     RetrievalSearchRequest,
     RetrievalSearchResponse,
     RetrievalChunkResponse,
+    RepoMapResponse,
+    SymbolSearchRequest,
+    SymbolSearchResponse,
+    SymbolMatchResponse,
 )
 from app.services.code_retrieval_service import CodeRetrievalService
-from app.state import get_code_retrieval_service
+from app.services.repo_map_service import RepoMapService
+from app.services.symbol_index_service import SymbolIndexService
+from app.state import get_code_retrieval_service, get_repo_map_service, get_symbol_index_service
 
 router = APIRouter(prefix="/api/retrieval", tags=["retrieval"])
 
@@ -61,3 +67,51 @@ async def retrieval_stats(
         indexed_chunks=int(stats["indexed_chunks"]),
         retrieval_mode=str(stats.get("mode", service.mode)),
     )
+
+
+@router.get("/repo-map", response_model=RepoMapResponse)
+async def repo_map(
+    path_prefix: str = "",
+    service: RepoMapService = Depends(get_repo_map_service),
+) -> RepoMapResponse:
+    return RepoMapResponse(
+        summary=service.build_summary(path_prefix=path_prefix),
+        root_path=str(service.root),
+    )
+
+
+@router.post("/symbols/search", response_model=SymbolSearchResponse)
+async def search_symbols(
+    payload: SymbolSearchRequest,
+    service: SymbolIndexService = Depends(get_symbol_index_service),
+) -> SymbolSearchResponse:
+    matches = service.search(payload.query, limit=payload.limit, path_prefix=payload.path_prefix)
+    return SymbolSearchResponse(
+        query=payload.query,
+        total=len(matches),
+        matches=[
+            SymbolMatchResponse(
+                name=item.name,
+                kind=item.kind,
+                path=item.path,
+                line=item.line,
+                callers=[
+                    service.format_graph_ref(edge.caller_path, edge.caller_line, edge.caller_name)
+                    for edge in service.callers_of(item.name, limit=5)
+                ],
+                callees=[
+                    service.format_graph_ref(edge.path, edge.line, edge.callee_name)
+                    for edge in service.callees_of(item.name, limit=5)
+                ],
+            )
+            for item in matches
+        ],
+    )
+
+
+@router.post("/symbols/reindex")
+async def reindex_symbols(
+    service: SymbolIndexService = Depends(get_symbol_index_service),
+) -> dict[str, int]:
+    total = service.reindex()
+    return {"symbols": total}

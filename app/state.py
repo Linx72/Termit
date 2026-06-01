@@ -5,14 +5,27 @@ from app.core.config import get_settings
 from app.services.agent_registry_store import AgentRegistryStore
 from app.services.agent_service import AgentService
 from app.services.agent_run_store import InMemoryAgentRunStore
+from app.services.agent_hook_service import AgentHookService
 from app.services.agent_maintenance_scheduler_service import AgentMaintenanceSchedulerService
+from app.services.agent_schedule_service import AgentScheduleService
+from app.services.guardrail_service import GuardrailService
+from app.services.mcp_registry_service import McpRegistryService
+from app.services.search_provider import build_search_provider
+from app.services.skill_store import SkillStore
+from app.services.trace_span_store import TraceSpanStore
 from app.services.agent_memory_store import AgentMemoryStore
 from app.services.agent_eval_service import AgentEvalService
 from app.services.agent_loop_service import AgentLoopService
 from app.services.local_runtime_service import LocalRuntimeService
 from app.services.chat_service import ChatService
-from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.context_compaction import ContextCompactor
+from app.services.code_retrieval_service import CodeRetrievalService
+from app.services.agent_templates_store import AgentTemplatesStore
+from app.services.context_enrichment_service import ContextEnrichmentService
+from app.services.context_packing_service import ContextPackingService
+from app.services.project_rules_store import ProjectRulesStore
+from app.services.repo_map_service import RepoMapService
+from app.services.symbol_index_service import SymbolIndexService
 from app.services.browser_workflow_service import BrowserWorkflowService
 from app.services.memory_store import MemoryBackend, MemoryStore
 from app.services.metrics_snapshot_store import MetricsSnapshotStore
@@ -29,7 +42,9 @@ from app.services.sqlite_agent_run_store import SQLiteAgentRunStore
 from app.services.eval_report_store import EvalReportStore
 from app.services.eval_service import EvalService
 from app.services.finetune_service import FinetuneService
+from app.services.finetune_adapter_resolver import FinetuneAdapterResolver
 from app.services.finetune_trainer_service import FinetuneTrainerService
+from app.services.patch_outcome_store import PatchOutcomeStore
 from app.services.feedback_store import FeedbackStore
 from app.services.sqlite_task_store import SQLiteTaskStore
 from app.services.task_service import PlanningError, TaskService
@@ -80,6 +95,7 @@ def _build_chat_service() -> ChatService:
         max_chars=settings.context_max_chars,
         summary_max_chars=settings.context_summary_max_chars,
     )
+    enrichment = _build_context_enrichment_service() if settings.context_enrichment_enabled else None
     return ChatService(
         router,
         providers,
@@ -90,6 +106,7 @@ def _build_chat_service() -> ChatService:
         telemetry=telemetry,
         context_compactor=compactor,
         code_retrieval=_build_code_retrieval_service(),
+        context_enrichment=enrichment,
         retrieval_enabled=settings.retrieval_enabled,
         provider_retry_attempts=settings.provider_retry_attempts,
         provider_retry_backoff_ms=settings.provider_retry_backoff_ms,
@@ -106,6 +123,10 @@ def get_chat_service() -> ChatService:
 def _build_agent_registry_store() -> AgentRegistryStore:
     settings = get_settings()
     return AgentRegistryStore(file_path=settings.agent_registry_file_path)
+
+
+def get_agent_registry_store() -> AgentRegistryStore:
+    return _build_agent_registry_store()
 
 
 @lru_cache
@@ -158,8 +179,18 @@ def _build_agent_service() -> AgentService:
         max_response_chars=settings.agent_run_max_response_chars,
         retention_days=settings.agent_run_retention_days,
         training_signal_store=_build_training_signal_store(),
+        patch_outcome_store=_build_patch_outcome_store(),
         verify_after_patch=settings.agent_verify_after_patch,
         verify_cmd=settings.agent_verify_cmd,
+        guardrail_service=_build_guardrail_service(),
+        hook_service=_build_agent_hook_service(),
+        skill_store=_build_skill_store(),
+        search_provider=_build_search_provider(),
+        mcp_registry=_build_mcp_registry_service(),
+        trace_span_store=_build_trace_span_store(),
+        context_enrichment=_build_context_enrichment_service(),
+        guardrails_enabled=settings.guardrails_enabled,
+        default_repo_profile_id=settings.finetune_repo_profile_id,
     )
 
 
@@ -210,8 +241,45 @@ def get_agent_maintenance_scheduler_service() -> AgentMaintenanceSchedulerServic
 
 
 @lru_cache
+def _build_patch_outcome_store() -> PatchOutcomeStore:
+    settings = get_settings()
+    return PatchOutcomeStore(
+        file_path=settings.finetune_patch_outcomes_path,
+        enabled=settings.finetune_capture_patch_reverts,
+    )
+
+
+def get_patch_outcome_store() -> PatchOutcomeStore:
+    return _build_patch_outcome_store()
+
+
+@lru_cache
 def _build_tooling_service() -> ToolingService:
-    return ToolingService(root_path=".")
+    settings = get_settings()
+    signals = _build_training_signal_store()
+    patches = _build_patch_outcome_store()
+
+    def on_file_changed(path: str) -> None:
+        if settings.finetune_capture_patch_reverts:
+            try:
+                patches.handle_file_changed(
+                    path,
+                    root_path=settings.retrieval_root_path,
+                    training_signals=signals,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        if not settings.retrieval_auto_reindex:
+            return
+        try:
+            _build_code_retrieval_service().reindex_path(path)
+        except Exception:  # noqa: BLE001
+            pass
+
+    return ToolingService(
+        root_path=settings.retrieval_root_path,
+        on_file_changed=on_file_changed,
+    )
 
 
 def get_tooling_service() -> ToolingService:
@@ -303,6 +371,7 @@ def _build_eval_service() -> EvalService:
         browser_service=_build_browser_workflow_service(),
         telemetry=_build_telemetry_store(),
         report_store=EvalReportStore(file_path=settings.eval_report_file_path),
+        retrieval_service=_build_code_retrieval_service(),
     )
 
 
@@ -374,6 +443,73 @@ def get_code_retrieval_service() -> CodeRetrievalService:
 
 
 @lru_cache
+def _build_repo_map_service() -> RepoMapService:
+    settings = get_settings()
+    return RepoMapService(
+        root_path=settings.retrieval_root_path,
+        max_dirs=settings.repo_map_max_dirs,
+    )
+
+
+def get_repo_map_service() -> RepoMapService:
+    return _build_repo_map_service()
+
+
+@lru_cache
+def _build_symbol_index_service() -> SymbolIndexService:
+    settings = get_settings()
+    return SymbolIndexService(root_path=settings.retrieval_root_path)
+
+
+def get_symbol_index_service() -> SymbolIndexService:
+    return _build_symbol_index_service()
+
+
+@lru_cache
+def _build_context_packing_service() -> ContextPackingService:
+    settings = get_settings()
+    return ContextPackingService(root_path=settings.retrieval_root_path)
+
+
+@lru_cache
+def _build_project_rules_store() -> ProjectRulesStore:
+    settings = get_settings()
+    return ProjectRulesStore(base_dir=settings.project_rules_dir)
+
+
+def get_project_rules_store() -> ProjectRulesStore:
+    return _build_project_rules_store()
+
+
+@lru_cache
+def _build_agent_templates_store() -> AgentTemplatesStore:
+    settings = get_settings()
+    return AgentTemplatesStore(file_path=settings.agent_templates_path)
+
+
+def get_agent_templates_store() -> AgentTemplatesStore:
+    return _build_agent_templates_store()
+
+
+@lru_cache
+def _build_context_enrichment_service() -> ContextEnrichmentService:
+    settings = get_settings()
+    return ContextEnrichmentService(
+        repo_map=_build_repo_map_service(),
+        context_packing=_build_context_packing_service(),
+        symbol_index=_build_symbol_index_service(),
+        retrieval=_build_code_retrieval_service(),
+        rules_store=_build_project_rules_store(),
+        repo_map_enabled=True,
+        context_packing_enabled=True,
+    )
+
+
+def get_context_enrichment_service() -> ContextEnrichmentService:
+    return _build_context_enrichment_service()
+
+
+@lru_cache
 def _build_ops_service() -> OpsService:
     settings = get_settings()
     quota_store = None
@@ -401,6 +537,8 @@ def _build_multi_agent_orchestrator() -> MultiAgentOrchestrator:
     return MultiAgentOrchestrator(
         task_service=_build_task_service(),
         chat_service=_build_chat_service(),
+        tooling=_build_tooling_service(),
+        code_retrieval=_build_code_retrieval_service(),
     )
 
 
@@ -409,11 +547,25 @@ def get_multi_agent_orchestrator() -> MultiAgentOrchestrator:
 
 
 @lru_cache
+def _build_finetune_adapter_resolver() -> FinetuneAdapterResolver:
+    settings = get_settings()
+    return FinetuneAdapterResolver(
+        adapters_path=settings.finetune_adapters_path,
+        adapters_dir=settings.finetune_adapters_dir,
+    )
+
+
+def get_finetune_adapter_resolver() -> FinetuneAdapterResolver:
+    return _build_finetune_adapter_resolver()
+
+
+@lru_cache
 def _build_routing_policy_service() -> RoutingPolicyService:
     settings = get_settings()
     return RoutingPolicyService(
         repo_profiles_path=settings.repo_model_profiles_path,
         benchmarks_path=settings.routing_benchmarks_path,
+        adapter_resolver=_build_finetune_adapter_resolver(),
     )
 
 
@@ -426,10 +578,19 @@ def _build_finetune_trainer_service() -> FinetuneTrainerService:
     settings = get_settings()
     return FinetuneTrainerService(
         modelfiles_dir=settings.finetune_modelfiles_dir,
+        adapters_dir=settings.finetune_adapters_dir,
         ollama_bin=settings.finetune_ollama_bin,
+        ollama_base_url=settings.ollama_base_url,
         default_output_model=settings.finetune_output_model,
         trainer_mode=settings.finetune_trainer,
         train_timeout_seconds=settings.finetune_train_timeout_seconds,
+        hf_dry_run=settings.finetune_hf_dry_run,
+        hf_epochs=settings.finetune_hf_epochs,
+        hf_lora_rank=settings.finetune_hf_lora_rank,
+        hf_max_samples=settings.finetune_hf_max_samples,
+        hf_auto_gguf=settings.finetune_hf_auto_gguf,
+        hf_auto_ollama=settings.finetune_hf_auto_ollama,
+        llama_cpp_path=settings.finetune_llama_cpp_path,
     )
 
 
@@ -469,6 +630,7 @@ def _build_finetune_service() -> FinetuneService:
         post_eval_runner=_post_eval_runner,
         training_signal_store=signal_store,
         regression_gate_enabled=settings.finetune_regression_gate_enabled,
+        regression_require_post_eval=settings.finetune_regression_require_post_eval,
         max_train_regression=settings.finetune_max_train_regression,
         shadow_traffic_percent=settings.finetune_shadow_traffic_percent,
     )
@@ -500,3 +662,93 @@ def _build_stage1_scheduler_service() -> Stage1SchedulerService:
 
 def get_stage1_scheduler_service() -> Stage1SchedulerService:
     return _build_stage1_scheduler_service()
+
+
+@lru_cache
+def _build_skill_store() -> SkillStore:
+    settings = get_settings()
+    return SkillStore(settings.skills_dir)
+
+
+def get_skill_store() -> SkillStore:
+    return _build_skill_store()
+
+
+@lru_cache
+def _build_guardrail_service() -> GuardrailService:
+    settings = get_settings()
+    return GuardrailService(max_patch_chars=settings.guardrails_max_patch_chars)
+
+
+def get_guardrail_service() -> GuardrailService:
+    return _build_guardrail_service()
+
+
+@lru_cache
+def _build_agent_hook_service() -> AgentHookService:
+    settings = get_settings()
+    webhook = settings.hooks_webhook_url or settings.alert_webhook_url
+    return AgentHookService(
+        config_path=settings.hooks_config_path,
+        webhook_url=webhook,
+        enabled=settings.hooks_enabled,
+    )
+
+
+def get_agent_hook_service() -> AgentHookService:
+    return _build_agent_hook_service()
+
+
+@lru_cache
+def _build_trace_span_store() -> TraceSpanStore:
+    settings = get_settings()
+    return TraceSpanStore(settings.trace_spans_db_path)
+
+
+def get_trace_span_store() -> TraceSpanStore:
+    return _build_trace_span_store()
+
+
+@lru_cache
+def _build_search_provider():
+    settings = get_settings()
+    return build_search_provider(
+        settings.search_api_url,
+        settings.search_api_key,
+        provider=settings.search_provider,
+    )
+
+
+def get_search_provider():
+    return _build_search_provider()
+
+
+@lru_cache
+def _build_mcp_registry_service() -> McpRegistryService:
+    settings = get_settings()
+    return McpRegistryService(settings.mcp_registry_path)
+
+
+def get_mcp_registry_service() -> McpRegistryService:
+    return _build_mcp_registry_service()
+
+
+def _schedule_enqueue(agent_id: str, payload) -> str:
+    return get_agent_service().create_run(agent_id, payload).run_id
+
+
+@lru_cache
+def _build_agent_schedule_service() -> AgentScheduleService:
+    settings = get_settings()
+    service = AgentScheduleService(
+        db_path=settings.agent_schedules_db_path,
+        enqueue_fn=_schedule_enqueue,
+        poll_interval_seconds=settings.agent_schedules_poll_seconds,
+    )
+    if settings.agent_schedules_enabled:
+        service.start()
+    return service
+
+
+def get_agent_schedule_service() -> AgentScheduleService:
+    return _build_agent_schedule_service()

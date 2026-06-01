@@ -54,7 +54,7 @@ function parseAgentRunSseBlock(block: string): AgentRunStreamEvent | null {
     }
   }
 
-  if (eventName === "status" || eventName === "done" || eventName === "error" || eventName === "timeout") {
+  if (eventName === "status" || eventName === "timeline" || eventName === "done" || eventName === "error" || eventName === "timeout") {
     let data: Record<string, unknown> = {};
     const raw = dataLines.join("\n");
     if (raw) {

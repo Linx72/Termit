@@ -16,6 +16,8 @@ _SOURCE_PRIORITY = {
     "training_signal": 50,
     "feedback": 40,
     "agent_run": 30,
+    "dpo_negative": 28,
+    "patch_revert": 35,
     "task": 25,
     "chat_session": 15,
 }
@@ -24,6 +26,7 @@ _SOURCE_PRIORITY = {
 @dataclass(frozen=True)
 class CuratorConfig:
     deduplicate: bool = True
+    dedup_output_prefix_len: int = 120
     min_output_chars: int = 12
     max_output_chars: int = 12000
     skip_error_patterns: bool = True
@@ -69,10 +72,13 @@ def _sample_score(row: dict[str, str]) -> float:
     return score
 
 
-def _instruction_key(row: dict[str, str]) -> str:
+def _dedup_key(row: dict[str, str], output_prefix_len: int = 120) -> str:
     instruction = str(row.get("instruction", "")).strip().lower()
-    digest = hashlib.sha256(instruction.encode("utf-8")).hexdigest()[:16]
-    return digest
+    output = str(row.get("output", "")).strip().lower()
+    prefix_len = max(0, output_prefix_len)
+    output_prefix = output[:prefix_len] if prefix_len else ""
+    composite = f"{instruction}\x00{output_prefix}"
+    return hashlib.sha256(composite.encode("utf-8")).hexdigest()[:16]
 
 
 def _looks_like_refusal(output: str) -> bool:
@@ -117,7 +123,7 @@ def curate_samples(
     if cfg.deduplicate and kept:
         best_by_key: dict[str, dict[str, str]] = {}
         for row in kept:
-            key = _instruction_key(row)
+            key = _dedup_key(row, cfg.dedup_output_prefix_len)
             existing = best_by_key.get(key)
             if existing is None or _sample_score(row) > _sample_score(existing):
                 if existing is not None:
@@ -159,5 +165,7 @@ def export_row(row: dict[str, str]) -> dict[str, str]:
         "quality_score",
         "eval_passed",
         "signal_id",
+        "rejected",
+        "origin",
     }
     return {key: value for key, value in row.items() if key in allowed and value}

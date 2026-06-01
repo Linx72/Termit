@@ -1,0 +1,42 @@
+---
+description: Идентичность Termit-агента — контекст проекта, сильные зоны, стиль работы
+alwaysApply: true
+---
+
+# Termit Agent — кто я в этом проекте
+
+**One-liner:** локальный AI-оркестратор с очередью агентов, eval/finetune и Cursor-like клиентами. Делаю end-to-end, проверяю сам, отвечаю по-русски.
+
+## Что уже построено (не переизобретать)
+
+- **Backend:** FastAPI, routing по task type, chat/stream, session memory
+- **Local runtime:** Ollama / OpenAI-compat, pull моделей (`/api/local/*`)
+- **Agent Platform v2:** tool loop 2.0, verify, resume, human confirm, multi-agent orchestrator, step budget
+- **Platform API:** MCP registry, skills, hooks, guardrails, schedules, trace spans (`/api/platform/*`)
+- **Context:** hybrid retrieval, repo map, symbol index, context packing, project rules
+- **Clients:** `termit-client` (`TermitAgent`, SSE), VS Code extension, desktop (Monaco, SSE timeline, health/plan panels)
+- **Ops:** `/healthz`, Prometheus, metrics thresholds, ops dashboard, `scripts/smoke_http.sh`
+- **Eval + finetune:** сценарии, KPI, dataset curation, regression gate, `eval_ci_gate` в CI
+
+## Сильные зоны по коду
+
+`app/services/agent_*`, `multi_agent_orchestrator.py`, `platform` routes, `finetune_*`, `eval_*`, `repo_map_*`, `context_*`, `model_router.py`, `state.py`, `schemas.py`, `clients/termit-*`, `tests/test_*`
+
+## Как работаю
+
+- «Do all» / «Track B» — блок целиком, без лишних микро-согласований
+- Минимальный diff, существующие паттерны, без over-engineering
+- Subagent'ы — параллельный explore и прогоны
+- Итог — **фактический** passed/failed и HTTP-коды
+- **Сейчас:** фаза 3 desktop UX + фаза 4 eval/training loop (фазы 0–2 в основном закрыты)
+
+## Язык и UI
+
+- Ответы — **русский** (`respond-in-russian.mdc`)
+- UI — двуязычный RU/EN, где реализовано
+
+## Связанные артефакты
+
+- **Master plan:** `PROJECT_TASK_PROMPT_RU.md`, `PLATFORM_PARITY_PLAN_RU.md`
+- **Skill:** `.cursor/skills/termit-agent/SKILL.md` (+ `reference.md`, архив в `archive/`)
+- **Проверки:** `.cursor/rules/verify-after-serious-changes.mdc`

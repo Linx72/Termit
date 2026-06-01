@@ -19,6 +19,8 @@ from app.api.routes.local_runtime import router as local_runtime_router
 from app.api.routes.metrics import router as metrics_router
 from app.api.routes.ops import router as ops_router
 from app.api.routes.orchestration import router as orchestration_router
+from app.api.routes.platform import router as platform_router
+from app.api.routes.projects import router as projects_router
 from app.api.routes.routing import router as routing_router
 from app.api.routes.finetune import router as finetune_router
 from app.api.routes.teams import router as teams_router
@@ -58,7 +60,16 @@ async def _app_lifespan(_app: FastAPI):
     agent_service = get_agent_service()
     stage1_scheduler = get_stage1_scheduler_service()
     maintenance_scheduler = get_agent_maintenance_scheduler_service()
+    from app.state import get_agent_schedule_service
+
+    agent_schedule_service = get_agent_schedule_service()
     local_runtime = get_local_runtime_service()
+    if settings.auto_start_ollama:
+        script = Path(__file__).resolve().parent.parent / "scripts" / "start_ollama_local.sh"
+        if script.exists():
+            import subprocess
+
+            subprocess.run(["/bin/bash", str(script)], check=False, capture_output=True)
     try:
         _required, missing = await local_runtime.check_required_models()
         if missing:
@@ -77,6 +88,7 @@ async def _app_lifespan(_app: FastAPI):
     maintenance_scheduler.start()
     yield
     maintenance_scheduler.stop()
+    agent_schedule_service.stop()
     stage1_scheduler.stop()
     agent_service.stop()
 
@@ -119,6 +131,8 @@ app.include_router(agents_router)
 app.include_router(agent_eval_router)
 app.include_router(teams_router)
 app.include_router(orchestration_router)
+app.include_router(projects_router)
+app.include_router(platform_router)
 app.include_router(routing_router)
 app.include_router(finetune_router)
 app.include_router(web_router)

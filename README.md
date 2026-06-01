@@ -391,7 +391,7 @@ Use model naming format `provider:model_name`, e.g.:
   - `TERMIT_METRICS_SNAPSHOT_FILE`
 - Beta feedback endpoint:
   - `POST /api/feedback`
-- Eval harness endpoints (24 scenarios in `data/eval_scenarios.json`):
+- Eval harness endpoints (49 scenarios in `data/eval_scenarios.json`):
   - `GET /api/eval/scenarios`
   - `POST /api/eval/run` (executes task/tool/web runner and returns scored result)
   - `POST /api/eval/run-suite` (batch run + JSONL report in `TERMIT_EVAL_REPORT_FILE`)

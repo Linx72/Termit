@@ -5,10 +5,17 @@ from app.core.config import Settings
 from app.domain.schemas import TaskType
 
 if TYPE_CHECKING:
+    from app.services.finetune_adapter_resolver import FinetuneAdapterResolver
     from app.services.routing_policy_service import RoutingPolicyService
 
 
 class ModelRouter:
+    MODEL_PROFILES = {
+        "coding-fast": "code_model",
+        "coding-strong": "analysis_model",
+        "review": "analysis_model",
+    }
+
     def __init__(
         self,
         settings: Settings,
@@ -17,8 +24,19 @@ class ModelRouter:
         self.settings = settings
         self._routing_policy = routing_policy
 
+    def resolve_profile_model(self, profile_name: str) -> Optional[str]:
+        key = profile_name.strip().lower()
+        attr = self.MODEL_PROFILES.get(key)
+        if not attr:
+            return None
+        value = getattr(self.settings, attr, None)
+        return str(value) if value else None
+
     def select_model(self, task_type: TaskType, requested_model: Optional[str] = None) -> str:
         if requested_model:
+            resolved = self.resolve_profile_model(requested_model)
+            if resolved:
+                return resolved
             return requested_model
 
         if task_type == TaskType.coding:
@@ -38,6 +56,9 @@ class ModelRouter:
         routing_policy: str = "default",
     ) -> list[str]:
         if requested_model:
+            resolved = self.resolve_profile_model(requested_model)
+            if resolved:
+                return [resolved]
             return [requested_model]
 
         complexity = self.complexity_tier(task_type=task_type, message=message, history=history or [])
@@ -78,7 +99,8 @@ class ModelRouter:
                 unique = [preferred] + [item for item in unique if item != preferred]
             if routing_policy == "benchmark":
                 unique = self._routing_policy.rank_models_for_task(unique, task_type)
-        return unique
+        max_candidates = max(1, getattr(self.settings, "routing_max_candidates", 4))
+        return unique[:max_candidates]
 
     @staticmethod
     def complexity_tier(task_type: TaskType, message: str, history: list[ChatMessage]) -> str:

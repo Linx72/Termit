@@ -70,4 +70,4 @@ Ghost-text suggestions while typing (off by default):
 
 ## Agent timeline
 
-In the **Agents** tab: click an agent to list recent runs; click a run to watch tool-loop events (polls every 2s until finished).
+In the **Agents** tab: click an agent to list recent runs; click a run to watch tool-loop events via **SSE** (`watchAgentRun` / `GET /api/agents/runs/{id}/stream`).

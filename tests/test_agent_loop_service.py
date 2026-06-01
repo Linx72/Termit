@@ -153,5 +153,62 @@ class AgentLoopIntegrationTests(unittest.TestCase):
             self.assertEqual(target.read_text(encoding="utf-8"), "value=2")
 
 
+    def test_verify_after_patch_auto_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tests_dir = Path(tmp) / "tests"
+            tests_dir.mkdir()
+            (tests_dir / "test_ok.py").write_text(
+                "import unittest\nclass OkTest(unittest.TestCase):\n"
+                "    def test_ok(self):\n        self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            target = Path(tmp) / "sample.txt"
+            target.write_text("value=1", encoding="utf-8")
+
+            chat = LoopChatStub(
+                [
+                    json.dumps(
+                        {
+                            "action": "tool",
+                            "tool": "apply_patch",
+                            "arguments": {
+                                "path": "sample.txt",
+                                "content": "value=2",
+                                "dry_run": False,
+                                "confirmed": True,
+                            },
+                        }
+                    ),
+                    json.dumps({"action": "final", "answer": "done"}),
+                ]
+            )
+            service = AgentService(
+                chat_service=chat,
+                registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                agent_loop_service=AgentLoopService(),
+                verify_after_patch=True,
+                verify_cmd="",
+                max_concurrency=1,
+            )
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Auto Verify Agent",
+                    description="auto verify cmd",
+                    system_prompt="Patch and verify.",
+                    task_type=TaskType.coding,
+                    enabled_tools=["apply_patch", "execute_command"],
+                    use_tool_loop=True,
+                )
+            )
+            result = asyncio.run(
+                service.run_agent(agent.agent_id, AgentRunRequest(input="Update value"))
+            )
+            self.assertEqual(result.response, "done")
+            self.assertEqual(target.read_text(encoding="utf-8"), "value=2")
+
+
 if __name__ == "__main__":
     unittest.main()

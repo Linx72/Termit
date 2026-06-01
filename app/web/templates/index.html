@@ -331,8 +331,28 @@
       <button id="runEvalScenarioBtn" data-tip="runEvalScenarioBtn" data-i18n="btn.runScenario">Run scenario</button>
       <label for="evalCategory" data-tip="evalCategory" data-i18n="label.suiteCategory">Suite category filter (optional)</label>
       <input id="evalCategory" data-tip="evalCategory" placeholder="coding | local | web" />
-      <button id="runEvalSuiteBtn" data-tip="runEvalSuiteBtn" data-i18n="btn.runSuite">Run full suite (24)</button>
+      <button id="runEvalSuiteBtn" data-tip="runEvalSuiteBtn" data-i18n="btn.runSuite">Run full suite</button>
       <button id="listEvalReportsBtn" data-tip="listEvalReportsBtn" data-i18n="btn.listEvalReports">List eval reports</button>
+      <button id="refreshEvalDashboardBtn" data-tip="refreshEvalDashboardBtn">Refresh eval KPI</button>
+      <div id="evalPassRatePanel" class="meta" style="margin:0.5rem 0;font-weight:600;"></div>
+      <div id="evalKpiGrid" class="dashboard-grid" style="margin-top:0.5rem;">
+        <div class="dash-card ok">
+          <h4>Eval pass rate</h4>
+          <div id="evalKpiPass" class="dash-value">—</div>
+        </div>
+        <div class="dash-card ok">
+          <h4>Eval p95 latency</h4>
+          <div id="evalKpiP95" class="dash-value">—</div>
+        </div>
+        <div class="dash-card ok">
+          <h4>Est. cost / suite</h4>
+          <div id="evalKpiCost" class="dash-value">—</div>
+        </div>
+        <div class="dash-card ok">
+          <h4>Scenarios</h4>
+          <div id="evalKpiCount" class="dash-value">—</div>
+        </div>
+      </div>
       <button id="captureMetricsBtn" data-tip="captureMetricsBtn" data-i18n="btn.captureMetrics">Capture KPI snapshot</button>
       </section>
 
@@ -480,6 +500,7 @@
       const evalCategoryEl = document.getElementById("evalCategory");
       const runEvalSuiteBtn = document.getElementById("runEvalSuiteBtn");
       const listEvalReportsBtn = document.getElementById("listEvalReportsBtn");
+      const evalPassRatePanel = document.getElementById("evalPassRatePanel");
       const captureMetricsBtn = document.getElementById("captureMetricsBtn");
       const finetuneRunNameEl = document.getElementById("finetuneRunName");
       const finetuneBaseModelEl = document.getElementById("finetuneBaseModel");
@@ -1775,11 +1796,44 @@
           const data = await resp.json();
           responseMeta.textContent = `suite ${data.run_id}: pass_rate=${data.pass_rate}`;
           responseBox.textContent = JSON.stringify(data, null, 2);
+          await refreshEvalPassRate();
         } catch (error) {
           responseMeta.textContent = "Network error";
           responseBox.textContent = String(error);
         }
       });
+
+      async function refreshEvalPassRate() {
+        if (!evalPassRatePanel) {
+          return;
+        }
+        try {
+          const resp = await fetch("/api/eval/dashboard?limit=5", { headers: authHeaders() });
+          const data = await resp.json();
+          const pct = Math.round(Number(data.pass_rate || 0) * 1000) / 10;
+          const p95 = Number(data.latency_p95_ms || 0);
+          const cost = Number(data.estimated_cost_usd || 0);
+          const total = Number(data.latest_total || 0);
+          const passed = Number(data.latest_passed || 0);
+          evalPassRatePanel.textContent =
+            `Eval KPI: pass ${pct}% (${passed}/${total}) · p95 ${p95}ms · cost ~$${cost.toFixed(4)} · ${data.scenario_count} scenarios`;
+          const passEl = document.getElementById("evalKpiPass");
+          const p95El = document.getElementById("evalKpiP95");
+          const costEl = document.getElementById("evalKpiCost");
+          const countEl = document.getElementById("evalKpiCount");
+          if (passEl) passEl.textContent = total ? `${pct}%` : "—";
+          if (p95El) p95El.textContent = p95 ? `${p95} ms` : "—";
+          if (costEl) costEl.textContent = cost ? `$${cost.toFixed(4)}` : "—";
+          if (countEl) countEl.textContent = String(data.scenario_count || "—");
+        } catch {
+          evalPassRatePanel.textContent = "Eval KPI: unavailable";
+        }
+      }
+
+      const refreshEvalDashboardBtn = document.getElementById("refreshEvalDashboardBtn");
+      if (refreshEvalDashboardBtn) {
+        refreshEvalDashboardBtn.addEventListener("click", () => void refreshEvalPassRate());
+      }
 
       listEvalReportsBtn.addEventListener("click", async () => {
         responseMeta.textContent = "Loading eval reports...";
@@ -1788,6 +1842,7 @@
           const data = await resp.json();
           responseMeta.textContent = `reports: ${data.total}`;
           responseBox.textContent = JSON.stringify(data, null, 2);
+          await refreshEvalPassRate();
         } catch (error) {
           responseMeta.textContent = "Network error";
           responseBox.textContent = String(error);
@@ -2196,6 +2251,7 @@
       });
 
       refreshMetricsHealth();
+      refreshEvalPassRate();
       refreshOperatorDashboard();
       setInterval(refreshOperatorDashboard, 15000);
       if (window.TermitAgentHub) {

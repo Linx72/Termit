@@ -18,6 +18,11 @@ clients/termit-desktop/dist-electron/
 clients/termit-desktop/release/
 clients/termit-desktop/out/
 
+# Cursor hook runtime (tracked: hooks.json + token_watch.py)
+.cursor/hooks/state/*
+!.cursor/hooks/state/.gitkeep
+.cursor/hooks/token_watch.env
+
 # Runtime artifacts under data/ (keep seed JSON tracked)
 data/*
 !data/eval_scenarios.json

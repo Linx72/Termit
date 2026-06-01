@@ -5,18 +5,19 @@ from app.services.finetune_dataset_curator import CuratorConfig, curate_samples
 
 class FinetuneDatasetCuratorTests(unittest.TestCase):
     def test_deduplicate_keeps_higher_quality(self) -> None:
+        shared_prefix = "p" * 120
         samples = [
             {
                 "instruction": "Fix auth bug",
                 "input": "",
-                "output": "Short fix note",
+                "output": shared_prefix + " short tail",
                 "source": "task",
                 "category": "coding",
             },
             {
                 "instruction": "Fix auth bug",
                 "input": "tool trace",
-                "output": "Detailed fix with tests and rationale",
+                "output": shared_prefix + " detailed tail with tests",
                 "source": "agent_run",
                 "category": "agent",
                 "trajectory": "tool trace",
@@ -25,6 +26,50 @@ class FinetuneDatasetCuratorTests(unittest.TestCase):
         curated, stats = curate_samples(samples, CuratorConfig(deduplicate=True))
         self.assertEqual(len(curated), 1)
         self.assertEqual(curated[0]["source"], "agent_run")
+        self.assertEqual(stats.filtered_duplicate, 1)
+
+    def test_deduplicate_keeps_different_outputs_same_instruction(self) -> None:
+        samples = [
+            {
+                "instruction": "Fix auth bug",
+                "input": "",
+                "output": "Short fix note with enough chars",
+                "source": "task",
+                "category": "coding",
+            },
+            {
+                "instruction": "Fix auth bug",
+                "input": "",
+                "output": "Detailed fix with tests and rationale for auth middleware",
+                "source": "agent_run",
+                "category": "agent",
+            },
+        ]
+        curated, stats = curate_samples(samples, CuratorConfig(deduplicate=True))
+        self.assertEqual(len(curated), 2)
+        self.assertEqual(stats.filtered_duplicate, 0)
+
+    def test_deduplicate_collapses_same_instruction_and_output_prefix(self) -> None:
+        prefix = "x" * 120
+        samples = [
+            {
+                "instruction": "Same task",
+                "input": "",
+                "output": prefix + " tail variant one",
+                "source": "task",
+                "category": "coding",
+            },
+            {
+                "instruction": "Same task",
+                "input": "extra context",
+                "output": prefix + " tail variant two",
+                "source": "agent_run",
+                "category": "agent",
+                "trajectory": "trace",
+            },
+        ]
+        curated, stats = curate_samples(samples, CuratorConfig(deduplicate=True))
+        self.assertEqual(len(curated), 1)
         self.assertEqual(stats.filtered_duplicate, 1)
 
     def test_filters_refusal_and_too_short(self) -> None:

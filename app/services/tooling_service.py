@@ -3,6 +3,7 @@ from __future__ import annotations
 import shlex
 import subprocess
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -27,8 +28,13 @@ class ToolingError(Exception):
 
 
 class ToolingService:
-    def __init__(self, root_path: str = ".") -> None:
+    def __init__(
+        self,
+        root_path: str = ".",
+        on_file_changed: Callable[[str], None] | None = None,
+    ) -> None:
         self.root = Path(root_path).resolve()
+        self._on_file_changed = on_file_changed
         self._audit_lock = Lock()
         self._audit_events: list[ToolAuditEvent] = []
 
@@ -286,6 +292,11 @@ class ToolingService:
             reason="Patch applied.",
             path=payload.path,
         )
+        if self._on_file_changed is not None:
+            try:
+                self._on_file_changed(rel_path)
+            except Exception:  # noqa: BLE001
+                pass
         return ApplyPatchResponse(
             path=payload.path,
             risk_level=ToolRiskLevel.confirm,

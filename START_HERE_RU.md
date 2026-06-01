@@ -84,6 +84,23 @@ TERMIT_RETRIEVAL_EMBED_MODEL=nomic-embed-text
 
 Переиндекс: UI или `POST /api/retrieval/reindex`. Без Ollama embeddings — fallback на keyword.
 
+## 7. Первый Composer run за ~10 минут
+
+1. Запустите API (`./scripts/start_server.sh` или LaunchAgent) и Ollama с моделью из `.env.example`.
+2. Откройте **Termit desktop** или VS Code extension → **Connect** (индикатор API зелёный).
+3. **Choose folder** — корень репозитория с кодом.
+4. Вкладка **Composer** → **Add file** (или `@file` в chat) → опишите задачу, например: «Добавь unit-тест для функции X».
+5. Дождитесь diff preview → **Apply** (или Apply all).
+6. Опционально: вкладка **Agents** → запустите agent run с tool loop — timeline обновляется через **SSE** (`/api/agents/runs/{id}/stream`).
+
+Post-patch verify (авто `pytest`/`npm test` при `TERMIT_AGENT_VERIFY_AFTER_PATCH=true`):
+
+```bash
+# .env
+TERMIT_AGENT_VERIFY_AFTER_PATCH=true
+# TERMIT_AGENT_VERIFY_CMD=  # пусто = авто по типу репо
+```
+
 ## Шпаргалка скриптов
 
 | Скрипт | Назначение |
@@ -95,5 +112,9 @@ TERMIT_RETRIEVAL_EMBED_MODEL=nomic-embed-text
 | `package_desktop.sh` | Собрать Termit.app |
 | `install_launch_agent.sh` | **По умолчанию:** API при входе в macOS (LaunchAgent) |
 | `check_ollama_models.sh` | Проверка моделей из `.env` / embed |
+| `smoke_http.sh` | Curl smoke `:8765` (health, readiness, agent metrics) |
+| `smoke_all.sh` | Тесты + platform e2e + smoke HTTP (единый контур Фазы 0) |
+| `training_loop_week2.sh` | Export signals → job → KPI dashboard (Фаза 4) |
+| `release_smoke.sh` | То же, что `smoke_all.sh` (alias) |
 
 Подробнее: [DESKTOP_QUICKSTART.md](DESKTOP_QUICKSTART.md), [GITHUB_SETUP_RU.md](GITHUB_SETUP_RU.md), [SYNC_WORKFLOW.md](SYNC_WORKFLOW.md).

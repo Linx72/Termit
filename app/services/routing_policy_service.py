@@ -26,9 +26,11 @@ class RoutingPolicyService:
         self,
         repo_profiles_path: str = "./data/repo_model_profiles.json",
         benchmarks_path: str = "./data/routing_benchmarks.json",
+        adapter_resolver: Optional["FinetuneAdapterResolver"] = None,
     ) -> None:
         self._repo_profiles_path = Path(repo_profiles_path)
         self._benchmarks_path = Path(benchmarks_path)
+        self._adapter_resolver = adapter_resolver
         self._profiles_mtime: float = -1.0
         self._profiles: list[RepoModelProfile] = []
         self._benchmark_scores: dict[str, dict[str, float]] = {}
@@ -63,6 +65,10 @@ class RoutingPolicyService:
             profile = self.get_repo_profile(profile_id)
             if profile is not None:
                 return self._pick_profile_model(profile)
+            if self._adapter_resolver is not None:
+                adapter_model = self._adapter_resolver.resolve_model(profile_id)
+                if adapter_model:
+                    return adapter_model
 
         normalized_prefix = path_prefix.strip().replace("\\", "/")
         for profile in self._profiles:

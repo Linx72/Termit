@@ -13,7 +13,12 @@ import type {
   TaskType,
 } from "./types";
 
-const TERMINAL_RUN_STATES = new Set(["completed", "failed", "cancelled"]);
+const STOP_WATCH_STATES = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+  "awaiting_confirmation",
+]);
 
 export interface InlineEditParams {
   instruction: string;
@@ -148,17 +153,19 @@ export async function watchAgentRun(
   onUpdate: (payload: { run: AgentRunRecord; events: AgentRunEvent[] }) => void,
   options: AgentRunWatchOptions = {}
 ): Promise<void> {
-  const refresh = async (): Promise<AgentRunRecord> => {
-    const [run, events] = await Promise.all([
-      client.getAgentRun(runId),
-      client.getAgentRunEvents(runId),
-    ]);
-    onUpdate({ run, events });
-    return run;
+  let run: AgentRunRecord | null = null;
+  let events: AgentRunEvent[] = [];
+
+  const emit = () => {
+    if (run) {
+      onUpdate({ run, events });
+    }
   };
 
-  let run = await refresh();
-  if (TERMINAL_RUN_STATES.has(run.state)) {
+  run = await client.getAgentRun(runId);
+  events = await client.getAgentRunEvents(runId);
+  emit();
+  if (STOP_WATCH_STATES.has(run.state)) {
     return;
   }
 
@@ -167,12 +174,20 @@ export async function watchAgentRun(
       break;
     }
     if (event.event === "status") {
-      run = await refresh();
-      if (TERMINAL_RUN_STATES.has(run.state)) {
+      run = event.data as AgentRunRecord;
+      emit();
+      if (run && STOP_WATCH_STATES.has(run.state)) {
         break;
       }
+    } else if (event.event === "timeline") {
+      events = [...events, event.data as AgentRunEvent];
+      emit();
     } else if (event.event === "done" || event.event === "timeout") {
-      await refresh();
+      if (!run || !STOP_WATCH_STATES.has(run.state)) {
+        run = await client.getAgentRun(runId);
+        events = await client.getAgentRunEvents(runId);
+        emit();
+      }
       break;
     } else if (event.event === "error") {
       throw new Error(String(event.data.detail ?? "Agent stream error"));

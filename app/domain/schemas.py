@@ -38,8 +38,13 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     use_memory: bool = True
     use_retrieval: bool = False
+    use_repo_map: bool = True
+    use_context_packing: bool = True
     retrieval_limit: int = Field(default=5, ge=1, le=20)
     retrieval_path_prefix: str = ""
+    changed_files: list[str] = Field(default_factory=list)
+    symbol_query: Optional[str] = None
+    project_id: Optional[str] = None
     repo_profile: Optional[str] = None
     routing_policy: str = Field(default="default", pattern="^(default|benchmark)$")
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
@@ -127,6 +132,60 @@ class RetrievalIndexResponse(BaseModel):
     indexed_files: int
     indexed_chunks: int
     retrieval_mode: str = "keyword"
+
+
+class RepoMapResponse(BaseModel):
+    summary: str
+    root_path: str
+
+
+class SymbolMatchResponse(BaseModel):
+    name: str
+    kind: str
+    path: str
+    line: int
+    callers: list[str] = Field(default_factory=list)
+    callees: list[str] = Field(default_factory=list)
+
+
+class SymbolSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=200)
+    limit: int = Field(default=10, ge=1, le=30)
+    path_prefix: str = ""
+
+
+class SymbolSearchResponse(BaseModel):
+    query: str
+    total: int
+    matches: list[SymbolMatchResponse] = Field(default_factory=list)
+
+
+class ProjectRulesResponse(BaseModel):
+    project_id: str
+    project_rules: str = ""
+    user_rules: str = ""
+    skills: list[str] = Field(default_factory=list)
+
+
+class ProjectRulesUpdateRequest(BaseModel):
+    project_rules: str = ""
+    user_rules: str = ""
+    skills: list[str] = Field(default_factory=list)
+
+
+class AgentTemplateResponse(BaseModel):
+    template_id: str
+    name: str
+    description: str
+    task_type: TaskType
+    system_prompt: str
+    enabled_tools: list[str] = Field(default_factory=list)
+    use_tool_loop: bool = False
+    use_retrieval: bool = False
+
+
+class AgentTemplateListResponse(BaseModel):
+    templates: list[AgentTemplateResponse] = Field(default_factory=list)
 
 
 class ProviderInfo(BaseModel):
@@ -237,6 +296,7 @@ class OrchestrationRunRequest(BaseModel):
     retrieval_path_prefix: str = ""
     repo_profile: Optional[str] = None
     routing_policy: str = Field(default="benchmark", pattern="^(default|benchmark)$")
+    plan_only: bool = False
 
 
 class OrchestrationPhaseResult(BaseModel):
@@ -346,6 +406,13 @@ class AgentRunsMetricsResponse(BaseModel):
     health_status: str = "ok"
     health_reasons: list[str] = Field(default_factory=list)
     active_thresholds: AgentAlertThresholds = Field(default_factory=AgentAlertThresholds)
+    tool_loop_runs: int = 0
+    tool_loop_tool_steps: int = 0
+    tool_loop_tool_errors: int = 0
+    tool_loop_parse_errors: int = 0
+    tool_loop_final_steps: int = 0
+    tool_loop_tool_success_rate: float = 0.0
+    tool_loop_completion_rate: float = 0.0
 
 
 class AgentRunsCleanupRequest(BaseModel):
@@ -515,6 +582,18 @@ class EvalSuiteRunResponse(BaseModel):
 class EvalReportSummaryResponse(BaseModel):
     reports: list[dict[str, object]] = Field(default_factory=list)
     total: int
+
+
+class EvalDashboardResponse(BaseModel):
+    pass_rate: float = 0.0
+    latency_p95_ms: int = 0
+    chat_latency_p95_ms: Optional[int] = None
+    estimated_cost_usd: float = 0.0
+    latest_run_id: Optional[str] = None
+    latest_total: int = 0
+    latest_passed: int = 0
+    scenario_count: int = 0
+    recent_reports: list[dict[str, object]] = Field(default_factory=list)
 
 
 class ListFilesRequest(BaseModel):
@@ -698,6 +777,7 @@ class AgentProfileCreateRequest(BaseModel):
     use_tool_loop: bool = False
     max_tool_steps: int = Field(default=6, ge=1, le=20)
     use_long_term_memory: bool = True
+    skill_ids: list[str] = Field(default_factory=list)
 
 
 class AgentProfileResponse(BaseModel):
@@ -721,6 +801,7 @@ class AgentProfileResponse(BaseModel):
     use_tool_loop: bool = False
     max_tool_steps: int = 6
     use_long_term_memory: bool = True
+    skill_ids: list[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
 
@@ -728,6 +809,7 @@ class AgentProfileResponse(BaseModel):
 class AgentRunState(str, Enum):
     queued = "queued"
     running = "running"
+    awaiting_confirmation = "awaiting_confirmation"
     completed = "completed"
     failed = "failed"
     cancelled = "cancelled"
@@ -746,6 +828,12 @@ class AgentRunRequest(BaseModel):
     max_tokens: Optional[int] = Field(default=None, ge=64, le=8192)
     use_tool_loop: Optional[bool] = None
     priority: int = Field(default=0, ge=0, le=100)
+    resume_checkpoint: Optional[dict[str, object]] = None
+    workspace_scope: Optional[str] = None
+    repo_profile: Optional[str] = None
+    parent_run_id: Optional[str] = None
+    project_id: Optional[str] = None
+    changed_files: list[str] = Field(default_factory=list)
 
 
 class AgentEvalRunRequest(BaseModel):
@@ -788,6 +876,24 @@ class AgentRunRecordResponse(BaseModel):
     attempted_models: list[str] = Field(default_factory=list)
     response: str = ""
     error: Optional[str] = None
+    checkpoint_json: Optional[str] = None
+    parent_run_id: Optional[str] = None
+
+
+class AgentRunConfirmRequest(BaseModel):
+    approved: bool = True
+
+
+class AgentRunConfirmResponse(BaseModel):
+    run_id: str
+    state: AgentRunState
+    resumed: bool = False
+
+
+class AgentRunResumeResponse(BaseModel):
+    run_id: str
+    state: AgentRunState
+    resumed: bool = False
 
 
 class AgentRunEvent(BaseModel):
@@ -823,11 +929,13 @@ class FinetuneDatasetExportRequest(BaseModel):
     include_chat_sessions: bool = True
     include_trajectory: bool = True
     include_training_signals: bool = True
+    include_dpo_negatives: bool = True
     prefer_eval_passed: bool = True
     min_rating: int = Field(default=4, ge=1, le=5)
     min_samples: int = Field(default=1, ge=1, le=10000)
     limit: int = Field(default=500, ge=1, le=5000)
     curate_deduplicate: bool = True
+    curate_dedup_output_prefix_len: int = Field(default=120, ge=0, le=2000)
     curate_min_output_chars: int = Field(default=12, ge=1, le=5000)
     curate_max_output_chars: int = Field(default=12000, ge=100, le=100000)
     curate_skip_error_patterns: bool = True
@@ -845,6 +953,39 @@ class FinetuneDatasetExportResponse(BaseModel):
     sources: dict[str, int] = Field(default_factory=dict)
 
 
+class FinetuneTrajectoryExportRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    limit: int = Field(default=200, ge=1, le=5000)
+    min_samples: int = Field(default=1, ge=1, le=10000)
+    success_only: bool = True
+    min_messages: int = Field(default=3, ge=2, le=50)
+    system_prompt: str = Field(default="", max_length=4000)
+
+
+class FinetuneTrajectoryExportResponse(BaseModel):
+    name: str
+    dataset_path: str
+    sample_count: int
+    format: str = "sft_chat_jsonl"
+    stats: dict[str, int] = Field(default_factory=dict)
+
+
+class FinetuneDpoExportRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    limit: int = Field(default=500, ge=1, le=5000)
+    min_pairs: int = Field(default=1, ge=1, le=10000)
+    min_chosen_chars: int = Field(default=12, ge=4, le=5000)
+
+
+class FinetuneDpoExportResponse(BaseModel):
+    name: str
+    dataset_path: str
+    pair_count: int
+    format: str = "dpo_jsonl"
+    negative_count: int = 0
+    positive_pool: int = 0
+
+
 class FinetuneTrainingDashboardResponse(BaseModel):
     stage1_runs: list[dict[str, object]] = Field(default_factory=list)
     latest_dataset: Optional[str] = None
@@ -853,6 +994,14 @@ class FinetuneTrainingDashboardResponse(BaseModel):
     eval_trend: list[dict[str, object]] = Field(default_factory=list)
     regression_gate_enabled: bool = True
     shadow_traffic_percent: float = 10.0
+    tuning_report: dict[str, object] = Field(default_factory=dict)
+
+
+class FinetuneTuningReportResponse(BaseModel):
+    signal_origins: dict[str, int] = Field(default_factory=dict)
+    event_stats: dict[str, object] = Field(default_factory=dict)
+    dpo_negative_count: int = 0
+    recommendations: list[str] = Field(default_factory=list)
 
 
 class AgentRunReplayResponse(BaseModel):
@@ -936,6 +1085,7 @@ class FinetuneStage1RunRequest(BaseModel):
     eval_limit: Optional[int] = Field(default=24, ge=1, le=100)
     curate_deduplicate: bool = True
     curate_stratified_balance: bool = True
+    export_trajectory_sft: bool = True
     notes: str = Field(default="", max_length=2000)
     auto_register_adapter: bool = False
     adapter_name: Optional[str] = Field(default=None, max_length=120)
@@ -1005,6 +1155,7 @@ class FinetuneTrainResponse(BaseModel):
     status: str
     output_model: Optional[str] = None
     modelfile_path: Optional[str] = None
+    adapter_path: Optional[str] = None
     command: Optional[str] = None
     detail: str = ""
     duration_ms: int = 0
@@ -1027,3 +1178,120 @@ class FinetuneStage1SchedulerStatusResponse(BaseModel):
     last_run_at: Optional[str] = None
     last_run_source: Optional[str] = None
     thread_alive: bool = False
+
+
+class SkillSummaryResponse(BaseModel):
+    skill_id: str
+    name: str
+    description: str = ""
+
+
+class SkillListResponse(BaseModel):
+    skills: list[SkillSummaryResponse] = Field(default_factory=list)
+
+
+class SkillDetailResponse(BaseModel):
+    skill_id: str
+    name: str
+    description: str = ""
+    content: str
+
+
+class HookStatusResponse(BaseModel):
+    enabled: bool
+    webhook_configured: bool
+    configured_events: list[str] = Field(default_factory=list)
+
+
+class GuardrailCheckRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=50000)
+    kind: str = Field(default="prompt", pattern="^(prompt|patch)$")
+
+
+class GuardrailCheckResponse(BaseModel):
+    allowed: bool
+    reason: str = ""
+    severity: str = "info"
+
+
+class TraceSpanResponse(BaseModel):
+    span_id: str
+    run_id: str
+    name: str
+    status: str
+    detail: str = ""
+    duration_ms: int = 0
+    created_at: str
+
+
+class TraceSpanListResponse(BaseModel):
+    run_id: str
+    spans: list[TraceSpanResponse] = Field(default_factory=list)
+
+
+class McpServerCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    command: str = Field(min_length=1, max_length=500)
+    args: list[str] = Field(default_factory=list)
+    enabled: bool = True
+    allowed_tools: list[str] = Field(default_factory=list)
+    server_id: Optional[str] = None
+
+
+class McpServerResponse(BaseModel):
+    server_id: str
+    name: str
+    command: str
+    args: list[str] = Field(default_factory=list)
+    enabled: bool = True
+    allowed_tools: list[str] = Field(default_factory=list)
+
+
+class McpServerListResponse(BaseModel):
+    servers: list[McpServerResponse] = Field(default_factory=list)
+
+
+class McpInvokeRequest(BaseModel):
+    tool_name: str = Field(min_length=1, max_length=120)
+    arguments: dict[str, object] = Field(default_factory=dict)
+
+
+class McpInvokeResponse(BaseModel):
+    result_json: str
+
+
+class AgentScheduleCreateRequest(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=64)
+    cron: str = Field(min_length=1, max_length=64)
+    input: str = Field(min_length=1, max_length=20000)
+    use_tool_loop: Optional[bool] = None
+
+
+class AgentScheduleResponse(BaseModel):
+    schedule_id: str
+    agent_id: str
+    cron: str
+    enabled: bool = True
+    next_run_at: Optional[str] = None
+    last_run_at: Optional[str] = None
+
+
+class AgentScheduleListResponse(BaseModel):
+    schedules: list[AgentScheduleResponse] = Field(default_factory=list)
+
+
+class PlatformSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    max_results: int = Field(default=5, ge=1, le=20)
+
+
+class PlatformSearchHitResponse(BaseModel):
+    title: str
+    url: str
+    snippet: str
+
+
+class PlatformSearchResponse(BaseModel):
+    query: str
+    provider: str
+    hits: list[PlatformSearchHitResponse] = Field(default_factory=list)

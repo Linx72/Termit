@@ -168,6 +168,20 @@ async def metrics_prometheus(
         lines.append("# TYPE termit_agent_runs_total gauge")
         for state, count in sorted(by_state.items()):
             lines.append(_prom_line("termit_agent_runs_total", int(count), labels={"state": str(state)}))
+    for key, help_text in (
+        ("tool_loop_runs", "Agent runs with tool-loop events."),
+        ("tool_loop_tool_steps", "Successful tool-loop tool steps."),
+        ("tool_loop_tool_errors", "Failed tool-loop tool steps."),
+        ("tool_loop_parse_errors", "Tool-loop JSON parse errors."),
+        ("tool_loop_final_steps", "Tool-loop final steps."),
+    ):
+        lines.append(f"# HELP termit_{key} {help_text}")
+        lines.append(f"# TYPE termit_{key} gauge")
+        lines.append(_prom_line(f"termit_{key}", float(queue.get(key, 0))))
+    for key in ("tool_loop_tool_success_rate", "tool_loop_completion_rate"):
+        lines.append(f"# HELP termit_{key} Tool-loop success ratio.")
+        lines.append(f"# TYPE termit_{key} gauge")
+        lines.append(_prom_line(f"termit_{key}", float(queue.get(key, 0.0))))
     for row in telemetry.http_endpoint_metrics():
         endpoint = str(row["endpoint"]).replace('"', "")
         labels = {"endpoint": endpoint}

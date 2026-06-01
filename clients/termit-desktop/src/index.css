@@ -699,3 +699,164 @@ button.compact {
   flex-direction: column;
   min-height: 0;
 }
+
+.health-dashboard,
+.changed-files,
+.model-manager {
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.health-dashboard-header,
+.changed-files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.health-stats {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.8rem;
+  color: #8b949e;
+}
+
+.health-tag.ok {
+  color: #3fb950;
+}
+
+.health-tag.degraded,
+.health-tag.critical {
+  color: #f85149;
+}
+
+.changed-files-list {
+  max-height: 140px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.changed-files-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: #c9d1d9;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+.changed-files-item:hover {
+  background: #21262d;
+}
+
+.git-status {
+  font-family: ui-monospace, monospace;
+  color: #58a6ff;
+  min-width: 1.5rem;
+}
+
+.chat-sessions-search {
+  width: 100%;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+  color: #e6edf3;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+}
+
+.chat-session-rename {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.chat-session-rename input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-session-rename-btn {
+  border: none;
+  background: transparent;
+  color: #8b949e;
+  padding: 4px;
+}
+
+.composer-patch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.list-item-main {
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 8px;
+}
+
+.terminal-panel .terminal-input {
+  flex: 1;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+  color: #e6edf3;
+  padding: 8px 10px;
+}
+
+.terminal-quick {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.terminal-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.terminal-entry {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.plan-log {
+  max-height: 360px;
+}
+
+.wizard-section {
+  border-top: 1px solid #30363d;
+  padding-top: 12px;
+}
+
+.wizard-model-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.wizard-model-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.model-missing ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

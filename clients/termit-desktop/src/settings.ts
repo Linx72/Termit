@@ -13,6 +13,7 @@ export interface StoredSettings {
   selectedModel: string;
   repoProfile: string;
   inlineCompletionEnabled: boolean;
+  locale: import("./i18n").Locale;
 }
 
 export const STORAGE_KEY = "termit-app-settings";
@@ -28,10 +29,11 @@ export function loadSettings(): StoredSettings {
     autoStartServer: false,
     autoConnect: true,
     taskType: "coding",
-    useRetrieval: false,
+    useRetrieval: true,
     selectedModel: "",
     repoProfile: "",
     inlineCompletionEnabled: false,
+    locale: "ru",
   };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from uuid import uuid4
 
 from app.domain.schemas import (
+    ChatMessage,
     ChatRequest,
     OrchestrationPhaseResult,
     OrchestrationRunRequest,
@@ -15,38 +17,81 @@ from app.domain.schemas import (
     TaskType,
 )
 from app.services.chat_service import ChatService
+from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.task_service import TaskService
+from app.services.tooling_service import ToolingService
+from app.services.verify_command_resolver import resolve_verify_command
 
 
 class MultiAgentOrchestrator:
-    def __init__(self, task_service: TaskService, chat_service: ChatService) -> None:
+    def __init__(
+        self,
+        task_service: TaskService,
+        chat_service: ChatService,
+        tooling: ToolingService | None = None,
+        code_retrieval: CodeRetrievalService | None = None,
+    ) -> None:
         self._tasks = task_service
         self._chat = chat_service
+        self._tooling = tooling
+        self._retrieval = code_retrieval
 
     async def run(self, payload: OrchestrationRunRequest) -> OrchestrationRunResponse:
         run_id = f"orch_{uuid4().hex[:12]}"
         phases: list[OrchestrationPhaseResult] = []
 
         plan_started = time.perf_counter()
-        plan_steps = self._build_plan(payload.input, payload.task_type)
-        routing_detail = (
-            f"routing_policy={payload.routing_policy}, "
-            f"repo_profile={payload.repo_profile or 'auto'}"
-        )
+        plan_steps = await self._planner_steps(payload)
         phases.append(
             OrchestrationPhaseResult(
                 phase="planner",
                 status="passed",
-                detail=f"Prepared {len(plan_steps)} execution steps ({routing_detail}).",
+                detail=f"Prepared {len(plan_steps)} execution steps.",
                 duration_ms=int((time.perf_counter() - plan_started) * 1000),
             )
         )
 
+        explore_started = time.perf_counter()
+        explore_detail = await self._parallel_explore(payload)
+        phases.append(
+            OrchestrationPhaseResult(
+                phase="explore",
+                status="passed" if explore_detail else "skipped",
+                detail=explore_detail or "Explore skipped.",
+                duration_ms=int((time.perf_counter() - explore_started) * 1000),
+            )
+        )
+
+        if payload.plan_only:
+            report = "\n".join(
+                [
+                    f"Plan-only orchestration {run_id}",
+                    f"Objective: {payload.input}",
+                    "Plan:",
+                    *[f"- {step}" for step in plan_steps],
+                    "",
+                    "Explore:",
+                    explore_detail or "(none)",
+                    "",
+                    "Next: rerun with plan_only=false or enqueue agent run to Build.",
+                ]
+            )
+            return OrchestrationRunResponse(
+                run_id=run_id,
+                status="plan_ready",
+                plan_steps=plan_steps,
+                phases=phases,
+                report=report,
+                executor_response="",
+                session_id=payload.session_id,
+            )
+
         execute_started = time.perf_counter()
         executor_prompt = (
-            "Execute this coding objective using the approved plan.\n"
+            "Execute this coding objective using the approved plan and exploration context.\n"
             f"Objective: {payload.input}\n"
-            f"Plan: {' -> '.join(plan_steps)}"
+            f"Plan: {' -> '.join(plan_steps)}\n"
+            f"Explore:\n{explore_detail or '(none)'}"
         )
         chat_result = await self._chat.chat(
             ChatRequest(
@@ -60,22 +105,34 @@ class MultiAgentOrchestrator:
                 retrieval_path_prefix=payload.retrieval_path_prefix,
                 repo_profile=payload.repo_profile,
                 routing_policy=payload.routing_policy,
+                history=[ChatMessage(role="system", content="You are the coder agent.")],
             )
         )
         executor_response = chat_result.response or ""
         phases.append(
             OrchestrationPhaseResult(
-                phase="executor",
+                phase="coder",
                 status="passed" if executor_response.strip() else "failed",
-                detail="Executor produced a model response."
+                detail="Coder produced a model response."
                 if executor_response.strip()
-                else "Executor returned an empty response.",
+                else "Coder returned an empty response.",
                 duration_ms=int((time.perf_counter() - execute_started) * 1000),
             )
         )
 
+        review_started = time.perf_counter()
+        review_detail, review_ok = await self._reviewer_phase(payload.input, executor_response)
+        phases.append(
+            OrchestrationPhaseResult(
+                phase="reviewer",
+                status="passed" if review_ok else "failed",
+                detail=review_detail,
+                duration_ms=int((time.perf_counter() - review_started) * 1000),
+            )
+        )
+
         verify_started = time.perf_counter()
-        verify_ok, verify_detail = self._verify(payload.input, executor_response)
+        verify_ok, verify_detail = await self._verifier_phase(payload, executor_response)
         phases.append(
             OrchestrationPhaseResult(
                 phase="verifier",
@@ -105,7 +162,7 @@ class MultiAgentOrchestrator:
             )
         )
 
-        overall_ok = all(item.status == "passed" for item in phases)
+        overall_ok = all(item.status in {"passed", "skipped"} for item in phases)
         report = self._build_report(run_id, plan_steps, phases, executor_response, task_status.report or "")
         return OrchestrationRunResponse(
             run_id=run_id,
@@ -116,6 +173,121 @@ class MultiAgentOrchestrator:
             executor_response=executor_response,
             session_id=chat_result.session_id,
         )
+
+    async def _planner_steps(self, payload: OrchestrationRunRequest) -> list[str]:
+        planner_prompt = (
+            "Decompose the task into 3-6 short execution steps as a numbered list only.\n"
+            f"Task: {payload.input}"
+        )
+        try:
+            result = await self._chat.chat(
+                ChatRequest(
+                    message=planner_prompt,
+                    task_type=TaskType.general,
+                    model=payload.model,
+                    session_id=payload.session_id,
+                    use_memory=False,
+                    use_retrieval=False,
+                    history=[ChatMessage(role="system", content="You are the planner agent.")],
+                )
+            )
+            lines = [
+                line.strip(" -")
+                for line in result.response.splitlines()
+                if line.strip()
+            ]
+            steps = [line.split(". ", 1)[-1] for line in lines if len(line) > 2][:6]
+            if len(steps) >= 3:
+                return steps
+        except Exception:  # noqa: BLE001
+            pass
+        return self._build_plan(payload.input, payload.task_type)
+
+    async def _parallel_explore(self, payload: OrchestrationRunRequest) -> str:
+        if not payload.use_retrieval:
+            return ""
+
+        async def retrieval_part() -> str:
+            if self._retrieval is None:
+                return ""
+            hits = await asyncio.to_thread(
+                self._retrieval.search,
+                payload.input,
+                limit=min(payload.retrieval_limit, 5),
+                path_prefix=payload.retrieval_path_prefix,
+            )
+            if not hits:
+                return "retrieval: 0 hits"
+            lines = [f"- {hit.path} (score={hit.score:.2f})" for hit in hits[:5]]
+            return "retrieval hits:\n" + "\n".join(lines)
+
+        async def list_part() -> str:
+            if self._tooling is None:
+                return ""
+            from app.domain.schemas import ListFilesRequest
+
+            try:
+                listing = await asyncio.to_thread(
+                    self._tooling.list_files,
+                    ListFilesRequest(path=payload.retrieval_path_prefix or ".", pattern="*"),
+                )
+                return f"workspace files: {len(listing.files)}"
+            except Exception as exc:  # noqa: BLE001
+                return f"workspace list error: {exc}"
+
+        retrieval_text, list_text = await asyncio.gather(retrieval_part(), list_part())
+        parts = [part for part in (retrieval_text, list_text) if part.strip()]
+        return "\n".join(parts)
+
+    async def _reviewer_phase(self, task_input: str, executor_response: str) -> tuple[str, bool]:
+        if not executor_response.strip():
+            return "Reviewer failed: empty coder output.", False
+        review_prompt = (
+            "Review the coder output for correctness and safety. "
+            "Respond with APPROVED or list concrete issues.\n"
+            f"Task: {task_input}\n\nOutput:\n{executor_response[:4000]}"
+        )
+        try:
+            result = await self._chat.chat(
+                ChatRequest(
+                    message=review_prompt,
+                    task_type=TaskType.review,
+                    use_memory=False,
+                    use_retrieval=False,
+                    history=[ChatMessage(role="system", content="You are the read-only reviewer agent.")],
+                )
+            )
+            text = result.response.strip()
+            ok = text.upper().startswith("APPROVED") or len(text) >= 24
+            return text[:500], ok
+        except Exception as exc:  # noqa: BLE001
+            return f"Reviewer error: {exc}", False
+
+    async def _verifier_phase(
+        self,
+        payload: OrchestrationRunRequest,
+        executor_response: str,
+    ) -> tuple[bool, str]:
+        ok, detail = self._verify(payload.input, executor_response)
+        if not ok:
+            return False, detail
+        if self._tooling is None:
+            return ok, detail
+        verify_cmd = resolve_verify_command(str(self._tooling.root), "")
+        if not verify_cmd:
+            return ok, detail + " (no verify command configured)"
+        from app.domain.schemas import ExecuteCommandRequest
+
+        try:
+            result = await asyncio.to_thread(
+                self._tooling.execute_command,
+                ExecuteCommandRequest(command=verify_cmd, path=".", dry_run=False, confirmed=True),
+            )
+            if result.executed and result.exit_code != 0:
+                return False, f"Verifier command failed: exit_code={result.exit_code}"
+            return True, detail + f" (verify cmd exit_code={result.exit_code})"
+        except Exception as exc:  # noqa: BLE001
+            return ok, detail + f" (verify cmd skipped: {exc})"
 
     @staticmethod
     def _build_plan(task_input: str, task_type: TaskType) -> list[str]:

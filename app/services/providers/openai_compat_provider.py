@@ -1,7 +1,9 @@
+import json
+
 import httpx
 
 from app.domain.schemas import ChatMessage
-from app.services.providers.base import BaseProvider, ProviderError
+from app.services.providers.base import BaseProvider, ProviderError, ProviderToolCall, ProviderToolResponse
 
 
 class OpenAICompatProvider(BaseProvider):
@@ -52,6 +54,69 @@ class OpenAICompatProvider(BaseProvider):
         if not choices:
             return ""
         return choices[0].get("message", {}).get("content", "").strip()
+
+    async def generate_with_tools(
+        self,
+        model_name: str,
+        messages: list[ChatMessage],
+        tools: list[dict[str, object]],
+        temperature: float,
+        max_tokens: int,
+    ) -> ProviderToolResponse:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        payload = {
+            "model": self._strip_prefix(model_name),
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "tools": tools,
+            "tool_choice": "auto",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                )
+        except httpx.HTTPError as exc:
+            raise ProviderError(
+                f"OpenAI-compatible request failed for {self.base_url}: {exc}"
+            ) from exc
+        if resp.status_code >= 400:
+            raise ProviderError(
+                f"OpenAI-compatible endpoint error {resp.status_code}: {resp.text}"
+            )
+        data = resp.json()
+        choices = data.get("choices", [])
+        if not choices:
+            return ProviderToolResponse()
+        message = choices[0].get("message", {})
+        tool_calls_raw = message.get("tool_calls") or []
+        tool_calls: list[ProviderToolCall] = []
+        for item in tool_calls_raw:
+            function = item.get("function") or {}
+            raw_args = function.get("arguments") or "{}"
+            try:
+                arguments = json.loads(raw_args)
+            except json.JSONDecodeError:
+                arguments = {}
+            if not isinstance(arguments, dict):
+                arguments = {}
+            tool_calls.append(
+                ProviderToolCall(
+                    id=str(item.get("id") or function.get("name") or "tool"),
+                    name=str(function.get("name") or ""),
+                    arguments=arguments,
+                )
+            )
+        return ProviderToolResponse(
+            content=str(message.get("content") or "").strip(),
+            tool_calls=tool_calls,
+            finish_reason=str(choices[0].get("finish_reason") or ""),
+        )
 
     def list_models(self) -> list[str]:
         return [

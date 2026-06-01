@@ -3,29 +3,33 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_URL="${TERMIT_BASE_URL:-http://127.0.0.1:8765}"
-API_KEY="${TERMIT_API_KEY:-}"
-
-check() {
-  local path="$1"
-  local code
-  if [[ -n "$API_KEY" ]]; then
-    code="$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -H "X-API-Key: $API_KEY" "$BASE_URL$path")"
-  else
-    code="$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' "$BASE_URL$path")"
-  fi
-  echo "$path -> HTTP $code"
-  [[ "$code" == "200" ]]
-}
 
 cd "$ROOT"
 echo "== Python tests =="
 python3 -m unittest discover -s tests -q
 
-echo "== Smoke HTTP =="
-check /health
-check /healthz
-check /api/metrics/thresholds
-check /api/ops/readiness
-check /api/ops/agent-runs/metrics
+echo "== Platform e2e =="
+python3 -m unittest tests.test_platform_e2e -q
 
-echo "OK"
+echo "== Smoke HTTP =="
+if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
+  ./scripts/smoke_http.sh
+  echo "== Eval CI gate =="
+  curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
+    -H 'Content-Type: application/json' \
+    -d '{"limit":49,"persist_report":false}' \
+    | TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-0.95}" python3 scripts/eval_ci_gate.py
+elif [[ "${TERMIT_SMOKE_REQUIRE_SERVER:-}" == "1" ]]; then
+  echo "TERMIT_SMOKE_REQUIRE_SERVER=1 but server not reachable at $BASE_URL" >&2
+  exit 1
+else
+  echo "Server not running on $BASE_URL — skip live HTTP smoke (run uvicorn on :8765 first)."
+fi
+
+if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
+  echo "== Eval CI gate =="
+  curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
+    -H 'Content-Type: application/json' \
+    -d '{"persist_report":false}' \
+    | python3 scripts/eval_ci_gate.py
+fi

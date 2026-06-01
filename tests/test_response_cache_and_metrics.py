@@ -360,6 +360,7 @@ class MetricsApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("termit_chat_requests_total", resp.text)
         self.assertIn("termit_agent_queue_size", resp.text)
+        self.assertIn("termit_tool_loop_runs", resp.text)
 
 
 if __name__ == "__main__":

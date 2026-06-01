@@ -7,8 +7,13 @@ export interface ChatRequest {
   session_id?: string;
   use_memory?: boolean;
   use_retrieval?: boolean;
+  use_repo_map?: boolean;
+  use_context_packing?: boolean;
   retrieval_limit?: number;
   retrieval_path_prefix?: string;
+  changed_files?: string[];
+  symbol_query?: string;
+  project_id?: string;
   repo_profile?: string;
   routing_policy?: "default" | "benchmark";
   temperature?: number;
@@ -87,6 +92,8 @@ export interface AgentProfile {
   task_type: TaskType;
   model?: string;
   enabled_tools?: string[];
+  max_tool_steps?: number;
+  use_tool_loop?: boolean;
 }
 
 export interface AgentRunRequest {
@@ -94,6 +101,8 @@ export interface AgentRunRequest {
   online_url?: string;
   online_objective?: string;
   session_id?: string;
+  project_id?: string;
+  changed_files?: string[];
 }
 
 export interface AgentRunCreateResponse {
@@ -131,7 +140,7 @@ export interface AgentRunEvent {
 }
 
 export interface AgentRunStreamEvent {
-  event: "status" | "done" | "error" | "timeout";
+  event: "status" | "timeline" | "done" | "error" | "timeout";
   data: Record<string, unknown>;
 }
 
@@ -213,6 +222,112 @@ export interface ExecuteCommandResponse {
   stdout?: string;
   stderr?: string;
   duration_ms?: number;
+}
+
+export interface SymbolMatch {
+  name: string;
+  kind: string;
+  path: string;
+  line: number;
+}
+
+export interface SymbolSearchRequest {
+  query: string;
+  limit?: number;
+  path_prefix?: string;
+}
+
+export interface SymbolSearchResponse {
+  query: string;
+  total: number;
+  matches: SymbolMatch[];
+}
+
+export interface RetrievalStatsResponse {
+  indexed_files: number;
+  indexed_chunks: number;
+  retrieval_mode?: string;
+}
+
+export interface AgentRunsMetrics {
+  queue_size: number;
+  queue_capacity: number;
+  queue_utilization_percent: number;
+  worker_count: number;
+  alive_workers: number;
+  health_status: string;
+  active_runs: number;
+  tool_loop_runs?: number;
+  tool_loop_tool_steps?: number;
+  tool_loop_tool_errors?: number;
+  tool_loop_parse_errors?: number;
+  tool_loop_tool_success_rate?: number;
+  tool_loop_completion_rate?: number;
+}
+
+export interface EvalReportSummary {
+  run_id?: string;
+  timestamp?: number | string;
+  pass_rate?: number;
+  total?: number;
+  passed?: number;
+  failed?: number;
+}
+
+export interface FinetuneTrainingDashboard {
+  stage1_runs: Array<Record<string, unknown>>;
+  latest_dataset?: string | null;
+  datasets_count: number;
+  training_signals_count: number;
+  eval_trend: Array<Record<string, unknown>>;
+  regression_gate_enabled: boolean;
+  shadow_traffic_percent: number;
+  tuning_report: Record<string, unknown>;
+}
+
+export interface OpsReadiness {
+  status: string;
+  passed: number;
+  failed: number;
+}
+
+export interface LocalModelInfo {
+  name: string;
+  size?: number;
+  modified_at?: string;
+}
+
+export interface LocalModelsResponse {
+  models: LocalModelInfo[];
+}
+
+export interface LocalModelPullResponse {
+  model: string;
+  status: string;
+  message?: string;
+}
+
+export interface EvalDashboard {
+  pass_rate: number;
+  latency_p95_ms: number;
+  chat_latency_p95_ms?: number;
+  estimated_cost_usd: number;
+  latest_run_id?: string;
+  latest_total: number;
+  latest_passed: number;
+  scenario_count: number;
+}
+
+export interface PlatformSearchHit {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+export interface PlatformSearchResponse {
+  query: string;
+  provider: string;
+  hits: PlatformSearchHit[];
 }
 
 export interface RepoModelProfile {

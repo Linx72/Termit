@@ -137,6 +137,8 @@ class HealthzApiTests(unittest.TestCase):
         self.assertIn("health_reasons", body)
         self.assertIn("dead_letter_rate", body)
         self.assertIn("active_thresholds", body)
+        self.assertIn("tool_loop_runs", body)
+        self.assertIn("tool_loop_tool_success_rate", body)
 
 
 class OpsServiceHealthzTests(unittest.IsolatedAsyncioTestCase):

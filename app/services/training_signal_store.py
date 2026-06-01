@@ -58,6 +58,178 @@ class TrainingSignalStore:
             row["session_id"] = session_id
         return self._append(row)
 
+    def try_capture_tool_step(
+        self,
+        *,
+        run_id: str,
+        step: int,
+        action: str,
+        tool: Optional[str] = None,
+        observation: str = "",
+        instruction: str = "",
+        assistant_text: str = "",
+        verified: bool = False,
+    ) -> bool:
+        """Capture high-value tool-loop steps (e.g. successful apply_patch) for SFT."""
+        if not self._enabled:
+            return False
+        if action not in {"tool", "final"} and not verified:
+            return False
+        if tool not in {None, "", "apply_patch"} and not verified:
+            return False
+        observation_text = observation.strip()
+        if verified and len(observation_text) < 8:
+            return False
+        if not verified and len(observation_text) < self._min_output_chars:
+            return False
+        signal_id = f"run:{run_id}:step:{step}"
+        if self._has_signal(signal_id):
+            return False
+        row = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "signal_id": signal_id,
+            "source": "training_signal",
+            "origin": "tool_step",
+            "instruction": instruction.strip(),
+            "input": json.dumps(
+                {
+                    "step": step,
+                    "action": action,
+                    "tool": tool or "",
+                    "observation": observation_text[:4000],
+                    "assistant": assistant_text[:4000],
+                },
+                ensure_ascii=False,
+            ),
+            "output": observation_text[:8000] if verified else assistant_text[:8000],
+            "category": "tool_loop",
+            "run_id": run_id,
+            "eval_passed": "1" if verified else "0",
+        }
+        return self._append(row)
+
+    def try_capture_subagent_run(
+        self,
+        *,
+        parent_run_id: str,
+        child_run_id: str,
+        task: str,
+        success: bool,
+        summary: str = "",
+    ) -> bool:
+        if not self._enabled:
+            return False
+        prompt = task.strip()
+        output = summary.strip() or ("subagent run completed" if success else "subagent run failed")
+        if len(output) < self._min_output_chars and len(prompt) >= 4:
+            output = (output + " " + task).strip()[:8000]
+        if len(prompt) < 4:
+            return False
+        signal_id = f"subagent:{parent_run_id}:{child_run_id}"
+        if self._has_signal(signal_id):
+            return False
+        row = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "signal_id": signal_id,
+            "source": "training_signal",
+            "origin": "subagent_run",
+            "instruction": prompt,
+            "input": json.dumps(
+                {"parent_run_id": parent_run_id, "child_run_id": child_run_id},
+                ensure_ascii=False,
+            ),
+            "output": output[:8000] if output else ("completed" if success else "failed"),
+            "category": "subagent",
+            "run_id": child_run_id,
+            "parent_run_id": parent_run_id,
+            "eval_passed": "1" if success else "0",
+        }
+        return self._append(row)
+
+    def try_capture_negative_tool_step(
+        self,
+        *,
+        run_id: str,
+        step: int,
+        action: str,
+        tool: Optional[str] = None,
+        observation: str = "",
+        instruction: str = "",
+        reason: str = "verify_failed",
+    ) -> bool:
+        """Capture failed tool steps for DPO / negative SFT export."""
+        if not self._enabled:
+            return False
+        observation_text = observation.strip()
+        if len(observation_text) < 8 and len(instruction) < 4:
+            return False
+        signal_id = f"run:{run_id}:neg:step:{step}"
+        if self._has_signal(signal_id):
+            return False
+        row = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "signal_id": signal_id,
+            "source": "training_signal",
+            "origin": "tool_step_negative",
+            "instruction": instruction.strip(),
+            "input": json.dumps(
+                {
+                    "step": step,
+                    "action": action,
+                    "tool": tool or "",
+                    "observation": observation_text[:4000],
+                    "reason": reason,
+                },
+                ensure_ascii=False,
+            ),
+            "output": observation_text[:8000],
+            "rejected": observation_text[:8000],
+            "category": "tool_loop_negative",
+            "run_id": run_id,
+            "eval_passed": "0",
+            "skip_export": "0",
+        }
+        return self._append(row)
+
+    def try_capture_patch_revert(
+        self,
+        *,
+        run_id: str,
+        path: str,
+        instruction: str = "",
+        original_hash: str = "",
+        new_hash: str = "",
+        chosen_output: str = "",
+    ) -> bool:
+        if not self._enabled:
+            return False
+        signal_id = f"run:{run_id}:revert:{path}"
+        if self._has_signal(signal_id):
+            return False
+        detail = (
+            f"User edited or reverted agent patch on {path}. "
+            f"hash {original_hash[:12]} -> {new_hash[:12]}"
+        )
+        row = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "signal_id": signal_id,
+            "source": "training_signal",
+            "origin": "patch_revert",
+            "instruction": instruction.strip() or f"Apply patch to {path}",
+            "input": json.dumps(
+                {"path": path, "original_hash": original_hash, "new_hash": new_hash},
+                ensure_ascii=False,
+            ),
+            "output": detail,
+            "rejected": detail,
+            "category": "patch_revert",
+            "run_id": run_id,
+            "eval_passed": "0",
+        }
+        if chosen_output.strip():
+            row["chosen"] = chosen_output.strip()[:8000]
+        return self._append(row)
+
     def try_capture_task(
         self,
         *,
@@ -124,6 +296,55 @@ class TrainingSignalStore:
                 value = item.get(key)
                 if value:
                     sample[key] = str(value)
+            origin = str(item.get("origin", ""))
+            if origin:
+                sample["origin"] = origin
+            rejected = str(item.get("rejected", "")).strip()
+            if rejected:
+                sample["rejected"] = rejected
+            rows.append(sample)
+        rows.reverse()
+        return rows
+
+    def load_dpo_samples(self, limit: int = 500) -> list[dict[str, str]]:
+        """Negative tool-step signals formatted for preference tuning export."""
+        if not self.file_path.exists():
+            return []
+        safe_limit = max(1, min(limit, 5000))
+        rows: list[dict[str, str]] = []
+        with self._lock:
+            lines = self.file_path.read_text(encoding="utf-8").splitlines()
+        for line in reversed(lines):
+            if len(rows) >= safe_limit:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if str(item.get("origin", "")) not in {
+                "tool_step_negative",
+                "patch_revert",
+            }:
+                continue
+            instruction = str(item.get("instruction", "")).strip()
+            rejected = str(item.get("rejected", item.get("output", ""))).strip()
+            if len(instruction) < 4 or len(rejected) < self._min_output_chars:
+                continue
+            sample = {
+                "instruction": instruction,
+                "input": str(item.get("input", "")).strip(),
+                "output": rejected,
+                "rejected": rejected,
+                "source": "dpo_negative",
+                "category": str(item.get("category", "tool_loop_negative")),
+                "run_id": str(item.get("run_id", "")),
+            }
+            chosen = str(item.get("chosen", "")).strip()
+            if chosen:
+                sample["chosen"] = chosen
             rows.append(sample)
         rows.reverse()
         return rows

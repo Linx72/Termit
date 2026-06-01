@@ -50,6 +50,14 @@ def required_role(method: str, path: str) -> str:
         return "viewer"
     if path.startswith("/api/routing"):
         return "viewer"
+    if path.startswith("/api/projects") and method == "POST":
+        return "operator"
+    if path.startswith("/api/projects"):
+        return "viewer"
+    if path.startswith("/api/platform") and method == "POST":
+        return "operator"
+    if path.startswith("/api/platform"):
+        return "viewer"
     if path.startswith("/api/finetune") and method == "POST":
         return "operator"
     if path.startswith("/api/finetune"):

@@ -46,6 +46,20 @@ services:
   #   volumes:
   #     - ollama-data:/root/.ollama
 
+  # Optional: self-hosted web search for Termit web_search tool (no API key)
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "8888:8080"
+    volumes:
+      - ./deploy/searxng:/etc/searxng:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   termit-sqlite:
   caddy-data:

@@ -41,7 +41,15 @@ class AgentMemoryStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_agent_memory_agent ON agent_memory(agent_id, id DESC)"
             )
+            self._ensure_column(conn, "agent_memory", "workspace_scope", "TEXT")
             conn.commit()
+
+    @staticmethod
+    def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        existing = {row[1] for row in rows}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def append(
         self,
@@ -51,18 +59,20 @@ class AgentMemoryStore:
         summary: str,
         detail: str,
         run_id: str | None = None,
+        workspace_scope: str | None = None,
     ) -> None:
         safe_summary = summary.strip()[:500]
         safe_detail = detail.strip()[:2000]
+        safe_scope = (workspace_scope or "").strip()[:200] or None
         if not safe_summary:
             return
         with self._lock, self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO agent_memory(agent_id, outcome, summary, detail, run_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO agent_memory(agent_id, outcome, summary, detail, run_id, created_at, workspace_scope)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (agent_id, outcome, safe_summary, safe_detail, run_id, _utc_now_iso()),
+                (agent_id, outcome, safe_summary, safe_detail, run_id, _utc_now_iso(), safe_scope),
             )
             conn.execute(
                 """
@@ -79,19 +89,38 @@ class AgentMemoryStore:
             )
             conn.commit()
 
-    def get_context(self, agent_id: str, limit: int = 5) -> list[str]:
+    def get_context(
+        self,
+        agent_id: str,
+        limit: int = 5,
+        workspace_scope: str | None = None,
+    ) -> list[str]:
         safe_limit = max(1, min(limit, 20))
+        scope = (workspace_scope or "").strip()
         with self._lock, self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT outcome, summary, detail, created_at
-                FROM agent_memory
-                WHERE agent_id = ?
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (agent_id, safe_limit),
-            ).fetchall()
+            if scope:
+                rows = conn.execute(
+                    """
+                    SELECT outcome, summary, detail, created_at
+                    FROM agent_memory
+                    WHERE agent_id = ?
+                      AND (workspace_scope IS NULL OR workspace_scope = '' OR workspace_scope = ?)
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (agent_id, scope, safe_limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT outcome, summary, detail, created_at
+                    FROM agent_memory
+                    WHERE agent_id = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (agent_id, safe_limit),
+                ).fetchall()
         lines: list[str] = []
         for row in reversed(rows):
             lines.append(

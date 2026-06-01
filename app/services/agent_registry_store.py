@@ -53,6 +53,7 @@ class AgentRegistryStore:
             use_tool_loop=payload.use_tool_loop,
             max_tool_steps=payload.max_tool_steps,
             use_long_term_memory=payload.use_long_term_memory,
+            skill_ids=list(payload.skill_ids),
             created_at=now,
             updated_at=now,
         )

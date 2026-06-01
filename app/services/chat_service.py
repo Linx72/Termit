@@ -18,12 +18,25 @@ from app.domain.schemas import (
 )
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.context_compaction import ContextCompactor
+from app.services.context_enrichment_service import ContextEnrichmentService
 from app.services.memory_store import MemoryBackend
 from app.services.model_router import ModelRouter
 from app.services.provider_circuit_breaker import ProviderCircuitBreaker
-from app.services.providers.base import BaseProvider, ProviderError
+from app.services.providers.base import BaseProvider, ProviderError, ProviderToolCall, ProviderToolResponse
 from app.services.response_cache_store import ResponseCacheStore
 from app.services.telemetry_store import TelemetryStore
+
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class ToolStepChatResult:
+    provider: str
+    model: str
+    content: str
+    tool_calls: list[ProviderToolCall] = field(default_factory=list)
+    attempted_models: list[str] = field(default_factory=list)
 
 
 class ChatService:
@@ -38,6 +51,7 @@ class ChatService:
         telemetry: Optional[TelemetryStore] = None,
         context_compactor: Optional[ContextCompactor] = None,
         code_retrieval: Optional[CodeRetrievalService] = None,
+        context_enrichment: Optional[ContextEnrichmentService] = None,
         retrieval_enabled: bool = True,
         provider_retry_attempts: int = 2,
         provider_retry_backoff_ms: int = 150,
@@ -58,6 +72,7 @@ class ChatService:
         self.telemetry = telemetry
         self._compactor = context_compactor or ContextCompactor()
         self._retrieval = code_retrieval
+        self._enrichment = context_enrichment
         self._retrieval_enabled = retrieval_enabled
         self._provider_retry_attempts = max(1, provider_retry_attempts)
         self._provider_retry_backoff_ms = max(0, provider_retry_backoff_ms)
@@ -82,7 +97,18 @@ class ChatService:
         compaction = self._compactor.compact(messages)
         messages = list(compaction.messages)
         retrieval_hits = 0
-        if payload.use_retrieval and self._retrieval_enabled and self._retrieval is not None:
+        if self._enrichment is not None:
+            enrichment_messages = self._enrichment.build_system_messages(payload)
+            if enrichment_messages:
+                messages = enrichment_messages + messages
+            if payload.use_retrieval and self._retrieval_enabled and self._retrieval is not None:
+                hits = self._retrieval.search(
+                    payload.message,
+                    limit=payload.retrieval_limit,
+                    path_prefix=payload.retrieval_path_prefix,
+                )
+                retrieval_hits = len(hits)
+        elif payload.use_retrieval and self._retrieval_enabled and self._retrieval is not None:
             hits = self._retrieval.search(
                 payload.message,
                 limit=payload.retrieval_limit,
@@ -218,6 +244,64 @@ class ChatService:
             fallback_used=bool(attempted_models and selected_model != attempted_models[0]),
         )
         return response
+
+    async def chat_with_tools(
+        self,
+        payload: ChatRequest,
+        tools: list[dict[str, object]],
+    ) -> ToolStepChatResult:
+        messages = list(payload.history)
+        messages.append(ChatMessage(role="user", content=payload.message))
+
+        candidate_models = self.model_router.candidate_models(
+            payload.task_type,
+            payload.model,
+            message=payload.message,
+            history=messages,
+            repo_profile=payload.repo_profile,
+            path_prefix=payload.retrieval_path_prefix,
+            routing_policy=payload.routing_policy,
+        )
+        attempted: list[str] = []
+        errors: list[str] = []
+
+        for model_name in candidate_models:
+            provider_name = self.model_router.provider_for_model(model_name)
+            provider = self.providers.get(provider_name)
+            attempted.append(model_name)
+            if provider is None:
+                errors.append(f"Provider '{provider_name}' missing for '{model_name}'.")
+                continue
+            generate_with_tools = getattr(provider, "generate_with_tools", None)
+            if generate_with_tools is None:
+                errors.append(f"Provider '{provider_name}' does not support native tools.")
+                continue
+            if self.circuit_breaker and not self.circuit_breaker.is_available(provider_name):
+                errors.append(f"Provider '{provider_name}' circuit is open.")
+                continue
+            try:
+                result: ProviderToolResponse = await generate_with_tools(
+                    model_name=model_name,
+                    messages=messages,
+                    tools=tools,
+                    temperature=payload.temperature,
+                    max_tokens=payload.max_tokens,
+                )
+                if self.circuit_breaker:
+                    self.circuit_breaker.record_success(provider_name)
+                return ToolStepChatResult(
+                    provider=provider_name,
+                    model=model_name,
+                    content=result.content,
+                    tool_calls=list(result.tool_calls),
+                    attempted_models=attempted,
+                )
+            except ProviderError as exc:
+                if self.circuit_breaker:
+                    self.circuit_breaker.record_failure(provider_name)
+                errors.append(str(exc))
+
+        raise ProviderError(" | ".join(errors) if errors else "No tool-capable models available.")
 
     async def fim_complete(self, payload: FimCompletionRequest) -> FimCompletionResponse:
         path_hint = f"File: {payload.path}\n" if payload.path else ""

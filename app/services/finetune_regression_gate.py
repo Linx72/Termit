@@ -30,8 +30,18 @@ def evaluate_training_regression(
     post_pass_rate: Optional[float],
     max_regression: float = 0.02,
     shadow_on_regression: bool = True,
+    require_post_eval: bool = False,
 ) -> RegressionDecision:
     if post_pass_rate is None:
+        if require_post_eval:
+            return RegressionDecision(
+                promote=False,
+                use_shadow=False,
+                baseline_pass_rate=baseline_pass_rate,
+                post_pass_rate=None,
+                delta=None,
+                reason="Post-train eval missing; promotion blocked (require_post_eval).",
+            )
         return RegressionDecision(
             promote=True,
             use_shadow=False,

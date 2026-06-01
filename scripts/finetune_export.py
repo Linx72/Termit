@@ -24,6 +24,8 @@ def main() -> int:
     parser.add_argument("--no-feedback", action="store_true")
     parser.add_argument("--no-tasks", action="store_true")
     parser.add_argument("--no-agent-runs", action="store_true")
+    parser.add_argument("--trajectory", action="store_true", help="Also export trajectory SFT JSONL")
+    parser.add_argument("--no-dpo", action="store_true")
     args = parser.parse_args()
 
     settings = get_settings()
@@ -44,6 +46,7 @@ def main() -> int:
                 include_feedback=not args.no_feedback,
                 include_tasks=not args.no_tasks,
                 include_agent_runs=not args.no_agent_runs,
+                include_dpo_negatives=not args.no_dpo,
                 min_samples=args.min_samples,
             )
         )
@@ -52,6 +55,21 @@ def main() -> int:
         return 1
 
     print(json.dumps(result, indent=2))
+    if args.trajectory:
+        from app.domain.schemas import FinetuneTrajectoryExportRequest
+
+        try:
+            traj = service.export_trajectory_sft(
+                FinetuneTrajectoryExportRequest(
+                    name=f"{args.name}-trajectory",
+                    min_samples=1,
+                    limit=300,
+                )
+            )
+        except ValueError as exc:
+            print(json.dumps({"trajectory_error": str(exc)}, indent=2))
+            return 0
+        print(json.dumps({"trajectory_sft": traj}, indent=2))
     return 0
 
 
