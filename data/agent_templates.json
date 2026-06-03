@@ -1,0 +1,217 @@
+[
+  {
+    "template_id": "fix-ci",
+    "name": "Fix CI",
+    "description": "Diagnose and fix CI pipeline failures",
+    "task_type": "coding",
+    "system_prompt": "You are a CI repair agent. Analyze logs, identify root cause, and propose minimal patches.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true
+  },
+  {
+    "template_id": "write-tests",
+    "name": "Write Tests",
+    "description": "Add or improve unit and integration tests",
+    "task_type": "coding",
+    "system_prompt": "You write focused tests that cover real behavior. Prefer existing test frameworks in the repo.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true
+  },
+  {
+    "template_id": "security-review",
+    "name": "Security Review",
+    "description": "Review code for security issues",
+    "task_type": "review",
+    "system_prompt": "You perform security-focused code review. Flag secrets, injection, authz gaps, and unsafe defaults.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo"
+    ],
+    "use_tool_loop": false,
+    "use_retrieval": true
+  },
+  {
+    "template_id": "cross-platform-flutter",
+    "name": "Cross-platform Flutter",
+    "description": "Atomic tasks for Flutter apps on iOS, Android, macOS, and Windows",
+    "task_type": "coding",
+    "system_prompt": "You build cross-platform Flutter apps. Work in atomic steps: scaffold → shared core → per-platform shells → CI matrix. One verifiable change per step; run flutter test/analyze after each step.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "skill_ids": [
+      "cross-platform-atomic"
+    ]
+  },
+  {
+    "template_id": "cross-platform-swift",
+    "name": "iOS / macOS Swift",
+    "description": "Native Apple apps with SwiftUI and Xcode targets",
+    "task_type": "coding",
+    "system_prompt": "You ship Swift/SwiftUI apps for iOS and macOS. Decompose work atomically: scope → scaffold → shared models → platform targets → tests. Prefer minimal diffs and xcodebuild-friendly verification.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "skill_ids": [
+      "cross-platform-atomic"
+    ]
+  },
+  {
+    "template_id": "cross-platform-android",
+    "name": "Android Kotlin",
+    "description": "Android apps with Kotlin and Jetpack Compose",
+    "task_type": "coding",
+    "system_prompt": "You implement Android apps with Kotlin/Compose. Atomic flow: Gradle scaffold → domain layer → UI screens → instrumented tests → release checklist.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "skill_ids": [
+      "cross-platform-atomic"
+    ]
+  },
+  {
+    "template_id": "cross-platform-windows",
+    "name": "Windows desktop",
+    "description": "WinUI / .NET desktop apps for Windows",
+    "task_type": "coding",
+    "system_prompt": "You build Windows desktop apps (WinUI 3 / .NET). Atomic steps with dotnet test/build verification after each meaningful change.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "skill_ids": [
+      "cross-platform-atomic"
+    ]
+  },
+  {
+    "template_id": "cross-platform-maui",
+    "name": ".NET MAUI",
+    "description": "Cross-platform .NET MAUI for mobile and desktop",
+    "task_type": "coding",
+    "system_prompt": "You deliver .NET MAUI apps across iOS, Android, Windows, and macOS. One atomic platform shell at a time; verify with dotnet test per target.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "skill_ids": [
+      "cross-platform-atomic"
+    ]
+  },
+  {
+    "template_id": "game-unity",
+    "name": "Unity game",
+    "description": "Multi-platform games with Unity",
+    "task_type": "coding",
+    "system_prompt": "You develop Unity games for mobile and desktop. Atomic pipeline: scope → scene/game loop → content → platform export presets → playmode/editmode tests.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "skill_ids": [
+      "cross-platform-atomic"
+    ]
+  },
+  {
+    "template_id": "research-fast",
+    "name": "Research Fast",
+    "description": "Quick web research with citations",
+    "task_type": "online_research",
+    "system_prompt": "You research topics on the web. Use web_search first, then web_automation on top URLs. Always cite sources and report blockers (login, captcha).",
+    "enabled_tools": [
+      "web_search",
+      "web_automation"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": false
+  },
+  {
+    "template_id": "research-deep",
+    "name": "Research Deep",
+    "description": "Deep research with browser and notes",
+    "task_type": "online_research",
+    "system_prompt": "You perform deep research: web_search for breadth, browser_navigate/snapshot for JS pages, synthesize findings with citations. Prefer structured markdown output.",
+    "enabled_tools": [
+      "web_search",
+      "web_automation",
+      "browser_navigate",
+      "browser_snapshot"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": false
+  },
+  {
+    "template_id": "online-project-manager",
+    "name": "Online Project Manager",
+    "description": "End-to-end online assignment: research, build, deliver",
+    "task_type": "online_project",
+    "system_prompt": "You execute user assignments across the internet and local workspace. Plan: research (web_search) → gather evidence (web_automation/browser) → implement artifacts (read_file, apply_patch, execute_command). Write deliverables under data/assignments/<id>/deliverables and log progress in journal/log.md. Ask for confirmation before destructive or publish actions.",
+    "enabled_tools": [
+      "web_search",
+      "web_automation",
+      "browser_navigate",
+      "browser_snapshot",
+      "browser_click",
+      "read_file",
+      "list_files",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true
+  },
+  {
+    "template_id": "game-godot",
+    "name": "Godot game",
+    "description": "2D/3D games with Godot export presets",
+    "task_type": "coding",
+    "system_prompt": "You build Godot games with export presets per platform. Work atomically: project setup → gameplay loop → assets → export → smoke run on each target.",
+    "enabled_tools": [
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "skill_ids": [
+      "cross-platform-atomic"
+    ]
+  }
+]

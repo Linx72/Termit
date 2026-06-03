@@ -133,7 +133,7 @@ class Settings:
     metrics_snapshot_file_path: str = "./data/metrics_snapshots.jsonl"
     eval_report_file_path: str = "./data/eval_reports.jsonl"
     eval_min_pass_rate: float = 0.95
-    eval_ci_limit: int = 49
+    eval_ci_limit: int = 53
     retrieval_enabled: bool = True
     retrieval_mode: str = "semantic"
     retrieval_auto_reindex: bool = True
@@ -216,10 +216,26 @@ class Settings:
     search_api_url: str = "http://127.0.0.1:8888"
     search_api_key: str = ""
     search_provider: str = "searxng"
+    browser_backend: str = "httpx"
+    assignments_dir: str = "./data/assignments"
     mcp_registry_path: str = "./data/mcp_servers.json"
+    desktop_state_dir: str = "./data/desktop"
+    desktop_north_star_path: str = "./data/desktop_north_star.json"
+    desktop_policy_presets_path: str = "./data/desktop_policy_presets.json"
     agent_schedules_db_path: str = "./termit_agent_schedules.db"
     agent_schedules_enabled: bool = True
     agent_schedules_poll_seconds: int = 60
+    daily_improvement_enabled: bool = False
+    daily_improvement_hour: int = 2
+    daily_improvement_minute: int = 0
+    daily_improvement_agent_id: str = ""
+    daily_improvement_max_agent_runs: int = 3
+    daily_improvement_max_dlq_replay: int = 2
+    daily_improvement_max_eval_fixes: int = 2
+    daily_improvement_eval_probe_limit: int = 12
+    daily_improvement_run_eval_probe: bool = True
+    daily_improvement_auto_create_agent: bool = True
+    daily_improvement_state_path: str = "./data/ops/daily_improvement_state.json"
 
 
 def get_settings() -> Settings:
@@ -315,7 +331,7 @@ def get_settings() -> Settings:
         ),
         eval_report_file_path=os.getenv("TERMIT_EVAL_REPORT_FILE", "./data/eval_reports.jsonl"),
         eval_min_pass_rate=_parse_clamped_float_env("TERMIT_EVAL_MIN_PASS_RATE", 0.95),
-        eval_ci_limit=int(os.getenv("TERMIT_EVAL_CI_LIMIT", "49")),
+        eval_ci_limit=int(os.getenv("TERMIT_EVAL_CI_LIMIT", "53")),
         retrieval_enabled=os.getenv("TERMIT_RETRIEVAL_ENABLED", "true").lower() in {"1", "true", "yes"},
         retrieval_mode=os.getenv("TERMIT_RETRIEVAL_MODE", "semantic"),
         retrieval_auto_reindex=os.getenv("TERMIT_RETRIEVAL_AUTO_REINDEX", "true").lower()
@@ -506,7 +522,18 @@ def get_settings() -> Settings:
         search_api_url=os.getenv("TERMIT_SEARCH_API_URL", "http://127.0.0.1:8888"),
         search_api_key=os.getenv("TERMIT_SEARCH_API_KEY", ""),
         search_provider=os.getenv("TERMIT_SEARCH_PROVIDER", "searxng"),
+        browser_backend=os.getenv("TERMIT_BROWSER_BACKEND", "httpx").strip().lower(),
+        assignments_dir=os.getenv("TERMIT_ASSIGNMENTS_DIR", "./data/assignments"),
         mcp_registry_path=os.getenv("TERMIT_MCP_REGISTRY_PATH", "./data/mcp_servers.json"),
+        desktop_state_dir=os.getenv("TERMIT_DESKTOP_STATE_DIR", "./data/desktop"),
+        desktop_north_star_path=os.getenv(
+            "TERMIT_DESKTOP_NORTH_STAR_PATH",
+            "./data/desktop_north_star.json",
+        ),
+        desktop_policy_presets_path=os.getenv(
+            "TERMIT_DESKTOP_POLICY_PRESETS_PATH",
+            "./data/desktop_policy_presets.json",
+        ),
         agent_schedules_db_path=os.getenv(
             "TERMIT_AGENT_SCHEDULES_DB_PATH",
             "./termit_agent_schedules.db",
@@ -514,4 +541,42 @@ def get_settings() -> Settings:
         agent_schedules_enabled=os.getenv("TERMIT_AGENT_SCHEDULES_ENABLED", "true").lower()
         in {"1", "true", "yes"},
         agent_schedules_poll_seconds=int(os.getenv("TERMIT_AGENT_SCHEDULES_POLL_SECONDS", "60")),
+        daily_improvement_enabled=os.getenv("TERMIT_DAILY_IMPROVEMENT_ENABLED", "false").lower()
+        in {"1", "true", "yes"},
+        daily_improvement_hour=max(0, min(int(os.getenv("TERMIT_DAILY_IMPROVEMENT_HOUR", "2")), 23)),
+        daily_improvement_minute=max(
+            0,
+            min(int(os.getenv("TERMIT_DAILY_IMPROVEMENT_MINUTE", "0")), 59),
+        ),
+        daily_improvement_agent_id=os.getenv("TERMIT_DAILY_IMPROVEMENT_AGENT_ID", ""),
+        daily_improvement_max_agent_runs=max(
+            1,
+            int(os.getenv("TERMIT_DAILY_IMPROVEMENT_MAX_AGENT_RUNS", "3")),
+        ),
+        daily_improvement_max_dlq_replay=max(
+            0,
+            int(os.getenv("TERMIT_DAILY_IMPROVEMENT_MAX_DLQ_REPLAY", "2")),
+        ),
+        daily_improvement_max_eval_fixes=max(
+            0,
+            int(os.getenv("TERMIT_DAILY_IMPROVEMENT_MAX_EVAL_FIXES", "2")),
+        ),
+        daily_improvement_eval_probe_limit=max(
+            1,
+            min(int(os.getenv("TERMIT_DAILY_IMPROVEMENT_EVAL_PROBE_LIMIT", "12")), 53),
+        ),
+        daily_improvement_run_eval_probe=os.getenv(
+            "TERMIT_DAILY_IMPROVEMENT_RUN_EVAL_PROBE",
+            "true",
+        ).lower()
+        in {"1", "true", "yes"},
+        daily_improvement_auto_create_agent=os.getenv(
+            "TERMIT_DAILY_IMPROVEMENT_AUTO_CREATE_AGENT",
+            "true",
+        ).lower()
+        in {"1", "true", "yes"},
+        daily_improvement_state_path=os.getenv(
+            "TERMIT_DAILY_IMPROVEMENT_STATE_PATH",
+            "./data/ops/daily_improvement_state.json",
+        ),
     )

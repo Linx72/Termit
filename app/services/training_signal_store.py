@@ -230,6 +230,37 @@ class TrainingSignalStore:
             row["chosen"] = chosen_output.strip()[:8000]
         return self._append(row)
 
+    def try_capture_cross_platform_step(
+        self,
+        *,
+        goal: str,
+        stack_id: str,
+        step_id: str,
+        step_index: int,
+        verify_ok: bool,
+        verify_detail: str = "",
+        plan_id: Optional[str] = None,
+    ) -> bool:
+        if not self._enabled:
+            return False
+        signal_id = f"cross_platform:{stack_id}:{step_id}:{step_index}"
+        if self._has_signal(signal_id):
+            return False
+        row = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "signal_id": signal_id,
+            "source": "training_signal",
+            "origin": "cross_platform_atomic",
+            "instruction": goal.strip()[:4000],
+            "input": f"stack={stack_id} step={step_id} index={step_index}",
+            "output": verify_detail.strip()[:2000] or ("verify_ok" if verify_ok else "verify_failed"),
+            "category": "cross_platform",
+            "eval_passed": "1" if verify_ok else "0",
+        }
+        if plan_id:
+            row["plan_id"] = plan_id
+        return self._append(row)
+
     def try_capture_task(
         self,
         *,

@@ -860,3 +860,48 @@ button.compact {
   margin: 4px 0 0;
   padding-left: 18px;
 }
+
+.agent-observability {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+}
+
+.workflow-hub,
+.kpi-gate-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+}
+
+.workflow-journey-chips .chip.active {
+  border-color: #58a6ff;
+}
+
+.workflow-steps {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #8b949e;
+  font-size: 0.82rem;
+}
+
+.safe-apply-hint {
+  color: #d29922;
+}
+
+.context-suggestions {
+  margin-bottom: 8px;
+}
+
+.policy-preset-field select {
+  width: 100%;
+}
+
+.online-panel .list {
+  margin-top: 8px;
+  margin-bottom: 16px;
+}

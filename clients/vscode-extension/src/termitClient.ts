@@ -3,9 +3,11 @@ import { TermitClient } from "@termit/client";
 
 export function getClient(): TermitClient {
   const config = vscode.workspace.getConfiguration("termit");
+  const workspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   return new TermitClient({
     baseUrl: config.get<string>("baseUrl", "http://127.0.0.1:8765"),
     apiKey: config.get<string>("apiKey") || undefined,
+    workspace: workspace || undefined,
   });
 }
 

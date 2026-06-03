@@ -174,13 +174,13 @@ export async function watchAgentRun(
       break;
     }
     if (event.event === "status") {
-      run = event.data as AgentRunRecord;
+      run = event.data as unknown as AgentRunRecord;
       emit();
       if (run && STOP_WATCH_STATES.has(run.state)) {
         break;
       }
     } else if (event.event === "timeline") {
-      events = [...events, event.data as AgentRunEvent];
+      events = [...events, event.data as unknown as AgentRunEvent];
       emit();
     } else if (event.event === "done" || event.event === "timeout") {
       if (!run || !STOP_WATCH_STATES.has(run.state)) {

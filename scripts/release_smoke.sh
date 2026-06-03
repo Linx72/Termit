@@ -17,7 +17,7 @@ if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
   echo "== Eval CI gate =="
   curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
     -H 'Content-Type: application/json' \
-    -d '{"limit":49,"persist_report":false}' \
+    -d '{"limit":53,"persist_report":false}' \
     | TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-0.95}" python3 scripts/eval_ci_gate.py
 elif [[ "${TERMIT_SMOKE_REQUIRE_SERVER:-}" == "1" ]]; then
   echo "TERMIT_SMOKE_REQUIRE_SERVER=1 but server not reachable at $BASE_URL" >&2

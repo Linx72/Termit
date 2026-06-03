@@ -53,6 +53,7 @@ from app.services.provider_circuit_breaker import ProviderCircuitBreaker
 from app.services.quota_store import QuotaStore
 from app.services.response_cache_store import ResponseCacheStore
 from app.services.stage1_scheduler_service import Stage1SchedulerService
+from app.services.daily_improvement_scheduler_service import DailyImprovementSchedulerService
 from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingService
 from app.services.training_signal_store import TrainingSignalStore
@@ -169,6 +170,7 @@ def _build_agent_service() -> AgentService:
         run_store=run_store,
         tooling=_build_tooling_service(),
         browser_workflow=_build_browser_workflow_service(),
+        playwright_browser=_build_playwright_browser_service(),
         agent_memory_store=_build_agent_memory_store(),
         agent_loop_service=AgentLoopService(),
         max_concurrency=settings.agent_max_concurrency,
@@ -191,6 +193,7 @@ def _build_agent_service() -> AgentService:
         context_enrichment=_build_context_enrichment_service(),
         guardrails_enabled=settings.guardrails_enabled,
         default_repo_profile_id=settings.finetune_repo_profile_id,
+        policy_preset_service=_build_agent_policy_preset_service(),
     )
 
 
@@ -303,6 +306,7 @@ def _build_task_service() -> TaskService:
         agent_runner=agent_runner,
         use_agent_for_auto=settings.task_use_agent,
         task_agent_id=settings.task_agent_id,
+        assignment_workspace=_build_assignment_workspace_service(),
     )
 
 
@@ -333,12 +337,44 @@ def get_task_service() -> TaskService:
 
 
 @lru_cache
+def _build_playwright_browser_service():
+    from app.services.playwright_browser_service import PlaywrightBrowserService
+
+    return PlaywrightBrowserService()
+
+
+def get_playwright_browser_service():
+    return _build_playwright_browser_service()
+
+
+@lru_cache
 def _build_browser_workflow_service() -> BrowserWorkflowService:
-    return BrowserWorkflowService()
+    settings = get_settings()
+    backend = settings.browser_backend
+    if backend == "playwright":
+        pw = _build_playwright_browser_service()
+        if pw.available():
+            return BrowserWorkflowService(
+                fetcher=pw.fetch_as_http,
+                backend_label="playwright",
+            )
+    return BrowserWorkflowService(backend_label="httpx")
 
 
 def get_browser_workflow_service() -> BrowserWorkflowService:
     return _build_browser_workflow_service()
+
+
+@lru_cache
+def _build_assignment_workspace_service():
+    from app.services.assignment_workspace_service import AssignmentWorkspaceService
+
+    settings = get_settings()
+    return AssignmentWorkspaceService(settings.assignments_dir)
+
+
+def get_assignment_workspace_service():
+    return _build_assignment_workspace_service()
 
 
 @lru_cache
@@ -665,6 +701,37 @@ def get_stage1_scheduler_service() -> Stage1SchedulerService:
 
 
 @lru_cache
+def _build_daily_improvement_service():
+    from app.services.daily_improvement_service import DailyImprovementService
+
+    settings = get_settings()
+    return DailyImprovementService(
+        settings=settings,
+        agent_service=_build_agent_service(),
+        eval_service=_build_eval_service(),
+        kpi_gate_service=_build_desktop_kpi_gate_service(),
+        finetune_service=_build_finetune_service(),
+    )
+
+
+def get_daily_improvement_service():
+    return _build_daily_improvement_service()
+
+
+@lru_cache
+def _build_daily_improvement_scheduler_service() -> DailyImprovementSchedulerService:
+    settings = get_settings()
+    return DailyImprovementSchedulerService(
+        settings=settings,
+        improvement_service=_build_daily_improvement_service(),
+    )
+
+
+def get_daily_improvement_scheduler_service() -> DailyImprovementSchedulerService:
+    return _build_daily_improvement_scheduler_service()
+
+
+@lru_cache
 def _build_skill_store() -> SkillStore:
     settings = get_settings()
     return SkillStore(settings.skills_dir)
@@ -752,3 +819,70 @@ def _build_agent_schedule_service() -> AgentScheduleService:
 
 def get_agent_schedule_service() -> AgentScheduleService:
     return _build_agent_schedule_service()
+
+
+@lru_cache
+def _build_agent_policy_preset_service():
+    from app.services.agent_policy_preset_service import AgentPolicyPresetService
+
+    settings = get_settings()
+    return AgentPolicyPresetService(settings.desktop_policy_presets_path)
+
+
+def get_agent_policy_preset_service():
+    return _build_agent_policy_preset_service()
+
+
+@lru_cache
+def _build_desktop_accelerator_service():
+    from app.services.desktop_accelerator_service import DesktopAcceleratorService
+
+    settings = get_settings()
+    agent_service = _build_agent_service()
+    eval_service = _build_eval_service()
+
+    def run_lookup(run_id: str) -> dict[str, object] | None:
+        try:
+            record = agent_service.get_run(run_id)
+        except Exception:
+            return None
+        return record.model_dump()
+
+    def eval_suite_runner(category: str | None, limit: int | None) -> dict[str, object]:
+        report = eval_service.run_suite(category=category, limit=limit, persist_report=True)
+        return {str(key): value for key, value in report.items()}
+
+    return DesktopAcceleratorService(
+        settings.desktop_state_dir,
+        run_lookup=run_lookup,
+        eval_suite_runner=eval_suite_runner,
+    )
+
+
+def get_desktop_accelerator_service():
+    return _build_desktop_accelerator_service()
+
+
+@lru_cache
+def _build_desktop_kpi_gate_service():
+    from app.services.desktop_kpi_gate_service import DesktopKpiGateService
+
+    settings = get_settings()
+    eval_service = _build_eval_service()
+    agent_service = _build_agent_service()
+
+    def eval_dashboard_provider() -> dict[str, object]:
+        return eval_service.build_dashboard(report_limit=5)
+
+    def agent_metrics_provider() -> dict[str, object]:
+        return agent_service.queue_metrics()
+
+    return DesktopKpiGateService(
+        settings.desktop_north_star_path,
+        eval_dashboard_provider=eval_dashboard_provider,
+        agent_metrics_provider=agent_metrics_provider,
+    )
+
+
+def get_desktop_kpi_gate_service():
+    return _build_desktop_kpi_gate_service()

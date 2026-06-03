@@ -35,6 +35,7 @@ from app.domain.schemas import (
     WebAutomationRequest,
     WebAutomationResponse,
 )
+from app.services.agent_policy_preset_service import AgentPolicyPresetService
 from app.services.agent_registry_store import AgentRegistryStore
 from app.services.agent_run_store import AgentRunStore
 from app.services.agent_run_queue import AgentRunQueue
@@ -48,6 +49,7 @@ from app.services.agent_loop_service import (
 from app.services.agent_memory_store import AgentMemoryStore
 from app.services.agent_run_notifier import AgentRunNotifier
 from app.services.browser_workflow_service import BrowserWorkflowService
+from app.services.playwright_browser_service import PlaywrightBrowserService, PlaywrightUnavailableError
 from app.services.chat_service import ChatService
 from app.services.context_enrichment_service import ContextEnrichmentService
 from app.services.guardrail_service import GuardrailService
@@ -100,6 +102,7 @@ class AgentService:
         run_store: AgentRunStore,
         tooling: ToolingService,
         browser_workflow: BrowserWorkflowService,
+        playwright_browser: Optional[PlaywrightBrowserService] = None,
         agent_memory_store: Optional[AgentMemoryStore] = None,
         agent_loop_service: Optional[AgentLoopService] = None,
         max_concurrency: int = 2,
@@ -122,12 +125,14 @@ class AgentService:
         context_enrichment: Optional[ContextEnrichmentService] = None,
         guardrails_enabled: bool = True,
         default_repo_profile_id: Optional[str] = None,
+        policy_preset_service: Optional[AgentPolicyPresetService] = None,
     ) -> None:
         self._chat_service = chat_service
         self._registry = registry
         self._run_store = run_store
         self._tooling = tooling
         self._browser_workflow = browser_workflow
+        self._playwright_browser = playwright_browser
         self._agent_memory = agent_memory_store
         self._loop_service = agent_loop_service or AgentLoopService()
         self._run_queue: AgentRunQueue[tuple[str, str, AgentRunRequest]] = AgentRunQueue(
@@ -151,6 +156,7 @@ class AgentService:
         self._trace_spans = trace_span_store
         self._context_enrichment = context_enrichment
         self._default_repo_profile_id = (default_repo_profile_id or "").strip() or None
+        self._policy_presets = policy_preset_service
         self._notifier = AgentRunNotifier.get()
         self._queue_capacity = max(1, max_queue_size)
         self._worker_count = max(1, max_concurrency)
@@ -541,6 +547,9 @@ class AgentService:
         if payload.online_url:
             return self._run_online_request(profile, payload)
 
+        if self._policy_presets is not None:
+            profile, payload = self._policy_presets.apply_to_run(profile, payload)
+
         use_loop = (
             profile.use_tool_loop
             if payload.use_tool_loop is None
@@ -608,6 +617,20 @@ class AgentService:
                 profile_for_loop = profile_for_loop.model_copy(
                     update={"system_prompt": f"{profile.system_prompt}\n\n{skill_block}"}
                 )
+
+        from app.services.cross_platform_dev_service import CrossPlatformDevService
+
+        if CrossPlatformDevService.is_cross_platform_task(payload.input):
+            cp_service = CrossPlatformDevService()
+            cp_block = cp_service.build_agent_context(payload.input)
+            skill_ids = set(profile.skill_ids)
+            if self._skills is not None and "cross-platform-atomic" not in skill_ids:
+                extra_skill = self._skills.build_prompt_block(["cross-platform-atomic"])
+                if extra_skill:
+                    cp_block = f"{extra_skill}\n\n{cp_block}"
+            profile_for_loop = profile_for_loop.model_copy(
+                update={"system_prompt": f"{profile_for_loop.system_prompt}\n\n{cp_block}"}
+            )
 
         if self._context_enrichment is not None:
             enrichment_lines = self._context_enrichment.build_agent_context_lines(payload, profile)
@@ -818,7 +841,13 @@ class AgentService:
     ) -> tuple[str, list[tuple[str, str]]]:
         side_effects: list[tuple[str, str]] = []
         self._ensure_tool_allowed(agent_id, tool_name)
-        if tool_name == "web_automation" and not profile.allow_online:
+        if tool_name in {
+            "web_automation",
+            "web_search",
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_click",
+        } and not profile.allow_online:
             raise AgentOnlineError(f"Agent '{profile.name}' is not configured for online execution.")
         if tool_name == "apply_patch" and self._guardrails is not None:
             content = arguments.get("content")
@@ -826,11 +855,31 @@ class AgentService:
                 patch_check = self._guardrails.check_patch_content(str(content))
                 if not patch_check.allowed:
                     raise GuardrailBlockedError(patch_check.reason)
-        if tool_name == "web_search":
-            if not profile.allow_online:
+        if tool_name in {"browser_navigate", "browser_snapshot", "browser_click"}:
+            browser = self._playwright_browser
+            if browser is None or not browser.available():
                 raise AgentOnlineError(
-                    f"Agent '{profile.name}' is not configured for online execution (web_search)."
+                    "Playwright browser is not available. Set TERMIT_BROWSER_BACKEND=playwright "
+                    "and run: pip install playwright && playwright install chromium"
                 )
+            try:
+                if tool_name == "browser_navigate":
+                    payload = browser.navigate(
+                        str(arguments.get("url", "")),
+                        timeout_seconds=int(arguments.get("timeout_seconds", 30)),
+                    )
+                elif tool_name == "browser_snapshot":
+                    payload = browser.snapshot()
+                else:
+                    payload = browser.click(
+                        str(arguments.get("selector", "")),
+                        confirmed=bool(arguments.get("confirmed", False)),
+                    )
+            except PlaywrightUnavailableError as exc:
+                raise AgentOnlineError(str(exc)) from exc
+            side_effects.append((tool_name, str(payload.get("url", payload.get("executed", "")))))
+            return json.dumps(payload, ensure_ascii=True), side_effects
+        if tool_name == "web_search":
             query = str(arguments.get("query", ""))
             max_results = int(arguments.get("max_results", 5))
             domains_raw = arguments.get("domains")

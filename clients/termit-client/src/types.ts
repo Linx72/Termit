@@ -103,6 +103,12 @@ export interface AgentRunRequest {
   session_id?: string;
   project_id?: string;
   changed_files?: string[];
+  use_retrieval?: boolean;
+  retrieval_path_prefix?: string;
+  use_tool_loop?: boolean;
+  workspace_scope?: string;
+  policy_preset?: string;
+  execution_mode?: "local" | "online" | "hybrid";
 }
 
 export interface AgentRunCreateResponse {
@@ -124,6 +130,7 @@ export interface AgentRunRecord {
   model?: string;
   response?: string;
   error?: string;
+  checkpoint_json?: string | null;
 }
 
 export interface AgentRunListResponse {
@@ -263,6 +270,8 @@ export interface AgentRunsMetrics {
   tool_loop_parse_errors?: number;
   tool_loop_tool_success_rate?: number;
   tool_loop_completion_rate?: number;
+  dead_letter_rate?: number;
+  health_reasons?: string[];
 }
 
 export interface EvalReportSummary {

@@ -34,6 +34,22 @@ async def create_agent_from_template(
     return registry.create_agent(request)
 
 
+@router.post("/agent-templates/{template_id}/ensure-agent", response_model=AgentProfileResponse)
+async def ensure_agent_from_template(
+    template_id: str,
+    registry: AgentRegistryStore = Depends(get_agent_registry_store),
+    templates: AgentTemplatesStore = Depends(get_agent_templates_store),
+) -> AgentProfileResponse:
+    try:
+        request = templates.to_create_request(template_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    for agent in registry.list_agents():
+        if agent.name == request.name and agent.task_type == request.task_type:
+            return agent
+    return registry.create_agent(request)
+
+
 @router.get("/{project_id}/rules", response_model=ProjectRulesResponse)
 async def get_project_rules(
     project_id: str,

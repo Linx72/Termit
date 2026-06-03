@@ -43,6 +43,8 @@ class ModelRouter:
             return self.settings.code_model
         if task_type in {TaskType.review, TaskType.debug, TaskType.explain}:
             return self.settings.analysis_model
+        if task_type in {TaskType.online_research, TaskType.online_project}:
+            return self.settings.analysis_model
         return self.settings.default_model
 
     def candidate_models(
@@ -74,6 +76,8 @@ class ModelRouter:
                 ]
         elif task_type in {TaskType.review, TaskType.debug, TaskType.explain}:
             models = [self.settings.analysis_model, self.settings.analysis_fallback_model]
+        elif task_type in {TaskType.online_research, TaskType.online_project}:
+            models = [self.settings.analysis_model, self.settings.default_model]
         else:
             models = [self.settings.default_model, self.settings.default_fallback_model]
             if complexity == "high":

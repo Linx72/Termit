@@ -13,6 +13,10 @@ import {
   type ComposerFileContext,
   type TaskStatusResponse,
   type TaskType,
+  listDesktopJourneys,
+  listPolicyPresets,
+  type AgentPolicyPreset,
+  type DesktopJourney,
 } from "@termit/client";
 import { EditorPanel } from "./EditorPanel";
 import { FirstRunWizard } from "./FirstRunWizard";
@@ -47,8 +51,26 @@ import {
   saveSettings,
   type StoredSettings,
 } from "./settings";
+import { KpiGatePanel } from "./KpiGatePanel";
+import { AgentObservabilityPanel } from "./AgentObservabilityPanel";
+import { OnlineAcceleratorPanel } from "./OnlineAcceleratorPanel";
+import { PolicyPresetSelector } from "./PolicyPresetSelector";
+import { WorkflowHubPanel } from "./WorkflowHubPanel";
+import {
+  dryRunAllPatches,
+  formatSafeApplyHint,
+  summarizePatchRisk,
+  type SafeApplySummary,
+} from "./composerSafeApply";
+import { suggestContextFiles, type ContextSuggestion } from "./contextSuggestions";
+import { DEFAULT_VERIFY_COMMANDS, parseCheckpointSummary, type WorkflowTab } from "./northStar";
+import {
+  buildPresetDraft,
+  CROSS_PLATFORM_PRESETS,
+  launchCrossPlatformPreset,
+} from "./crossPlatformPresets";
 
-type Tab = "chat" | "composer" | "editor" | "plan" | "terminal" | "tasks" | "agents";
+type Tab = WorkflowTab;
 
 type ChatBlock =
   | { id: string; kind: "user"; text: string }
@@ -90,6 +112,8 @@ export function App() {
   const [apiReachable, setApiReachable] = useState(false);
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [atomicBusy, setAtomicBusy] = useState(false);
+  const [atomicProgress, setAtomicProgress] = useState("");
   const [statusLine, setStatusLine] = useState("Not connected");
   const [chatSessions, setChatSessions] = useState<StoredChatSession[]>(() => loadChatSessions());
   const [activeLocalId, setActiveLocalId] = useState(() => loadActiveLocalId());
@@ -141,6 +165,12 @@ export function App() {
   const [renameDraft, setRenameDraft] = useState("");
   const [pullingModel, setPullingModel] = useState<string | null>(null);
   const [editorOpenPath, setEditorOpenPath] = useState<string | null>(null);
+  const [northStarJourneys, setNorthStarJourneys] = useState<DesktopJourney[]>([]);
+  const [policyPresets, setPolicyPresets] = useState<AgentPolicyPreset[]>([]);
+  const [safeApplySummary, setSafeApplySummary] = useState<SafeApplySummary | null>(null);
+  const [contextSuggestions, setContextSuggestions] = useState<ContextSuggestion[]>([]);
+  const [pendingVerifyCommands, setPendingVerifyCommands] = useState<string[]>([]);
+  const [checkpointLine, setCheckpointLine] = useState("");
 
   const locale = settings.locale;
   const [platformSkills, setPlatformSkills] = useState<Array<{ skill_id: string; name: string }>>([]);
@@ -164,8 +194,9 @@ export function App() {
       new TermitClient({
         baseUrl: settings.baseUrl,
         apiKey: settings.apiKey || undefined,
+        workspace: settings.workspace || undefined,
       }),
-    [settings.baseUrl, settings.apiKey]
+    [settings.baseUrl, settings.apiKey, settings.workspace]
   );
 
   useEffect(() => {
@@ -299,6 +330,12 @@ export function App() {
       setConnected(true);
       setApiReachable(true);
       void refreshPlatformData(selectedAgentId);
+      void listDesktopJourneys(client)
+        .then((response) => setNorthStarJourneys(response.journeys))
+        .catch(() => setNorthStarJourneys([]));
+      void listPolicyPresets(client)
+        .then((items) => setPolicyPresets(items))
+        .catch(() => setPolicyPresets([]));
       const modelLabel = settings.selectedModel || "auto";
       setStatusLine(
         `Termit v${healthz.version || "?"} · ${ok}/${statuses.length} providers · ${modelLabel}`
@@ -495,6 +532,9 @@ export function App() {
           return;
         }
         setAwaitingConfirmationRunId(null);
+        void client.getAgentRun(run.run_id).then((record) => {
+          setCheckpointLine(parseCheckpointSummary(record.checkpoint_json));
+        });
         if (run.state === "completed") {
           window.termitDesktop.showNotification({
             title: "Agent run completed",
@@ -814,25 +854,22 @@ export function App() {
       setComposerPatches(patches);
       setComposerPatchPreviews({});
       setComposerBackups({});
-      const previews: Record<string, ApplyPatchResponse> = {};
-      for (const patch of patches) {
-        try {
-          previews[patch.path] = await client.applyPatch({
-            ...patch,
-            dry_run: true,
-            confirmed: false,
-          });
-        } catch (error) {
-          const text = error instanceof Error ? error.message : String(error);
-          previews[patch.path] = {
-            path: patch.path,
-            risk_level: "blocked",
-            policy_reason: text,
-            applied: false,
-          };
-        }
-      }
+      const previews = await dryRunAllPatches(client, patches);
       setComposerPatchPreviews(previews);
+      setSafeApplySummary(summarizePatchRisk(patches, previews));
+      if (composerFiles.length > 0 || patches.length > 0) {
+        const suggestions = await suggestContextFiles(client, {
+          changedFiles: [
+            ...composerFiles.map((item) => item.path),
+            ...patches.map((item) => item.path),
+          ],
+          workspacePrefix: workspacePrefix(settings.workspace),
+          limit: 6,
+        });
+        setContextSuggestions(suggestions);
+      } else {
+        setContextSuggestions([]);
+      }
       const prose = stripComposerJsonBlock(responseText);
       setComposerLog(
         `${prose}\n\n---\nParsed ${patches.length} patch(es). Click a file to dry-run preview.`
@@ -866,6 +903,15 @@ export function App() {
 
   const applyAllComposerPatches = async () => {
     if (composerPatches.length === 0) {
+      return;
+    }
+    if (safeApplySummary && !safeApplySummary.canApplyAll) {
+      setComposerPatchDetail(
+        formatSafeApplyHint(safeApplySummary, locale) +
+          (safeApplySummary.blockedPaths.length
+            ? `\n${safeApplySummary.blockedPaths.join(", ")}`
+            : "")
+      );
       return;
     }
     const backups: Record<string, string> = { ...composerBackups };
@@ -1165,6 +1211,8 @@ export function App() {
       session_id: settings.sessionId || undefined,
       project_id: projectId || undefined,
       changed_files: attachmentPaths(attachments),
+      policy_preset: settings.policyPreset || undefined,
+      execution_mode: settings.executionMode,
     });
     setAgentDetail(`Run queued: ${run.run_id} (${run.state})`);
     setAgentInput("");
@@ -1225,6 +1273,17 @@ export function App() {
           )}
         </div>
         <HealthDashboard client={client} connected={connected} locale={locale} />
+        <KpiGatePanel client={client} connected={connected} locale={locale} />
+        <AgentObservabilityPanel client={client} connected={connected} locale={locale} />
+        {northStarJourneys.length > 0 ? (
+          <WorkflowHubPanel
+            journeys={northStarJourneys}
+            activeJourneyId={settings.activeJourneyId}
+            locale={locale}
+            onSelectJourney={(journeyId) => updateSettings({ activeJourneyId: journeyId })}
+            onOpenTab={setTab}
+          />
+        ) : null}
         {connected && (
           <ModelManager
             client={client}
@@ -1455,6 +1514,31 @@ export function App() {
         )}
 
         <div className="field">
+          <label htmlFor="executionMode">Execution mode</label>
+          <select
+            id="executionMode"
+            value={settings.executionMode}
+            onChange={(event) =>
+              updateSettings({
+                executionMode: event.target.value as StoredSettings["executionMode"],
+              })
+            }
+          >
+            <option value="local">local</option>
+            <option value="hybrid">hybrid</option>
+            <option value="online">online</option>
+          </select>
+        </div>
+
+        <PolicyPresetSelector
+          presets={policyPresets}
+          value={settings.policyPreset}
+          locale={locale}
+          disabled={!connected}
+          onChange={(presetId) => updateSettings({ policyPreset: presetId })}
+        />
+
+        <div className="field">
           <label htmlFor="model">Model</label>
           <select
             id="model"
@@ -1493,7 +1577,7 @@ export function App() {
 
       <main className="main">
         <div className="tabs">
-          {(["chat", "composer", "editor", "plan", "terminal", "tasks", "agents"] as Tab[]).map((name) => (
+          {(["chat", "composer", "editor", "plan", "terminal", "tasks", "agents", "online"] as Tab[]).map((name) => (
             <button
               key={name}
               type="button"
@@ -1634,6 +1718,98 @@ export function App() {
                   ))}
                 </div>
               )}
+              <div className="chips cross-platform-presets">
+                {CROSS_PLATFORM_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className="chip secondary compact"
+                    disabled={!connected || busy}
+                    title={preset.goal}
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          const text = await buildPresetDraft(client, preset);
+                          setDraft(text);
+                        } catch (error) {
+                          const detail =
+                            error instanceof Error ? error.message : String(error);
+                          setBlocks((prev) => [
+                            ...prev,
+                            { id: blockId(), kind: "error", text: detail },
+                          ]);
+                        }
+                      })();
+                    }}
+                  >
+                    {locale === "ru" ? preset.labelRu : preset.labelEn}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="chip primary compact"
+                  disabled={!connected || busy || atomicBusy || !settings.workspace}
+                  title={
+                    locale === "ru"
+                      ? "Все атомарные шаги через agent + verify"
+                      : "Run all atomic steps via agent with verify"
+                  }
+                  onClick={() => {
+                    void (async () => {
+                      const preset = CROSS_PLATFORM_PRESETS[0];
+                      if (!preset) {
+                        return;
+                      }
+                      setAtomicBusy(true);
+                      setAtomicProgress(
+                        locale === "ru" ? "Старт atomic workflow…" : "Starting atomic workflow…"
+                      );
+                      try {
+                        const result = await launchCrossPlatformPreset(client, preset, {
+                          stopOnVerifyFailure: true,
+                          onStep: (index, task) => {
+                            setAtomicProgress(
+                              `${index + 1}: ${task.title} (${task.step_id})`
+                            );
+                          },
+                          onVerify: (index, task, verify) => {
+                            setAtomicProgress(
+                              `${index + 1}: ${task.step_id} verify ${verify.ok ? "OK" : "FAIL"} — ${verify.detail}`
+                            );
+                          },
+                        });
+                        setBlocks((prev) => [
+                          ...prev,
+                          {
+                            id: blockId(),
+                            kind: "meta",
+                            text:
+                              (locale === "ru"
+                                ? `Atomic workflow: ${result.steps.length} шагов`
+                                : `Atomic workflow: ${result.steps.length} steps`) +
+                              (result.aborted ? " (остановлен на verify)" : " (готово)"),
+                          },
+                        ]);
+                      } catch (error) {
+                        const detail =
+                          error instanceof Error ? error.message : String(error);
+                        setBlocks((prev) => [
+                          ...prev,
+                          { id: blockId(), kind: "error", text: detail },
+                        ]);
+                      } finally {
+                        setAtomicBusy(false);
+                        setAtomicProgress("");
+                      }
+                    })();
+                  }}
+                >
+                  {locale === "ru" ? "▶ Atomic (Flutter)" : "▶ Atomic (Flutter)"}
+                </button>
+              </div>
+              {atomicProgress ? (
+                <div className="message-block meta">{atomicProgress}</div>
+              ) : null}
               <textarea
                 value={draft}
                 placeholder="Ask Termit to implement, review, or debug..."
@@ -1722,6 +1898,38 @@ export function App() {
             <p className="hint">
               Composer: attach several @files, describe a multi-file change, review patches, apply all.
             </p>
+            {safeApplySummary ? (
+              <p className="hint safe-apply-hint">{formatSafeApplyHint(safeApplySummary, locale)}</p>
+            ) : null}
+            {contextSuggestions.length > 0 ? (
+              <div className="chips context-suggestions">
+                <span className="muted">{t(locale, "contextSuggestions")}:</span>
+                {contextSuggestions.map((item) => (
+                  <button
+                    key={item.path}
+                    type="button"
+                    className="chip secondary compact"
+                    disabled={!connected}
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          const file = await client.readFile({ path: item.path, max_bytes: 12000 });
+                          setComposerFiles((prev) => [
+                            ...prev.filter((entry) => entry.path !== item.path),
+                            { path: item.path, content: file.content },
+                          ]);
+                        } catch (error) {
+                          const text = error instanceof Error ? error.message : String(error);
+                          setComposerLog(text);
+                        }
+                      })();
+                    }}
+                  >
+                    @{item.path}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="chips">
               {composerFiles.map((file) => (
                 <span key={file.path} className="chip">
@@ -1762,7 +1970,7 @@ export function App() {
               <button
                 type="button"
                 className="secondary"
-                disabled={!connected || composerPatches.length === 0}
+                disabled={!connected || composerPatches.length === 0 || !safeApplySummary?.canApplyAll}
                 onClick={() => void applyAllComposerPatches()}
               >
                 Apply all ({composerPatches.length})
@@ -1839,11 +2047,21 @@ export function App() {
               setComposerInput(planText);
               setTab("composer");
             }}
+            onBuildAndVerify={(planText) => {
+              setComposerInput(planText);
+              setPendingVerifyCommands(DEFAULT_VERIFY_COMMANDS);
+              setTab("composer");
+            }}
           />
         )}
 
         {tab === "terminal" && (
-          <TerminalPanel client={client} connected={connected} locale={locale} />
+          <TerminalPanel
+            client={client}
+            connected={connected}
+            locale={locale}
+            suggestedCommands={pendingVerifyCommands}
+          />
         )}
 
         {tab === "editor" && (
@@ -2041,9 +2259,25 @@ export function App() {
                 </button>
               </div>
             ) : null}
+            {checkpointLine ? (
+              <p className="hint">
+                {t(locale, "checkpointAvailable")}: {checkpointLine}
+              </p>
+            ) : null}
             <pre className="detail-box">{agentTimeline}</pre>
             <pre className="detail-box">{runSpansText}</pre>
           </div>
+        )}
+
+        {tab === "online" && (
+          <OnlineAcceleratorPanel
+            client={client}
+            connected={connected}
+            locale={locale}
+            watchedRunId={watchedRunId}
+            team={settings.teamName}
+            onTeamChange={(team) => updateSettings({ teamName: team })}
+          />
         )}
       </main>
     </div>

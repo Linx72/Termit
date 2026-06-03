@@ -22,3 +22,27 @@ export type {
   InlineEditResult,
   AgentRunWatchOptions,
 } from "./workflows";
+export {
+  buildPresetDraft,
+  CROSS_PLATFORM_PRESETS,
+  decomposeCrossPlatformTask,
+  ensureAgentForCrossPlatform,
+  formatAtomicTaskPrompt,
+  launchCrossPlatformPreset,
+  listCrossPlatformStacks,
+  prepareCrossPlatformStep,
+  runAtomicDevWorkflow,
+  verifyAtomicStep,
+} from "./crossPlatform";
+export type {
+  AtomicVerifyResult,
+  CrossPlatformAtomicTask,
+  CrossPlatformDecomposeResult,
+  CrossPlatformPrepareResult,
+  CrossPlatformPreset,
+  CrossPlatformStackInfo,
+  DecomposeCrossPlatformOptions,
+  DevPlatform,
+  RunAtomicDevWorkflowParams,
+} from "./crossPlatform";
+export * from "./desktopOps";

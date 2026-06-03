@@ -22,8 +22,11 @@ class BrowserWorkflowService:
     def __init__(
         self,
         fetcher: Callable[[str, int], tuple[int, str, str]] | None = None,
+        *,
+        backend_label: str = "httpx",
     ) -> None:
         self._fetcher = fetcher or self._default_fetcher
+        self.backend_label = backend_label
 
     def run(self, payload: WebAutomationRequest) -> WebAutomationResponse:
         if not payload.url.startswith(("http://", "https://")):
@@ -87,7 +90,7 @@ class BrowserWorkflowService:
             )
 
         if not reached_step_limit:
-            steps.append("Workflow finished with collected evidence.")
+            steps.append(f"Workflow finished with collected evidence (backend={self.backend_label}).")
         return WebAutomationResponse(
             objective=payload.objective,
             success=True,

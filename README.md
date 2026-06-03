@@ -391,7 +391,11 @@ Use model naming format `provider:model_name`, e.g.:
   - `TERMIT_METRICS_SNAPSHOT_FILE`
 - Beta feedback endpoint:
   - `POST /api/feedback`
-- Eval harness endpoints (49 scenarios in `data/eval_scenarios.json`):
+- Cross-platform dev (apps/games, atomic steps):
+  - `GET /api/dev/cross-platform/stacks`
+  - `POST /api/dev/cross-platform/decompose`
+  - Guide: `docs/CROSS_PLATFORM_DEV_RU.md`
+- Eval harness endpoints (53 scenarios in `data/eval_scenarios.json`):
   - `GET /api/eval/scenarios`
   - `POST /api/eval/run` (executes task/tool/web runner and returns scored result)
   - `POST /api/eval/run-suite` (batch run + JSONL report in `TERMIT_EVAL_REPORT_FILE`)

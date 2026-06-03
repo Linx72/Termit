@@ -10,6 +10,7 @@ from typing import Optional, Protocol
 
 DEFAULT_SEARXNG_URL = "http://127.0.0.1:8888"
 PERPLEXITY_SEARCH_URL = "https://api.perplexity.ai/search"
+EXA_SEARCH_URL = "https://api.exa.ai/search"
 
 
 @dataclass(frozen=True)
@@ -188,6 +189,13 @@ class PerplexitySearchProvider(HttpSearchProvider):
         super().__init__(api_url=api_url, api_key=api_key, provider_label="perplexity")
 
 
+class ExaSearchProvider(HttpSearchProvider):
+    """Exa neural search API (https://exa.ai)."""
+
+    def __init__(self, api_key: str, api_url: str = EXA_SEARCH_URL) -> None:
+        super().__init__(api_url=api_url, api_key=api_key, provider_label="exa")
+
+
 def _apply_domain_filter(query: str, domains: Optional[list[str]]) -> str:
     cleaned = query.strip()
     if not domains:
@@ -280,6 +288,11 @@ def build_search_provider(
             return PerplexitySearchProvider(api_key=key, api_url=url or PERPLEXITY_SEARCH_URL)
         return StubSearchProvider()
 
+    if provider_name == "exa":
+        if key:
+            return ExaSearchProvider(api_key=key, api_url=url or EXA_SEARCH_URL)
+        return StubSearchProvider()
+
     if provider_name == "searxng":
         return SearxngSearchProvider(url or DEFAULT_SEARXNG_URL, key)
 
@@ -294,6 +307,8 @@ def build_search_provider(
         if url:
             if "perplexity.ai" in url:
                 return PerplexitySearchProvider(api_key=key, api_url=url)
+            if "exa.ai" in url:
+                return ExaSearchProvider(api_key=key, api_url=url)
             if _looks_like_searxng_url(url):
                 return SearxngSearchProvider(url, key)
             return HttpSearchProvider(api_url=url, api_key=key, provider_label="http")

@@ -16,7 +16,7 @@
 | Tool loop (JSON action → tool → observe) | Native function calling, resume, subagents |
 | Очередь run'ов, SQLite, SSE timeline | Единый real-time UX без polling |
 | Composer, ⌘K, tab completion | Качество и скорость на уровне коммерческих IDE |
-| Eval (49 сценариев), finetune stage 1 | Замкнутый цикл «ошибка → обучение → regression gate → promote» |
+| Eval (53 сценария), finetune stage 1 | Замкнутый цикл «ошибка → обучение → regression gate → promote» |
 | Desktop + VS Code + SDK | Один polished primary client, onboarding «из коробки» |
 
 **Приоритет Track B:** Agent Platform v2 — не «только finetune», а tool loop, multi-agent, routing policy, обучение на agent-run сигналах.
@@ -181,7 +181,8 @@ User task → Planner (optional) → Loop: think → tool → observe → … �
 
 ### 4.1 Eval 2.0
 
-- [x] Расширить `data/eval_scenarios.json`: patch quality, tool selection, multi-step (49 сценариев, runner `tool_sequence`)
+- [x] Расширить `data/eval_scenarios.json`: patch quality, tool selection, multi-step, cross-platform X1–X4 (53 сценария, runner `tool_sequence`)
+- [x] Cross-platform atomic dev: `/api/dev/cross-platform/*`, agent templates + skill, SDK `runAtomicDevWorkflow`, eval runner `cross_platform_decompose`
 - [x] KPI dashboard в UI: success rate, latency p95, cost/run (desktop HealthDashboard + `/api/finetune/training/dashboard`)
 - [x] Regression gate перед каждым release и promote adapter (CI eval + gate в finetune pipeline)
 

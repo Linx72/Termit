@@ -53,7 +53,7 @@ install_cron() {
     cmd="${ROOT}/scripts/stage1_weekly.sh >> ${HOME}/termit-stage1-weekly.cron.log 2>&1"
   fi
   local line="0 3 * * 1 ${cmd} ${marker}"
-  (crontab -l 2>/dev/null | grep -v "${marker}"; echo "${line}") | crontab -
+  ( { crontab -l 2>/dev/null || true; } | grep -v "${marker}" || true; echo "${line}" ) | crontab -
   echo "Installed user crontab entry:"
   echo "  ${line}"
 }

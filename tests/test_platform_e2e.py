@@ -23,6 +23,24 @@ class PlatformE2ETests(unittest.TestCase):
         self.assertIn("tool_loop_runs", metrics)
         self.assertIn("tool_loop_tool_success_rate", metrics)
 
+        stacks = client.get("/api/dev/cross-platform/stacks")
+        self.assertEqual(stacks.status_code, 200)
+        stack_ids = {item["stack_id"] for item in stacks.json()["stacks"]}
+        self.assertIn("flutter", stack_ids)
+
+        templates = client.get("/api/projects/agent-templates")
+        self.assertEqual(templates.status_code, 200)
+        template_ids = {item["template_id"] for item in templates.json()["templates"]}
+        self.assertIn("cross-platform-flutter", template_ids)
+
+        decompose = client.post(
+            "/api/dev/cross-platform/decompose",
+            json={"goal": "Flutter app iOS and Android", "stack_id": "flutter"},
+        )
+        self.assertEqual(decompose.status_code, 200)
+        body = decompose.json()
+        self.assertGreaterEqual(len(body["atomic_tasks"]), 5)
+
     def test_chat_apply_patch_agent_run_flow(self) -> None:
         client = TestClient(app)
 

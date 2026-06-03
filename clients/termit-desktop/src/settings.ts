@@ -14,6 +14,10 @@ export interface StoredSettings {
   repoProfile: string;
   inlineCompletionEnabled: boolean;
   locale: import("./i18n").Locale;
+  policyPreset: string;
+  teamName: string;
+  activeJourneyId: string;
+  executionMode: "local" | "online" | "hybrid";
 }
 
 export const STORAGE_KEY = "termit-app-settings";
@@ -34,6 +38,10 @@ export function loadSettings(): StoredSettings {
     repoProfile: "",
     inlineCompletionEnabled: false,
     locale: "ru",
+    policyPreset: "solo",
+    teamName: "default",
+    activeJourneyId: "local_feature",
+    executionMode: "hybrid",
   };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

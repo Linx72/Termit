@@ -48,6 +48,10 @@
         "title": "Termit: Create Task From Selection"
       },
       {
+        "command": "termit.crossPlatformTask",
+        "title": "Termit: Cross-Platform Task (iOS / Android / Windows / macOS)"
+      },
+      {
         "command": "termit.addSelectionToChat",
         "title": "Termit: Add Selection To Chat"
       },
@@ -94,6 +98,7 @@
         { "command": "termit.openComposer" },
         { "command": "termit.inlineEdit" },
         { "command": "termit.createTask" },
+        { "command": "termit.crossPlatformTask" },
         { "command": "termit.addSelectionToChat" },
         { "command": "termit.applyPatch" },
         { "command": "termit.applyPatchFromClipboard" },

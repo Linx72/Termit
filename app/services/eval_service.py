@@ -72,6 +72,9 @@ class EvalScenario:
     retrieval_query: str = ""
     retrieval_expect: str = ""
     platform_tool: str = ""
+    cp_stack_id: str = ""
+    cp_min_tasks: int = 5
+    cp_expect_steps: tuple[str, ...] = ()
 
 
 class EvalService:
@@ -138,6 +141,9 @@ class EvalService:
                     retrieval_query=str(item.get("retrieval_query", "")),
                     retrieval_expect=str(item.get("retrieval_expect", "")),
                     platform_tool=str(item.get("platform_tool", "")),
+                    cp_stack_id=str(item.get("cp_stack_id", "")),
+                    cp_min_tasks=int(item.get("cp_min_tasks", 5)),
+                    cp_expect_steps=tuple(str(s) for s in (item.get("cp_expect_steps") or [])),
                 )
             )
         return scenarios
@@ -303,7 +309,30 @@ class EvalService:
             return self._run_platform_mcp(scenario)
         if runner == "platform_spawn_tool":
             return self._run_platform_spawn_tool(scenario)
+        if runner == "cross_platform_decompose":
+            return self._run_cross_platform_decompose(scenario)
         raise ValueError(f"Unsupported runner: {runner}")
+
+    def _run_cross_platform_decompose(
+        self, scenario: EvalScenario
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        from app.services.cross_platform_dev_service import CrossPlatformDevService
+
+        goal = scenario.prompt.strip()
+        service = CrossPlatformDevService()
+        profile, platforms, tasks = service.decompose(
+            goal,
+            stack_id=scenario.cp_stack_id or None,
+        )
+        step_ids = {task.step_id for task in tasks}
+        ok = len(tasks) >= max(1, scenario.cp_min_tasks)
+        if scenario.cp_stack_id and profile.stack_id != scenario.cp_stack_id:
+            ok = False
+        for expected in scenario.cp_expect_steps:
+            if expected not in step_ids:
+                ok = False
+        ref = f"stack={profile.stack_id} tasks={len(tasks)} platforms={[p.value for p in platforms]}"
+        return ref, ok, None if ok else "cross_platform_plan", 1, "automated"
 
     def _run_task_scenario(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
         if self._task_service is None:

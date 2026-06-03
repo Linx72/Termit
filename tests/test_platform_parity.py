@@ -24,8 +24,11 @@ class PlatformParityTests(unittest.TestCase):
         skills = store.list_skills()
         ids = {item.skill_id for item in skills}
         self.assertIn("fix-ci", ids)
+        self.assertIn("cross-platform-atomic", ids)
         block = store.build_prompt_block(["fix-ci"])
         self.assertIn("Fix CI", block)
+        cp_block = store.build_prompt_block(["cross-platform-atomic"])
+        self.assertIn("Cross-platform atomic", cp_block)
 
     def test_stub_search_returns_citations(self) -> None:
         provider = StubSearchProvider()

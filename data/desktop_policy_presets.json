@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "preset_id": "solo",
+      "name": "Solo (local-first)",
+      "description_ru": "Минимальные подтверждения, быстрый локальный цикл.",
+      "description_en": "Minimal confirmations, fast local loop.",
+      "max_tool_steps": 8,
+      "allow_online": false,
+      "auto_confirm_risky_tools": false,
+      "verify_after_patch": true,
+      "enabled_tools": ["list_files", "read_file", "execute_command", "apply_patch"],
+      "execution_mode": "local"
+    },
+    {
+      "preset_id": "team",
+      "name": "Team (balanced)",
+      "description_ru": "Подтверждение risky tools, online research, shared runs.",
+      "description_en": "Confirm risky tools, online research, shared runs.",
+      "max_tool_steps": 10,
+      "allow_online": true,
+      "auto_confirm_risky_tools": false,
+      "verify_after_patch": true,
+      "enabled_tools": [
+        "list_files",
+        "read_file",
+        "execute_command",
+        "apply_patch",
+        "web_automation",
+        "web_search"
+      ],
+      "execution_mode": "hybrid"
+    },
+    {
+      "preset_id": "strict",
+      "name": "Strict (security)",
+      "description_ru": "Строгие подтверждения, без online automation, короткий step budget.",
+      "description_en": "Strict confirmations, no online automation, short step budget.",
+      "max_tool_steps": 5,
+      "allow_online": false,
+      "auto_confirm_risky_tools": false,
+      "verify_after_patch": true,
+      "enabled_tools": ["list_files", "read_file", "apply_patch"],
+      "execution_mode": "local"
+    }
+  ]
+}

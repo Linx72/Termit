@@ -53,7 +53,7 @@ export class TermitRun {
         throw new TermitRunError("Run wait timeout", this.runId, "timeout");
       }
       if (event.event === "status") {
-        latest = event.data as AgentRunRecord;
+        latest = event.data as unknown as AgentRunRecord;
         if (latest.state === "completed") {
           return latest;
         }

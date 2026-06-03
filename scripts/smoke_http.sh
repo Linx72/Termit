@@ -24,7 +24,11 @@ check /api/ops/readiness
 check /api/ops/agent-runs/metrics
 check /api/retrieval/repo-map
 check /api/projects/agent-templates
+check /api/dev/cross-platform/stacks
 check /api/finetune/training/dashboard
 check /api/eval/dashboard
+check /api/desktop/journeys
+check /api/desktop/kpi-gates
+check /api/desktop/policy-presets
 
 echo "OK"

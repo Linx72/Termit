@@ -6,6 +6,7 @@ interface TerminalPanelProps {
   client: TermitClient;
   connected: boolean;
   locale: Locale;
+  suggestedCommands?: string[];
 }
 
 interface TerminalEntry {
@@ -19,7 +20,12 @@ function entryId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function TerminalPanel({ client, connected, locale }: TerminalPanelProps) {
+export function TerminalPanel({
+  client,
+  connected,
+  locale,
+  suggestedCommands = [],
+}: TerminalPanelProps) {
   const [command, setCommand] = useState("");
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<TerminalEntry[]>([]);
@@ -62,7 +68,12 @@ export function TerminalPanel({ client, connected, locale }: TerminalPanelProps)
     }
   };
 
-  const quickCommands = ["git status", "git diff --stat", "python3 -m unittest discover -s tests -q"];
+  const quickCommands = [
+    ...suggestedCommands,
+    "git status",
+    "git diff --stat",
+    "python3 -m unittest discover -s tests -q",
+  ].filter((item, index, all) => all.indexOf(item) === index);
 
   return (
     <div className="panel-body terminal-panel">

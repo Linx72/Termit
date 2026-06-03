@@ -17,6 +17,7 @@ from app.domain.schemas import (
     TaskStatusResponse,
     TaskType,
 )
+from app.services.assignment_workspace_service import AssignmentWorkspaceService
 from app.services.task_store import TaskStore
 from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingError, ToolingService
@@ -63,9 +64,11 @@ class TaskService:
         agent_runner: TaskAgentRunner | None = None,
         use_agent_for_auto: bool = False,
         task_agent_id: str = "",
+        assignment_workspace: AssignmentWorkspaceService | None = None,
     ) -> None:
         self._tooling = tooling
         self._store = store
+        self._assignments = assignment_workspace
         self._max_attempts = max_attempts
         self._telemetry = telemetry
         self._training_signals = training_signal_store
@@ -184,7 +187,10 @@ class TaskService:
 
         if self._use_agent_for_auto and self._agent_runner is not None:
             try:
-                self._run_via_agent(task_id)
+                if self._is_cross_platform_task(task_id):
+                    self._run_cross_platform_via_agent(task_id)
+                else:
+                    self._run_via_agent(task_id)
                 self._record_task_telemetry(completed=True, auto_mode=True, failure_class=None)
             except TaskExecutionError as exc:
                 self._fail(task_id, exc.error_class, str(exc))
@@ -231,12 +237,21 @@ class TaskService:
             )
 
     def _build_plan(self, task: TaskStatusResponse) -> list[str]:
+        from app.services.cross_platform_dev_service import CrossPlatformDevService
+
         text = task.input.lower()
         if "[fail-plan]" in text:
             raise PlanningError("Planner failed due to malformed task constraints.")
 
+        if CrossPlatformDevService.is_cross_platform_task(task.input):
+            return CrossPlatformDevService().plan_orchestration_steps(task.input, task.task_type)
+
         steps = ["analyze_input"]
-        if task.task_type in {TaskType.coding, TaskType.review, TaskType.debug, TaskType.explain}:
+        if task.task_type == TaskType.online_project:
+            steps.extend(["scaffold_assignment", "inspect_deliverables"])
+        elif task.task_type == TaskType.online_research:
+            steps.append("online_research_brief")
+        elif task.task_type in {TaskType.coding, TaskType.review, TaskType.debug, TaskType.explain}:
             steps.append("inspect_workspace")
         if "readme" in text:
             steps.append("read_readme")
@@ -291,6 +306,45 @@ class TaskService:
                 raise PlanningError("Task input is too short to execute.")
             return "Intent analyzed."
 
+        if step == "analyze_requirements":
+            return "Requirements analyzed for cross-platform delivery."
+
+        if step == "detect_stack_and_targets":
+            from app.services.cross_platform_dev_service import CrossPlatformDevService
+
+            service = CrossPlatformDevService()
+            profile, platforms, tasks = service.decompose(task.input)
+            return (
+                f"Stack {profile.name} ({profile.stack_id}) for "
+                f"{', '.join(p.value for p in platforms)} — {len(tasks)} atomic steps."
+            )
+
+        if step.startswith("atomic_"):
+            from app.services.cross_platform_dev_service import CrossPlatformDevService
+
+            service = CrossPlatformDevService()
+            _, _, tasks = service.decompose(task.input)
+            slug = step.removeprefix("atomic_")
+            matched = next((item for item in tasks if item.step_id.replace("-", "_") == slug), None)
+            if matched is None:
+                matched = next(
+                    (item for item in tasks if slug in item.step_id.replace("-", "_")),
+                    None,
+                )
+            title = matched.title if matched else slug.replace("_", " ")
+            verify = matched.verify_hint if matched else "Step verify pending"
+            return f"Atomic step '{title}' planned. Verify: {verify}"
+
+        if step == "compose_delivery":
+            if "[fail-tool]" in text:
+                raise ExternalError("External provider timeout while composing report.")
+            if "[retry-demo]" in text and attempt == 1:
+                raise ExternalError("Transient external error detected (simulated).")
+            return "Cross-platform delivery report drafted."
+
+        if step == "validate_tests":
+            return "Test validation step recorded for cross-platform task."
+
         if step == "inspect_workspace":
             try:
                 listing = self._tooling.list_files(ListFilesRequest(path="app", pattern="*.py"))
@@ -306,6 +360,39 @@ class TaskService:
             except ToolingError as exc:
                 raise VerificationError(f"Could not read README for requested analysis: {exc}") from exc
 
+        if step == "scaffold_assignment":
+            if self._assignments is None:
+                return "Assignment workspace service not configured."
+            from app.domain.schemas import AssignmentCreateRequest
+
+            title = task.input.strip().splitlines()[0][:120] or "Online project"
+            created = self._assignments.create(
+                AssignmentCreateRequest(
+                    title=title,
+                    brief=task.input,
+                    success_criteria=["Deliverables in deliverables/", "Journal updated"],
+                )
+            )
+            return f"Assignment workspace created: {created.assignment_id} at {created.root_path}"
+
+        if step == "inspect_deliverables":
+            if self._assignments is None:
+                return "No assignment workspace configured."
+            from pathlib import Path
+
+            recent = self._assignments.list_assignments(limit=1)
+            if not recent:
+                return "No assignment folders found."
+            deliverables = Path(recent[0].deliverables_path)
+            count = sum(1 for item in deliverables.iterdir() if item.is_file())
+            return f"Deliverables folder has {count} file(s) at {deliverables}."
+
+        if step == "online_research_brief":
+            return (
+                "Online research brief prepared. Use agent with web_search + web_automation "
+                "or POST /api/automation/web for live URLs."
+            )
+
         if step == "compose_report":
             if "[fail-tool]" in text:
                 raise ExternalError("External provider timeout while composing report.")
@@ -314,6 +401,63 @@ class TaskService:
             return "Execution report drafted."
 
         raise PlanningError(f"Unknown plan step: {step}")
+
+    def _is_cross_platform_task(self, task_id: str) -> bool:
+        from app.services.cross_platform_dev_service import CrossPlatformDevService
+
+        task = self.get_task(task_id)
+        return CrossPlatformDevService.is_cross_platform_task(task.input)
+
+    def _run_cross_platform_via_agent(self, task_id: str) -> None:
+        from app.services.cross_platform_dev_service import CrossPlatformDevService
+
+        task = self.get_task(task_id)
+        service = CrossPlatformDevService()
+        profile, platforms, tasks = service.decompose(task.input)
+        if not tasks:
+            raise PlanningError("Cross-platform decomposition produced no steps.")
+
+        self._append_event(
+            task_id,
+            "cross_platform_plan",
+            TaskState.running,
+            (
+                f"Atomic workflow: {profile.stack_id} · "
+                f"{len(tasks)} steps · template {profile.agent_template_id}"
+            ),
+        )
+
+        execution_notes: list[str] = []
+        session_id = task.session_id
+        for index, atomic in enumerate(tasks):
+            prompt = service.format_atomic_prompt(
+                task.input,
+                profile,
+                platforms,
+                atomic,
+                index=index,
+                total=len(tasks),
+            )
+            self._append_event(
+                task_id,
+                "atomic_step_started",
+                TaskState.running,
+                f"Atomic step {index + 1}/{len(tasks)}: {atomic.title}",
+            )
+            if self._agent_runner is None:
+                raise PlanningError("Agent runner is not configured.")
+            response = self._agent_runner(prompt, task.task_type, session_id)
+            execution_notes.append(f"[{atomic.step_id}] {response[:500]}")
+            self._append_event(
+                task_id,
+                "atomic_step_completed",
+                TaskState.running,
+                f"Atomic step {index + 1}/{len(tasks)} completed",
+            )
+
+        self._set_state(task_id, TaskState.verifying, "verification_started", "Verifying agent output")
+        self._verify(task_id, execution_notes)
+        self._complete(task_id, execution_notes)
 
     def _run_via_agent(self, task_id: str) -> None:
         task = self.get_task(task_id)

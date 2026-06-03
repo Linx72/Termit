@@ -77,9 +77,11 @@ class Phase2Tests(unittest.TestCase):
 
         store = AgentTemplatesStore(file_path="data/agent_templates.json")
         templates = store.list_templates()
-        self.assertGreaterEqual(len(templates), 3)
+        self.assertGreaterEqual(len(templates), 9)
         ids = {item.template_id for item in templates}
         self.assertIn("fix-ci", ids)
+        self.assertIn("cross-platform-flutter", ids)
+        self.assertIn("game-unity", ids)
 
     def test_phase2_api_routes(self) -> None:
         import tempfile

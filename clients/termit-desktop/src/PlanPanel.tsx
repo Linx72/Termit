@@ -12,6 +12,7 @@ interface PlanPanelProps {
   projectId: string;
   onSessionId: (id: string) => void;
   onBuild: (planText: string) => void;
+  onBuildAndVerify: (planText: string) => void;
 }
 
 type PlanBlock =
@@ -36,6 +37,7 @@ export function PlanPanel({
   projectId,
   onSessionId,
   onBuild,
+  onBuildAndVerify,
 }: PlanPanelProps) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -131,6 +133,14 @@ export function PlanPanel({
           onClick={() => onBuild(lastAssistant.trim())}
         >
           {t(locale, "build")}
+        </button>
+        <button
+          type="button"
+          className="primary"
+          disabled={!lastAssistant.trim()}
+          onClick={() => onBuildAndVerify(lastAssistant.trim())}
+        >
+          {t(locale, "buildAndVerify")}
         </button>
       </div>
     </div>

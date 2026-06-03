@@ -24,7 +24,14 @@ if [[ "${TERMIT_SKIP_OLLAMA_CHECK:-}" != "1" ]]; then
   if [[ "${TERMIT_PULL_OLLAMA_MODELS:-}" == "1" ]]; then
     PULL_FLAG=(--pull-missing)
   fi
-  if "$ROOT/scripts/check_ollama_models.sh" "${PULL_FLAG[@]}"; then
+  if [[ ${#PULL_FLAG[@]} -gt 0 ]]; then
+    ollama_ok=0
+    "$ROOT/scripts/check_ollama_models.sh" "${PULL_FLAG[@]}" && ollama_ok=1
+  else
+    ollama_ok=0
+    "$ROOT/scripts/check_ollama_models.sh" && ollama_ok=1
+  fi
+  if [[ "$ollama_ok" -eq 1 ]]; then
     echo "Ollama models OK."
   else
     echo "warning: some Ollama models missing — chat may fail until you ollama pull them." >&2

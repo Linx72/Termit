@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "journeys": [
+    {
+      "journey_id": "local_feature",
+      "title_ru": "Локальная фича end-to-end",
+      "title_en": "Local feature end-to-end",
+      "description_ru": "Plan → Composer → apply → verify → commit без облака.",
+      "description_en": "Plan → Composer → apply → verify → commit without cloud.",
+      "modes": ["local"],
+      "steps": ["plan", "composer", "apply", "terminal_verify", "commit"],
+      "primary_tab": "plan"
+    },
+    {
+      "journey_id": "agent_autopilot",
+      "title_ru": "Agent autopilot с checkpoint",
+      "title_en": "Agent autopilot with checkpoint",
+      "description_ru": "Долгий agent run, confirm risky tools, resume после сбоя.",
+      "description_en": "Long agent run, confirm risky tools, resume after failure.",
+      "modes": ["local", "hybrid"],
+      "steps": ["select_agent", "policy_preset", "run", "confirm", "resume"],
+      "primary_tab": "agents"
+    },
+    {
+      "journey_id": "online_research",
+      "title_ru": "Online research + patch",
+      "title_en": "Online research + patch",
+      "description_ru": "@web контекст, composer, safe apply с rollback.",
+      "description_en": "@web context, composer, safe apply with rollback.",
+      "modes": ["online", "hybrid"],
+      "steps": ["attach_web", "composer", "preview_risk", "apply", "rollback_if_needed"],
+      "primary_tab": "composer"
+    },
+    {
+      "journey_id": "team_shared_run",
+      "title_ru": "Командный shared run",
+      "title_en": "Team shared run",
+      "description_ru": "Поделиться agent run, синхронизировать policy preset команды.",
+      "description_en": "Share agent run, sync team policy preset.",
+      "modes": ["online", "hybrid"],
+      "steps": ["run_agent", "share_run", "team_review"],
+      "primary_tab": "online"
+    },
+    {
+      "journey_id": "quality_gate",
+      "title_ru": "Quality gate перед релизом",
+      "title_en": "Quality gate before release",
+      "description_ru": "Eval KPI + tool loop metrics, heavy job eval suite в фоне.",
+      "description_en": "Eval KPI + tool loop metrics, background eval suite heavy job.",
+      "modes": ["local", "online"],
+      "steps": ["kpi_gate", "heavy_job_eval", "review_dashboard"],
+      "primary_tab": "online"
+    }
+  ],
+  "kpi_targets": {
+    "ttfuc_seconds": 90,
+    "patch_acceptance_rate": 0.7,
+    "verify_pass_rate": 0.85,
+    "agent_resume_median_seconds": 30,
+    "local_only_task_share": 0.6,
+    "eval_pass_rate_min": 0.75,
+    "tool_loop_completion_rate_min": 0.8
+  }
+}

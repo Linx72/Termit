@@ -26,6 +26,9 @@ clients/termit-desktop/out/
 # Runtime artifacts under data/ (keep seed JSON tracked)
 data/*
 !data/eval_scenarios.json
+!data/agent_templates.json
+!data/skills/
+!data/skills/**/SKILL.md
 !data/repo_model_profiles.json
 !data/routing_benchmarks.json
 !data/finetune/
@@ -34,3 +37,5 @@ data/finetune/*
 !data/eval_fixtures/
 data/eval_fixtures/*
 !data/eval_fixtures/patch_sample.txt
+!data/desktop_north_star.json
+!data/desktop_policy_presets.json

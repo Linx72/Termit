@@ -84,7 +84,22 @@ TERMIT_RETRIEVAL_EMBED_MODEL=nomic-embed-text
 
 Переиндекс: UI или `POST /api/retrieval/reindex`. Без Ollama embeddings — fallback на keyword.
 
-## 7. Первый Composer run за ~10 минут
+## 7. Кроссплатформа (iOS / macOS / Windows / Android)
+
+Приложения и игры — **атомарными шагами** (один шаг → одна проверка):
+
+```bash
+curl -s http://127.0.0.1:8765/api/dev/cross-platform/decompose \
+  -H 'Content-Type: application/json' \
+  -d '{"goal":"Flutter MVP для iOS и Android","stack_id":"flutter"}'
+```
+
+- **Desktop:** пресеты Flutter / Swift / Unity / MAUI над полем чата  
+- **VS Code:** `Termit: Cross-Platform Task` в Command Palette  
+- **SDK:** `runAtomicDevWorkflow()` из `@termit/client`  
+- **Док:** [CROSS_PLATFORM_DEV_RU.md](docs/CROSS_PLATFORM_DEV_RU.md)
+
+## 8. Первый Composer run за ~10 минут
 
 1. Запустите API (`./scripts/start_server.sh` или LaunchAgent) и Ollama с моделью из `.env.example`.
 2. Откройте **Termit desktop** или VS Code extension → **Connect** (индикатор API зелёный).

@@ -32,18 +32,32 @@ import type {
 export interface TermitClientOptions {
   baseUrl?: string;
   apiKey?: string;
+  workspace?: string;
   fetchImpl?: typeof fetch;
 }
 
 export class TermitClient {
   readonly baseUrl: string;
   readonly apiKey?: string;
+  readonly workspace?: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: TermitClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? "http://127.0.0.1:8765").replace(/\/$/, "");
     this.apiKey = options.apiKey;
+    this.workspace = options.workspace?.trim() || undefined;
     this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  private withWorkspace<T extends object>(payload: T): T {
+    if (!this.workspace) {
+      return payload;
+    }
+    const currentPrefix = (payload as { retrieval_path_prefix?: string }).retrieval_path_prefix;
+    if (typeof currentPrefix === "string" && currentPrefix.trim().length > 0) {
+      return payload;
+    }
+    return { ...payload, retrieval_path_prefix: this.workspace } as T;
   }
 
   private headers(extra?: HeadersInit): HeadersInit {
@@ -73,7 +87,7 @@ export class TermitClient {
   chat(payload: ChatRequest): Promise<ChatResponse> {
     return this.request<ChatResponse>("/api/chat", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(this.withWorkspace(payload)),
     });
   }
 
@@ -81,7 +95,7 @@ export class TermitClient {
     const response = await this.fetchImpl(`${this.baseUrl}/api/chat/stream`, {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(this.withWorkspace(payload)),
     });
 
     if (!response.ok) {
@@ -95,7 +109,7 @@ export class TermitClient {
   createTask(payload: TaskCreateRequest): Promise<TaskCreateResponse> {
     return this.request<TaskCreateResponse>("/api/tasks", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(this.withWorkspace(payload)),
     });
   }
 
@@ -112,11 +126,16 @@ export class TermitClient {
   }
 
   createAgentRun(agentId: string, payload: AgentRunRequest): Promise<AgentRunCreateResponse> {
+    const body = this.withWorkspace({
+      ...payload,
+      workspace_scope: payload.workspace_scope ?? this.workspace,
+      retrieval_path_prefix: payload.retrieval_path_prefix ?? this.workspace,
+    });
     return this.request<AgentRunCreateResponse>(
       `/api/agents/${encodeURIComponent(agentId)}/runs`,
       {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       }
     );
   }
@@ -406,5 +425,63 @@ export class TermitClient {
       method: "POST",
       body: JSON.stringify({ query, max_results: maxResults }),
     });
+  }
+
+  listCrossPlatformStacks(): Promise<import("./crossPlatform").CrossPlatformStacksResponse> {
+    return this.request("/api/dev/cross-platform/stacks");
+  }
+
+  decomposeCrossPlatformTask(
+    payload: import("./crossPlatform").CrossPlatformDecomposeRequest
+  ): Promise<import("./crossPlatform").CrossPlatformDecomposeResult> {
+    return this.request("/api/dev/cross-platform/decompose", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  prepareCrossPlatformStep(
+    payload: import("./crossPlatform").CrossPlatformPrepareRequest
+  ): Promise<import("./crossPlatform").CrossPlatformPrepareResult> {
+    return this.request("/api/dev/cross-platform/prepare", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  detectCrossPlatformStack(
+    workspacePath: string
+  ): Promise<{ stack_id: string | null; hints: string[] }> {
+    return this.request("/api/dev/cross-platform/detect-stack", {
+      method: "POST",
+      body: JSON.stringify({ workspace_path: workspacePath }),
+    });
+  }
+
+  ensureAgentFromTemplate(templateId: string): Promise<AgentProfile> {
+    return this.request<AgentProfile>(
+      `/api/projects/agent-templates/${encodeURIComponent(templateId)}/ensure-agent`,
+      { method: "POST", body: "{}" }
+    );
+  }
+
+  recordCrossPlatformStep(payload: {
+    goal: string;
+    stack_id: string;
+    step_id: string;
+    step_index: number;
+    verify_ok: boolean;
+    verify_detail: string;
+    plan_id?: string;
+  }): Promise<{ recorded: boolean }> {
+    return this.request("/api/dev/cross-platform/record-step", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Internal helper for desktop parity APIs (`/api/desktop/*`). */
+  requestDesktop<T>(path: string, init?: RequestInit): Promise<T> {
+    return this.request<T>(path, init);
   }
 }

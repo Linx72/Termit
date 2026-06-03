@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.api.routes.assignments import router as assignments_router
 from app.api.routes.automation import router as automation_router
 from app.api.routes.agents import router as agents_router
 from app.api.routes.agent_eval import router as agent_eval_router
@@ -18,6 +19,8 @@ from app.api.routes.feedback import router as feedback_router
 from app.api.routes.local_runtime import router as local_runtime_router
 from app.api.routes.metrics import router as metrics_router
 from app.api.routes.ops import router as ops_router
+from app.api.routes.desktop import router as desktop_router
+from app.api.routes.cross_platform import router as cross_platform_router
 from app.api.routes.orchestration import router as orchestration_router
 from app.api.routes.platform import router as platform_router
 from app.api.routes.projects import router as projects_router
@@ -40,6 +43,7 @@ from app.state import (
     get_ops_service,
     get_quota_store,
     get_stage1_scheduler_service,
+    get_daily_improvement_scheduler_service,
 )
 from app.web.routes import router as web_router
 
@@ -59,6 +63,7 @@ _logger = logging.getLogger("termit.startup")
 async def _app_lifespan(_app: FastAPI):
     agent_service = get_agent_service()
     stage1_scheduler = get_stage1_scheduler_service()
+    daily_improvement_scheduler = get_daily_improvement_scheduler_service()
     maintenance_scheduler = get_agent_maintenance_scheduler_service()
     from app.state import get_agent_schedule_service
 
@@ -85,10 +90,12 @@ async def _app_lifespan(_app: FastAPI):
         _logger.warning("Ollama model validation skipped: %s", exc)
     agent_service.start()
     stage1_scheduler.start()
+    daily_improvement_scheduler.start()
     maintenance_scheduler.start()
     yield
     maintenance_scheduler.stop()
     agent_schedule_service.stop()
+    daily_improvement_scheduler.stop()
     stage1_scheduler.stop()
     agent_service.stop()
 
@@ -124,6 +131,7 @@ app.include_router(eval_router)
 app.include_router(retrieval_router)
 app.include_router(ops_router)
 app.include_router(automation_router)
+app.include_router(assignments_router)
 app.include_router(tasks_router)
 app.include_router(tools_router)
 app.include_router(local_runtime_router)
@@ -131,6 +139,8 @@ app.include_router(agents_router)
 app.include_router(agent_eval_router)
 app.include_router(teams_router)
 app.include_router(orchestration_router)
+app.include_router(cross_platform_router)
+app.include_router(desktop_router)
 app.include_router(projects_router)
 app.include_router(platform_router)
 app.include_router(routing_router)

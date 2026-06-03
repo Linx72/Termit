@@ -6,6 +6,9 @@ from app.domain.schemas import (
     AgentRunsCleanupRequest,
     AgentRunsCleanupResponse,
     AgentRunsMetricsResponse,
+    DailyImprovementPlanResponse,
+    DailyImprovementRunResponse,
+    DailyImprovementStatusResponse,
     OpsIncidentDrillResponse,
     OpsReadinessResponse,
     QuotaResetRequest,
@@ -17,11 +20,13 @@ from app.services.alert_health_service import evaluate_agent_health
 from app.services.ops_service import OpsService
 from app.services.agent_service import AgentService
 from app.services.agent_maintenance_scheduler_service import AgentMaintenanceSchedulerService
+from app.services.daily_improvement_scheduler_service import DailyImprovementSchedulerService
 from app.services.quota_store import QuotaStore
 from app.state import (
     get_agent_maintenance_scheduler_service,
     get_agent_service,
     get_chat_service,
+    get_daily_improvement_scheduler_service,
     get_ops_service,
     get_quota_store,
 )
@@ -201,3 +206,36 @@ async def dispatch_ops_alerts(
         payload={"dead_letter_rate": metrics.dead_letter_rate},
     )
     return {"health_status": metrics.health_status, **result}
+
+
+@router.get("/daily-improvement/status", response_model=DailyImprovementStatusResponse)
+async def daily_improvement_status(
+    scheduler: DailyImprovementSchedulerService = Depends(get_daily_improvement_scheduler_service),
+) -> DailyImprovementStatusResponse:
+    return DailyImprovementStatusResponse(**scheduler.status())
+
+
+@router.get("/daily-improvement/plan", response_model=DailyImprovementPlanResponse)
+async def daily_improvement_plan(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    scheduler: DailyImprovementSchedulerService = Depends(get_daily_improvement_scheduler_service),
+) -> DailyImprovementPlanResponse:
+    if settings.auth_enabled:
+        caller_role = getattr(request.state, "api_role", "viewer")
+        if caller_role not in {"admin", "operator"}:
+            raise HTTPException(status_code=403, detail="Operator role required.")
+    return DailyImprovementPlanResponse(**scheduler.preview_plan())
+
+
+@router.post("/daily-improvement/trigger", response_model=DailyImprovementRunResponse)
+async def daily_improvement_trigger(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    scheduler: DailyImprovementSchedulerService = Depends(get_daily_improvement_scheduler_service),
+) -> DailyImprovementRunResponse:
+    if settings.auth_enabled:
+        caller_role = getattr(request.state, "api_role", "viewer")
+        if caller_role not in {"admin", "operator"}:
+            raise HTTPException(status_code=403, detail="Operator role required.")
+    return DailyImprovementRunResponse(**scheduler.trigger_now())

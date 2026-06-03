@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { createCrossPlatformTaskFromPreset } from "./crossPlatformTask";
 import { createTaskFromSelection, TermitSidebarProvider } from "./sidebarProvider";
 import { applyPatchFromClipboard, promptPatchFromUser } from "./patchWorkflow";
 import { runInlineEdit } from "./inlineEdit";
@@ -24,6 +25,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("termit.createTask", () => {
       void createTaskFromSelection();
+    }),
+    vscode.commands.registerCommand("termit.crossPlatformTask", () => {
+      void createCrossPlatformTaskFromPreset();
     }),
     vscode.commands.registerCommand("termit.addSelectionToChat", () => {
       provider.reveal("chat");

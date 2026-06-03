@@ -37,18 +37,9 @@ jobs:
       - name: Eval suite CI gate
         env:
           TERMIT_EVAL_MIN_PASS_RATE: "0.95"
+          TERMIT_EVAL_CI_LIMIT: "53"
         run: |
           curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
             -H 'Content-Type: application/json' \
-            -d '{"persist_report":false}' \
-            | python3 scripts/eval_ci_gate.py
-
-      - name: Eval suite CI gate
-        env:
-          TERMIT_EVAL_MIN_PASS_RATE: "0.95"
-          TERMIT_EVAL_CI_LIMIT: "49"
-        run: |
-          curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
-            -H 'Content-Type: application/json' \
-            -d '{"limit":49,"persist_report":false}' \
+            -d '{"limit":53,"persist_report":false}' \
             | python3 scripts/eval_ci_gate.py

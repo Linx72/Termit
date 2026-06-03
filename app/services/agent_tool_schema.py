@@ -93,6 +93,44 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
             },
         },
     },
+    "browser_navigate": {
+        "type": "function",
+        "function": {
+            "name": "browser_navigate",
+            "description": "Open a URL in the headless browser (Playwright when enabled).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "timeout_seconds": {"type": "integer"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    "browser_snapshot": {
+        "type": "function",
+        "function": {
+            "name": "browser_snapshot",
+            "description": "Return title and text excerpt from the active browser session.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    "browser_click": {
+        "type": "function",
+        "function": {
+            "name": "browser_click",
+            "description": "Click an element by CSS selector (requires confirmed=true).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {"type": "string"},
+                    "confirmed": {"type": "boolean"},
+                },
+                "required": ["selector"],
+            },
+        },
+    },
     "web_search": {
         "type": "function",
         "function": {

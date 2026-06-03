@@ -10,6 +10,8 @@ class TaskType(str, Enum):
     debug = "debug"
     explain = "explain"
     general = "general"
+    online_research = "online_research"
+    online_project = "online_project"
 
 
 class TaskState(str, Enum):
@@ -182,6 +184,7 @@ class AgentTemplateResponse(BaseModel):
     enabled_tools: list[str] = Field(default_factory=list)
     use_tool_loop: bool = False
     use_retrieval: bool = False
+    skill_ids: list[str] = Field(default_factory=list)
 
 
 class AgentTemplateListResponse(BaseModel):
@@ -314,6 +317,91 @@ class OrchestrationRunResponse(BaseModel):
     report: str
     executor_response: str = ""
     session_id: Optional[str] = None
+
+
+class CrossPlatformStackInfo(BaseModel):
+    stack_id: str
+    name: str
+    description: str
+    default_platforms: list[str] = Field(default_factory=list)
+    build_verify: str = ""
+    agent_template_id: str = ""
+
+
+class CrossPlatformStacksResponse(BaseModel):
+    stacks: list[CrossPlatformStackInfo] = Field(default_factory=list)
+
+
+class CrossPlatformDecomposeRequest(BaseModel):
+    goal: str = Field(min_length=3, max_length=20000)
+    stack_id: Optional[str] = None
+    platforms: list[str] = Field(default_factory=list)
+    include_game_loop: Optional[bool] = None
+    persist_plan: bool = False
+    workspace_path: str = ""
+
+
+class CrossPlatformAtomicTaskInfo(BaseModel):
+    step_id: str
+    title: str
+    detail: str
+    platform: Optional[str] = None
+    verify_hint: str = ""
+
+
+class CrossPlatformDecomposeResponse(BaseModel):
+    stack_id: str
+    stack_name: str
+    agent_template_id: str
+    skill_id: str = "cross-platform-atomic"
+    platforms: list[str] = Field(default_factory=list)
+    build_verify: str = ""
+    atomic_tasks: list[CrossPlatformAtomicTaskInfo] = Field(default_factory=list)
+    first_step_prompt: str = ""
+    plan_id: str = ""
+
+
+class CrossPlatformDetectStackRequest(BaseModel):
+    workspace_path: str = Field(min_length=1, max_length=2000)
+
+
+class CrossPlatformDetectStackResponse(BaseModel):
+    stack_id: Optional[str] = None
+    hints: list[str] = Field(default_factory=list)
+
+
+class CrossPlatformRecordStepRequest(BaseModel):
+    goal: str = Field(min_length=1, max_length=20000)
+    stack_id: str = Field(min_length=1, max_length=64)
+    step_id: str = Field(min_length=1, max_length=64)
+    step_index: int = Field(ge=0, le=100)
+    verify_ok: bool = False
+    verify_detail: str = ""
+    plan_id: Optional[str] = None
+
+
+class CrossPlatformPrepareRequest(BaseModel):
+    goal: str = Field(min_length=3, max_length=20000)
+    stack_id: Optional[str] = None
+    platforms: list[str] = Field(default_factory=list)
+    include_game_loop: Optional[bool] = None
+    step_index: int = Field(default=0, ge=0, le=50)
+
+
+class CrossPlatformPrepareResponse(BaseModel):
+    stack_id: str
+    stack_name: str
+    agent_template_id: str
+    skill_id: str = "cross-platform-atomic"
+    platforms: list[str] = Field(default_factory=list)
+    build_verify: str = ""
+    step_index: int = 0
+    step_count: int = 0
+    step_id: str = ""
+    step_title: str = ""
+    verify_hint: str = ""
+    prompt: str = ""
+    atomic_tasks: list[CrossPlatformAtomicTaskInfo] = Field(default_factory=list)
 
 
 class OpsCheckResult(BaseModel):
@@ -709,6 +797,22 @@ class WebAutomationResponse(BaseModel):
     duration_ms: int = 0
 
 
+class AssignmentCreateRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    brief: str = Field(min_length=10, max_length=20000)
+    success_criteria: list[str] = Field(default_factory=list)
+    target_urls: list[str] = Field(default_factory=list)
+
+
+class AssignmentResponse(BaseModel):
+    assignment_id: str
+    root_path: str
+    brief_path: str
+    deliverables_path: str
+    journal_path: str
+    created_at: str
+
+
 class TaskCreateRequest(BaseModel):
     input: str = Field(min_length=3, max_length=20000)
     task_type: TaskType = TaskType.general
@@ -834,6 +938,8 @@ class AgentRunRequest(BaseModel):
     parent_run_id: Optional[str] = None
     project_id: Optional[str] = None
     changed_files: list[str] = Field(default_factory=list)
+    policy_preset: Optional[str] = Field(default=None, max_length=32)
+    execution_mode: Optional[str] = Field(default=None, max_length=16)
 
 
 class AgentEvalRunRequest(BaseModel):
@@ -1180,6 +1286,42 @@ class FinetuneStage1SchedulerStatusResponse(BaseModel):
     thread_alive: bool = False
 
 
+class DailyImprovementStatusResponse(BaseModel):
+    enabled: bool
+    hour_utc: int
+    minute_utc: int
+    agent_id: str = ""
+    max_agent_runs: int = 3
+    max_dlq_replay: int = 2
+    max_eval_fixes: int = 2
+    eval_probe_limit: int = 12
+    run_eval_probe: bool = True
+    auto_create_agent: bool = True
+    last_run_slot: Optional[str] = None
+    last_run_at: Optional[str] = None
+    last_run_source: Optional[str] = None
+    last_status: Optional[str] = None
+    last_action_count: Optional[int] = None
+    thread_alive: bool = False
+
+
+class DailyImprovementPlanResponse(BaseModel):
+    diagnostics: dict[str, object] = Field(default_factory=dict)
+    actions: list[dict[str, object]] = Field(default_factory=list)
+    action_count: int = 0
+
+
+class DailyImprovementRunResponse(BaseModel):
+    status: str
+    source: Optional[str] = None
+    detail: Optional[str] = None
+    slot: Optional[str] = None
+    agent_id: Optional[str] = None
+    agent_source: Optional[str] = None
+    plan: dict[str, object] = Field(default_factory=dict)
+    results: list[dict[str, object]] = Field(default_factory=list)
+
+
 class SkillSummaryResponse(BaseModel):
     skill_id: str
     name: str
@@ -1295,3 +1437,95 @@ class PlatformSearchResponse(BaseModel):
     query: str
     provider: str
     hits: list[PlatformSearchHitResponse] = Field(default_factory=list)
+
+
+class DesktopJourneyResponse(BaseModel):
+    journey_id: str
+    title_ru: str
+    title_en: str
+    description_ru: str
+    description_en: str
+    modes: list[str] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list)
+    primary_tab: str = "chat"
+
+
+class DesktopNorthStarResponse(BaseModel):
+    journeys: list[DesktopJourneyResponse] = Field(default_factory=list)
+    kpi_targets: dict[str, float] = Field(default_factory=dict)
+
+
+class DesktopKpiGateItem(BaseModel):
+    gate_id: str
+    label: str
+    actual: float
+    target: float
+    passed: bool
+    higher_is_better: bool = True
+
+
+class DesktopKpiGateResponse(BaseModel):
+    overall_passed: bool
+    passed_count: int
+    total_gates: int
+    gates: list[DesktopKpiGateItem] = Field(default_factory=list)
+    targets: dict[str, float] = Field(default_factory=dict)
+    journeys: list[DesktopJourneyResponse] = Field(default_factory=list)
+
+
+class AgentPolicyPresetResponse(BaseModel):
+    preset_id: str
+    name: str
+    description_ru: str = ""
+    description_en: str = ""
+    max_tool_steps: int = 6
+    allow_online: bool = False
+    auto_confirm_risky_tools: bool = False
+    verify_after_patch: bool = True
+    enabled_tools: list[str] = Field(default_factory=list)
+    execution_mode: str = "local"
+
+
+class DesktopShareRunRequest(BaseModel):
+    run_id: str = Field(min_length=1, max_length=64)
+    team: str = Field(default="default", max_length=64)
+    note: str = Field(default="", max_length=500)
+    shared_by: str = Field(default="desktop", max_length=64)
+
+
+class DesktopShareRunResponse(BaseModel):
+    share_id: str
+    run_id: str
+    team: str
+    note: str = ""
+    shared_by: str = "desktop"
+    shared_at: str
+    snapshot: dict[str, object] = Field(default_factory=dict)
+
+
+class DesktopSharedRunListResponse(BaseModel):
+    shared_runs: list[DesktopShareRunResponse] = Field(default_factory=list)
+    total: int = 0
+
+
+class DesktopHeavyJobRequest(BaseModel):
+    job_type: str = Field(min_length=1, max_length=32)
+    payload: dict[str, object] = Field(default_factory=dict)
+    requested_by: str = Field(default="desktop", max_length=64)
+
+
+class DesktopHeavyJobResponse(BaseModel):
+    job_id: str
+    job_type: str
+    state: str
+    payload: dict[str, object] = Field(default_factory=dict)
+    requested_by: str = "desktop"
+    created_at: str
+    updated_at: str
+    result: Optional[dict[str, object]] = None
+    error: Optional[str] = None
+
+
+class DesktopHeavyJobListResponse(BaseModel):
+    jobs: list[DesktopHeavyJobResponse] = Field(default_factory=list)
+    total: int = 0

@@ -86,39 +86,50 @@ class MultiAgentOrchestrator:
                 session_id=payload.session_id,
             )
 
+        from app.services.cross_platform_dev_service import CrossPlatformDevService
+
         execute_started = time.perf_counter()
-        executor_prompt = (
-            "Execute this coding objective using the approved plan and exploration context.\n"
-            f"Objective: {payload.input}\n"
-            f"Plan: {' -> '.join(plan_steps)}\n"
-            f"Explore:\n{explore_detail or '(none)'}"
-        )
-        chat_result = await self._chat.chat(
-            ChatRequest(
-                message=executor_prompt,
-                task_type=payload.task_type,
-                model=payload.model,
-                session_id=payload.session_id,
-                use_memory=True,
-                use_retrieval=payload.use_retrieval,
-                retrieval_limit=payload.retrieval_limit,
-                retrieval_path_prefix=payload.retrieval_path_prefix,
-                repo_profile=payload.repo_profile,
-                routing_policy=payload.routing_policy,
-                history=[ChatMessage(role="system", content="You are the coder agent.")],
+        chat_result_session = payload.session_id
+        if CrossPlatformDevService.is_cross_platform_task(payload.input):
+            executor_response, atomic_phases, chat_result_session = await self._atomic_build_phases(
+                payload,
+                explore_detail=explore_detail,
             )
-        )
-        executor_response = chat_result.response or ""
-        phases.append(
-            OrchestrationPhaseResult(
-                phase="coder",
-                status="passed" if executor_response.strip() else "failed",
-                detail="Coder produced a model response."
-                if executor_response.strip()
-                else "Coder returned an empty response.",
-                duration_ms=int((time.perf_counter() - execute_started) * 1000),
+            phases.extend(atomic_phases)
+        else:
+            executor_prompt = (
+                "Execute this coding objective using the approved plan and exploration context.\n"
+                f"Objective: {payload.input}\n"
+                f"Plan: {' -> '.join(plan_steps)}\n"
+                f"Explore:\n{explore_detail or '(none)'}"
             )
-        )
+            chat_result = await self._chat.chat(
+                ChatRequest(
+                    message=executor_prompt,
+                    task_type=payload.task_type,
+                    model=payload.model,
+                    session_id=payload.session_id,
+                    use_memory=True,
+                    use_retrieval=payload.use_retrieval,
+                    retrieval_limit=payload.retrieval_limit,
+                    retrieval_path_prefix=payload.retrieval_path_prefix,
+                    repo_profile=payload.repo_profile,
+                    routing_policy=payload.routing_policy,
+                    history=[ChatMessage(role="system", content="You are the coder agent.")],
+                )
+            )
+            chat_result_session = chat_result.session_id
+            executor_response = chat_result.response or ""
+            phases.append(
+                OrchestrationPhaseResult(
+                    phase="coder",
+                    status="passed" if executor_response.strip() else "failed",
+                    detail="Coder produced a model response."
+                    if executor_response.strip()
+                    else "Coder returned an empty response.",
+                    duration_ms=int((time.perf_counter() - execute_started) * 1000),
+                )
+            )
 
         review_started = time.perf_counter()
         review_detail, review_ok = await self._reviewer_phase(payload.input, executor_response)
@@ -148,7 +159,7 @@ class MultiAgentOrchestrator:
                 input=f"[orchestration:{run_id}] {payload.input}",
                 task_type=payload.task_type,
                 mode=TaskMode.auto,
-                session_id=chat_result.session_id,
+                session_id=chat_result_session,
             )
         )
         task_status = self._tasks.get_task(task.task_id)
@@ -171,8 +182,77 @@ class MultiAgentOrchestrator:
             phases=phases,
             report=report,
             executor_response=executor_response,
-            session_id=chat_result.session_id,
+            session_id=chat_result_session,
         )
+
+    async def _atomic_build_phases(
+        self,
+        payload: OrchestrationRunRequest,
+        *,
+        explore_detail: str,
+    ) -> tuple[str, list[OrchestrationPhaseResult], str | None]:
+        from app.services.cross_platform_dev_service import CrossPlatformDevService
+
+        service = CrossPlatformDevService()
+        profile, platforms, tasks = service.decompose(payload.input)
+        phases: list[OrchestrationPhaseResult] = []
+        chunks: list[str] = []
+        session_id = payload.session_id
+
+        for index, task in enumerate(tasks):
+            step_started = time.perf_counter()
+            prompt = service.format_atomic_prompt(
+                payload.input,
+                profile,
+                platforms,
+                task,
+                index=index,
+                total=len(tasks),
+            )
+            if explore_detail and index == 0:
+                prompt = f"{prompt}\n\nExplore context:\n{explore_detail}"
+            try:
+                result = await self._chat.chat(
+                    ChatRequest(
+                        message=prompt,
+                        task_type=payload.task_type,
+                        model=payload.model,
+                        session_id=session_id,
+                        use_memory=True,
+                        use_retrieval=payload.use_retrieval,
+                        retrieval_limit=payload.retrieval_limit,
+                        retrieval_path_prefix=payload.retrieval_path_prefix,
+                        repo_profile=payload.repo_profile,
+                        routing_policy=payload.routing_policy,
+                        history=[
+                            ChatMessage(
+                                role="system",
+                                content=service.build_agent_context(payload.input, stack_id=profile.stack_id),
+                            )
+                        ],
+                    )
+                )
+                session_id = result.session_id or session_id
+                text = (result.response or "").strip()
+                ok = len(text) >= 16
+                chunks.append(f"### {task.step_id}\n{text[:2000]}")
+            except Exception as exc:  # noqa: BLE001
+                ok = False
+                text = str(exc)
+                chunks.append(f"### {task.step_id}\nerror: {text}")
+            phases.append(
+                OrchestrationPhaseResult(
+                    phase=f"atomic_{task.step_id}",
+                    status="passed" if ok else "failed",
+                    detail=task.title[:240],
+                    duration_ms=int((time.perf_counter() - step_started) * 1000),
+                )
+            )
+            if not ok:
+                break
+
+        combined = "\n\n".join(chunks).strip()
+        return combined, phases, session_id
 
     async def _planner_steps(self, payload: OrchestrationRunRequest) -> list[str]:
         planner_prompt = (
@@ -291,6 +371,11 @@ class MultiAgentOrchestrator:
 
     @staticmethod
     def _build_plan(task_input: str, task_type: TaskType) -> list[str]:
+        from app.services.cross_platform_dev_service import CrossPlatformDevService
+
+        if CrossPlatformDevService.is_cross_platform_task(task_input):
+            return CrossPlatformDevService().plan_orchestration_steps(task_input, task_type)
+
         text = task_input.lower()
         steps = ["analyze_requirements"]
         if task_type in {TaskType.coding, TaskType.debug}:
