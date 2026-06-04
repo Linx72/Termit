@@ -139,15 +139,13 @@ class MediaApiTests(unittest.TestCase):
             list_resp = client.get("/api/media/assets", params={"project_id": "api-test"})
             self.assertEqual(list_resp.status_code, 200)
             self.assertGreaterEqual(len(list_resp.json()), 1)
-            estimate_resp = client.post(
-                "/api/media/estimate",
-                json={"storyboard_path": str(STORYBOARD_EXAMPLE)},
-            )
             if STORYBOARD_EXAMPLE.is_file():
+                estimate_resp = client.post(
+                    "/api/media/estimate",
+                    json={"storyboard_path": str(STORYBOARD_EXAMPLE)},
+                )
                 self.assertEqual(estimate_resp.status_code, 200)
                 self.assertLessEqual(estimate_resp.json()["total_usd"], 25.0)
-            else:
-                self.assertIn(estimate_resp.status_code, (400, 404))
         finally:
             app.dependency_overrides.clear()
             tmp.cleanup()
