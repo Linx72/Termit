@@ -284,37 +284,40 @@ class SprintTop5Tests(unittest.TestCase):
                 verify_after_patch=False,
                 max_concurrency=1,
             )
-            created = service.create_run(profile.agent_id, AgentRunRequest(input="patch"))
-            run_id = created.run_id
-            checkpoint = json.dumps(
-                {
-                    "history": [{"role": "user", "content": "patch"}],
-                    "pending_tool": "apply_patch",
-                    "pending_arguments": {"path": "a.txt", "content": "x", "create": True},
-                    "step": 1,
-                }
-            )
-            with service._lock:
-                record = service._run_store.get_run(run_id)
-                assert record is not None
-                record.state = AgentRunState.awaiting_confirmation
-                record.checkpoint_json = checkpoint
-                service._run_store.put_run(record)
+            try:
+                created = service.create_run(profile.agent_id, AgentRunRequest(input="patch"))
+                run_id = created.run_id
+                checkpoint = json.dumps(
+                    {
+                        "history": [{"role": "user", "content": "patch"}],
+                        "pending_tool": "apply_patch",
+                        "pending_arguments": {"path": "a.txt", "content": "x", "create": True},
+                        "step": 1,
+                    }
+                )
+                with service._lock:
+                    record = service._run_store.get_run(run_id)
+                    assert record is not None
+                    record.state = AgentRunState.awaiting_confirmation
+                    record.checkpoint_json = checkpoint
+                    service._run_store.put_run(record)
 
-            rejected = service.confirm_run(run_id, approved=False)
-            self.assertEqual(rejected.state, AgentRunState.failed)
+                rejected = service.confirm_run(run_id, approved=False)
+                self.assertEqual(rejected.state, AgentRunState.failed)
 
-            with service._lock:
-                record = service._run_store.get_run(run_id)
-                assert record is not None
-                record.state = AgentRunState.awaiting_confirmation
-                record.error = None
-                record.checkpoint_json = checkpoint
-                service._run_store.put_run(record)
+                with service._lock:
+                    record = service._run_store.get_run(run_id)
+                    assert record is not None
+                    record.state = AgentRunState.awaiting_confirmation
+                    record.error = None
+                    record.checkpoint_json = checkpoint
+                    service._run_store.put_run(record)
 
-            approved = service.confirm_run(run_id, approved=True)
-            self.assertTrue(approved.resumed)
-            self.assertEqual(approved.state, AgentRunState.queued)
+                approved = service.confirm_run(run_id, approved=True)
+                self.assertTrue(approved.resumed)
+                self.assertEqual(approved.state, AgentRunState.queued)
+            finally:
+                service.stop()
 
     def test_confirm_run_keeps_verify_retry_counter_in_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -338,30 +341,33 @@ class SprintTop5Tests(unittest.TestCase):
                 verify_after_patch=False,
                 max_concurrency=1,
             )
-            created = service.create_run(profile.agent_id, AgentRunRequest(input="patch"))
-            run_id = created.run_id
-            checkpoint = json.dumps(
-                {
-                    "history": [{"role": "user", "content": "patch"}],
-                    "pending_tool": "apply_patch",
-                    "pending_arguments": {"path": "a.txt", "content": "x", "create": True},
-                    "step": 1,
-                    "verify_retries_used": 1,
-                }
-            )
-            with service._lock:
-                record = service._run_store.get_run(run_id)
-                assert record is not None
-                record.state = AgentRunState.awaiting_confirmation
-                record.checkpoint_json = checkpoint
-                service._run_store.put_run(record)
-            approved = service.confirm_run(run_id, approved=True)
-            self.assertTrue(approved.resumed)
-            with service._lock:
-                record = service._run_store.get_run(run_id)
-                assert record is not None
-                data = json.loads(record.checkpoint_json or "{}")
-            self.assertEqual(data.get("verify_retries_used"), 1)
+            try:
+                created = service.create_run(profile.agent_id, AgentRunRequest(input="patch"))
+                run_id = created.run_id
+                checkpoint = json.dumps(
+                    {
+                        "history": [{"role": "user", "content": "patch"}],
+                        "pending_tool": "apply_patch",
+                        "pending_arguments": {"path": "a.txt", "content": "x", "create": True},
+                        "step": 1,
+                        "verify_retries_used": 1,
+                    }
+                )
+                with service._lock:
+                    record = service._run_store.get_run(run_id)
+                    assert record is not None
+                    record.state = AgentRunState.awaiting_confirmation
+                    record.checkpoint_json = checkpoint
+                    service._run_store.put_run(record)
+                approved = service.confirm_run(run_id, approved=True)
+                self.assertTrue(approved.resumed)
+                with service._lock:
+                    record = service._run_store.get_run(run_id)
+                    assert record is not None
+                    data = json.loads(record.checkpoint_json or "{}")
+                self.assertEqual(data.get("verify_retries_used"), 1)
+            finally:
+                service.stop()
 
     def test_reindex_path_updates_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
