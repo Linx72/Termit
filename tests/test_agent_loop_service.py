@@ -381,6 +381,68 @@ class AgentLoopIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(result.response, "plan ok")
 
+    def test_run_override_verify_max_retries_zero_fails_on_first_verify(self) -> None:
+        chat = LoopChatStub(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "execute_command",
+                        "arguments": {"command": "echo mutate", "path": ".", "dry_run": False, "confirmed": True},
+                    }
+                ),
+                json.dumps({"action": "final", "answer": "first final"}),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            service = AgentService(
+                chat_service=chat,
+                registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                agent_loop_service=AgentLoopService(),
+                verify_after_patch=True,
+                verify_cmd="echo verify-fail",
+                verify_max_retries=1,
+                max_concurrency=1,
+            )
+            original_execute = service._tooling.execute_command  # type: ignore[attr-defined]
+
+            def execute_with_verify_fail(payload):  # type: ignore[no-untyped-def]
+                if payload.command == "echo verify-fail":
+                    from app.domain.schemas import ExecuteCommandResponse, ToolRiskLevel
+
+                    return ExecuteCommandResponse(
+                        command=payload.command,
+                        path=payload.path,
+                        risk_level=ToolRiskLevel.safe,
+                        executed=True,
+                        exit_code=1,
+                        stdout="",
+                        stderr="verify failed",
+                    )
+                return original_execute(payload)
+
+            service._tooling.execute_command = execute_with_verify_fail  # type: ignore[attr-defined]
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Verify Override Agent",
+                    description="per-run verify retries override",
+                    system_prompt="Try final after one tool call.",
+                    task_type=TaskType.coding,
+                    enabled_tools=["execute_command"],
+                    use_tool_loop=True,
+                )
+            )
+            with self.assertRaisesRegex(Exception, "Verify retries exhausted"):
+                asyncio.run(
+                    service.run_agent(
+                        agent.agent_id,
+                        AgentRunRequest(input="run with strict verify", verify_max_retries=0),
+                    )
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

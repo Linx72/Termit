@@ -111,6 +111,7 @@ export interface AgentRunRequest {
   execution_mode?: "local" | "online" | "hybrid" | "ssh";
   auto_confirm_risky_tools?: boolean;
   verify_after_patch?: boolean;
+  verify_max_retries?: number;
   ssh_host?: string;
   ssh_user?: string;
   ssh_port?: number;
