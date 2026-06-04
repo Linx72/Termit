@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -90,6 +91,32 @@ class OpsApiTests(unittest.TestCase):
         status_resp = client.get("/api/ops/agent-runs/maintenance")
         self.assertEqual(status_resp.status_code, 200)
         self.assertIn("enabled", status_resp.json())
+
+    def test_alert_dispatch_includes_verify_payload(self) -> None:
+        client = TestClient(app)
+
+        class _WebhookStub:
+            enabled = True
+
+            def __init__(self) -> None:
+                self.captured_payload = None
+
+            def send(self, *, title, status, detail, payload=None):  # type: ignore[no-untyped-def]
+                self.captured_payload = payload
+                return {"sent": True, "status_code": 200}
+
+        webhook_stub = _WebhookStub()
+        with patch("app.state.get_alert_webhook_service", return_value=webhook_stub):
+            resp = client.post("/api/ops/alerts/dispatch")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIn("health_status", body)
+        self.assertTrue(body.get("sent"))
+        self.assertIsInstance(webhook_stub.captured_payload, dict)
+        payload = webhook_stub.captured_payload or {}
+        self.assertIn("dead_letter_rate", payload)
+        self.assertIn("tool_loop_verify_pass_rate", payload)
+        self.assertIn("min_verify_pass_rate", payload)
 
 
 if __name__ == "__main__":
