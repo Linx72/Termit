@@ -17,6 +17,9 @@ clients/*/dist/
 clients/termit-desktop/dist-electron/
 clients/termit-desktop/release/
 clients/termit-desktop/out/
+clients/termit-shell/.build/
+clients/termit-shell/build/
+clients/termit-shell/release/
 
 # Cursor hook runtime (tracked: hooks.json + token_watch.py)
 .cursor/hooks/state/*
