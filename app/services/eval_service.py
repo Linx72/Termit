@@ -193,6 +193,9 @@ class EvalService:
             automation = "manual assisted"
             status = "failed"
             message = str(exc)
+        finally:
+            if scenario.patch_path == _EVAL_PATCH_FIXTURE:
+                self._reset_patch_fixture()
 
         duration_ms = int((time.perf_counter() - started) * 1000)
         return {

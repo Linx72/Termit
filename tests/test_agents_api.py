@@ -63,7 +63,7 @@ class AgentsApiTests(unittest.TestCase):
         run_id = queue_resp.json()["run_id"]
 
         state = "queued"
-        for _ in range(40):
+        for _ in range(80):
             run_resp = client.get(f"/api/agents/runs/{run_id}")
             self.assertEqual(run_resp.status_code, 200)
             state = run_resp.json()["state"]

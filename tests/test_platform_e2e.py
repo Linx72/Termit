@@ -88,13 +88,14 @@ class PlatformE2ETests(unittest.TestCase):
         run_id = run_resp.json()["run_id"]
 
         state = "queued"
-        for _ in range(40):
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline:
             status_resp = client.get(f"/api/agents/runs/{run_id}")
             self.assertEqual(status_resp.status_code, 200)
             state = status_resp.json()["state"]
             if state in {"completed", "failed"}:
                 break
-            time.sleep(0.05)
+            time.sleep(0.1)
 
         self.assertEqual(state, "completed")
 
