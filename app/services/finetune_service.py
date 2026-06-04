@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1219,7 +1220,7 @@ class FinetuneService:
         if not self.task_sqlite_path.exists():
             return []
         rows: list[dict[str, str]] = []
-        with sqlite3.connect(self.task_sqlite_path) as conn:
+        with closing(sqlite3.connect(self.task_sqlite_path)) as conn:
             conn.row_factory = sqlite3.Row
             try:
                 result = conn.execute(
@@ -1273,7 +1274,7 @@ class FinetuneService:
                     (task_id,),
                 ).fetchall()
             else:
-                with sqlite3.connect(self.task_sqlite_path) as local_conn:
+                with closing(sqlite3.connect(self.task_sqlite_path)) as local_conn:
                     local_conn.row_factory = sqlite3.Row
                     events = local_conn.execute(
                         """
@@ -1304,7 +1305,7 @@ class FinetuneService:
         if not self.agent_run_sqlite_path.exists():
             return []
         rows: list[dict[str, str]] = []
-        with sqlite3.connect(self.agent_run_sqlite_path) as conn:
+        with closing(sqlite3.connect(self.agent_run_sqlite_path)) as conn:
             conn.row_factory = sqlite3.Row
             try:
                 result = conn.execute(
@@ -1373,7 +1374,7 @@ class FinetuneService:
         if not self.memory_sqlite_path.exists():
             return []
         rows: list[dict[str, str]] = []
-        with sqlite3.connect(self.memory_sqlite_path) as conn:
+        with closing(sqlite3.connect(self.memory_sqlite_path)) as conn:
             conn.row_factory = sqlite3.Row
             try:
                 sessions = conn.execute(

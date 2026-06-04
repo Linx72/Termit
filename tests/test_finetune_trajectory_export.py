@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from app.services.finetune_trajectory_export import (
@@ -54,7 +55,7 @@ class FinetuneTrajectoryExportTests(unittest.TestCase):
     def test_load_trajectory_sft_rows_from_sqlite(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "runs.db"
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn:
                 conn.execute(
                     """
                     CREATE TABLE agent_runs (

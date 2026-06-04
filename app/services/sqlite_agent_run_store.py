@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from threading import Lock
 from typing import Optional
@@ -21,7 +22,7 @@ class SQLiteAgentRunStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(
                 """
@@ -74,7 +75,7 @@ class SQLiteAgentRunStore:
             conn.commit()
 
     def put_run(self, run: AgentRunRecordResponse) -> None:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             attempted = "\n".join(run.attempted_models)
             conn.execute(
                 """
@@ -126,14 +127,14 @@ class SQLiteAgentRunStore:
             conn.commit()
 
     def get_run(self, run_id: str) -> Optional[AgentRunRecordResponse]:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             row = conn.execute("SELECT * FROM agent_runs WHERE run_id = ?", (run_id,)).fetchone()
         if row is None:
             return None
         return self._row_to_run(row)
 
     def list_runs(self, limit: int = 50) -> list[AgentRunRecordResponse]:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT * FROM agent_runs ORDER BY updated_at DESC LIMIT ?",
                 (limit,),
@@ -141,7 +142,7 @@ class SQLiteAgentRunStore:
         return [self._row_to_run(row) for row in rows]
 
     def list_runs_by_agent(self, agent_id: str, limit: int = 50) -> list[AgentRunRecordResponse]:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT * FROM agent_runs WHERE agent_id = ? ORDER BY updated_at DESC LIMIT ?",
                 (agent_id, limit),
@@ -149,7 +150,7 @@ class SQLiteAgentRunStore:
         return [self._row_to_run(row) for row in rows]
 
     def append_event(self, run_id: str, event: AgentRunEvent) -> None:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO agent_run_events(run_id, event_type, state, message, timestamp, attempt)
@@ -168,7 +169,7 @@ class SQLiteAgentRunStore:
 
     def get_events(self, run_id: str, limit: int = 500) -> list[AgentRunEvent]:
         safe_limit = max(1, min(limit, 2000))
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT event_type, state, message, timestamp, attempt
@@ -192,7 +193,7 @@ class SQLiteAgentRunStore:
 
     def trim_events(self, run_id: str, max_events: int) -> int:
         safe_max = max(1, max_events)
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT COUNT(*) AS c FROM agent_run_events WHERE run_id = ?",
                 (run_id,),
@@ -220,19 +221,19 @@ class SQLiteAgentRunStore:
             return int(deleted or 0)
 
     def count_runs(self) -> int:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             row = conn.execute("SELECT COUNT(*) AS c FROM agent_runs").fetchone()
         return int(row["c"] if row else 0)
 
     def count_runs_by_state(self) -> dict[str, int]:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT state, COUNT(*) AS c FROM agent_runs GROUP BY state"
             ).fetchall()
         return {str(row["state"]): int(row["c"]) for row in rows}
 
     def tool_loop_event_metrics(self) -> dict[str, object]:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             event_rows = conn.execute(
                 """
                 SELECT run_id, event_type, message
@@ -263,7 +264,7 @@ class SQLiteAgentRunStore:
             return (0, 0)
         placeholders = ",".join("?" for _ in states)
         params = [cutoff_iso, *states]
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             run_rows = conn.execute(
                 f"""
                 SELECT run_id FROM agent_runs

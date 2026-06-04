@@ -10,8 +10,9 @@
 	reverse_proxy termit:8765
 }
 
-# Production HTTPS (set DOMAIN env, e.g. termit.example.com)
-{$DOMAIN} {
+# Production HTTPS (set DOMAIN env, e.g. termit.example.com).
+# Keep a non-empty default so Caddy doesn't parse an empty site label.
+{$DOMAIN:localhost} {
 	encode gzip zstd
 	reverse_proxy termit:8765
 }

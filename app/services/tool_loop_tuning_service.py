@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import Counter
+from contextlib import closing
 from pathlib import Path
 from typing import Optional
 
@@ -35,7 +36,7 @@ def _scan_agent_run_events(db_path: Path, *, limit: int = 5000) -> dict[str, obj
     if not db_path.exists():
         return stats
     try:
-        with sqlite3.connect(db_path) as conn:
+        with closing(sqlite3.connect(db_path)) as conn:
             rows = conn.execute(
                 """
                 SELECT event_type, message

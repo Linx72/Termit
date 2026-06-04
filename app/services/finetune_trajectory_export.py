@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
+from contextlib import closing
 from pathlib import Path
 from typing import Optional
 
@@ -134,7 +135,7 @@ def load_trajectory_sft_rows(
         return [], stats
 
     rows: list[dict[str, object]] = []
-    with sqlite3.connect(agent_run_sqlite_path) as conn:
+    with closing(sqlite3.connect(agent_run_sqlite_path)) as conn:
         conn.row_factory = sqlite3.Row
         query = """
             SELECT run_id, agent_id, input, response, state, error, failure_class

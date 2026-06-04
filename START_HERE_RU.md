@@ -61,10 +61,12 @@ open clients/termit-desktop/release/mac-arm64/Termit.app
 
 В приложении:
 
-1. **Choose repo** → папка клона Termit  
+1. **Choose repo** → путь к папке клона Termit (через встроенную модалку)  
 2. **Start server on launch** (опционально)  
-3. **Choose folder** → ваш код  
+3. **Choose folder** → путь к вашему workspace (через встроенную модалку)  
 4. **Connect** — индикатор API / Ollama в сайдбаре  
+
+UX parity: потоки выбора файлов/папок и коротких вводов (`@symbol`, `@web`) идут через встроенные модалки; `window.prompt` в ключевых пользовательских потоках не используется.
 
 ## 5. GitHub (несколько Mac)
 
@@ -107,7 +109,7 @@ curl -s http://127.0.0.1:8765/api/dev/cross-platform/decompose \
 
 1. Запустите API (`./scripts/start_server.sh` или LaunchAgent) и Ollama с моделью из `.env.example`.
 2. Откройте **Termit desktop** или VS Code extension → **Connect** (индикатор API зелёный).
-3. **Choose folder** — корень репозитория с кодом.
+3. **Choose folder** — корень репозитория с кодом (через встроенную модалку).
 4. Вкладка **Composer** → **Add file** (или `@file` в chat) → опишите задачу, например: «Добавь unit-тест для функции X».
 5. Дождитесь diff preview → **Apply** (или Apply all).
 6. Опционально: вкладка **Agents** → запустите agent run с tool loop — timeline обновляется через **SSE** (`/api/agents/runs/{id}/stream`).

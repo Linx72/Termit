@@ -7,6 +7,29 @@ from app.main import app
 
 
 class PlatformE2ETests(unittest.TestCase):
+    @staticmethod
+    def _wait_for_run_completed(client: TestClient, run_id: str, timeout_seconds: float = 20.0) -> str:
+        state = "queued"
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            status_resp = client.get(f"/api/agents/runs/{run_id}")
+            status_resp.raise_for_status()
+            state = status_resp.json()["state"]
+            if state in {"completed", "failed"}:
+                return state
+            time.sleep(0.1)
+
+        # Fallback for CI jitter: wait for SSE completion marker.
+        stream_resp = client.get(
+            f"/api/agents/runs/{run_id}/stream?poll_ms=100&timeout_seconds={int(timeout_seconds)}"
+        )
+        stream_resp.raise_for_status()
+        if "event: done" in stream_resp.text:
+            final_resp = client.get(f"/api/agents/runs/{run_id}")
+            final_resp.raise_for_status()
+            return final_resp.json()["state"]
+        return state
+
     def test_health_smoke_chain(self) -> None:
         client = TestClient(app)
         for path in (
@@ -22,6 +45,11 @@ class PlatformE2ETests(unittest.TestCase):
         metrics = client.get("/api/ops/agent-runs/metrics").json()
         self.assertIn("tool_loop_runs", metrics)
         self.assertIn("tool_loop_tool_success_rate", metrics)
+        self.assertIn("stale_queued_runs", metrics)
+        self.assertIn("stale_running_runs", metrics)
+        self.assertIn("max_queued_age_seconds", metrics)
+        self.assertIn("max_running_age_seconds", metrics)
+        self.assertIn("queue_stuck_timeout_seconds", metrics)
 
         stacks = client.get("/api/dev/cross-platform/stacks")
         self.assertEqual(stacks.status_code, 200)
@@ -87,16 +115,7 @@ class PlatformE2ETests(unittest.TestCase):
         self.assertEqual(run_resp.status_code, 200)
         run_id = run_resp.json()["run_id"]
 
-        state = "queued"
-        deadline = time.monotonic() + 15.0
-        while time.monotonic() < deadline:
-            status_resp = client.get(f"/api/agents/runs/{run_id}")
-            self.assertEqual(status_resp.status_code, 200)
-            state = status_resp.json()["state"]
-            if state in {"completed", "failed"}:
-                break
-            time.sleep(0.1)
-
+        state = self._wait_for_run_completed(client, run_id)
         self.assertEqual(state, "completed")
 
         stream_resp = client.get(f"/api/agents/runs/{run_id}/stream?poll_ms=50&timeout_seconds=10")

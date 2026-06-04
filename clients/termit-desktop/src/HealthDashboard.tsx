@@ -23,9 +23,21 @@ interface HealthSnapshot {
   evalTotal: number | null;
   toolLoopSuccessRate: number | null;
   toolLoopCompletionRate: number | null;
+  staleQueuedRuns: number;
+  staleRunningRuns: number;
+  maxQueuedAgeSeconds: number;
+  maxRunningAgeSeconds: number;
+  queueStuckTimeoutSeconds: number;
   trainingSignals: number | null;
   latestDataset: string | null;
   tuningHint: string | null;
+}
+
+interface LifecycleSummary {
+  level: "ok" | "degraded" | "critical";
+  staleTotal: number;
+  maxAgeSeconds: number;
+  timeoutSeconds: number;
 }
 
 function formatRate(value: number | null | undefined): string {
@@ -33,6 +45,26 @@ function formatRate(value: number | null | undefined): string {
     return "—";
   }
   return `${(value * 100).toFixed(0)}%`;
+}
+
+function buildLifecycleSummary(snapshot: HealthSnapshot): LifecycleSummary {
+  const staleTotal = snapshot.staleQueuedRuns + snapshot.staleRunningRuns;
+  const maxAgeSeconds = Math.max(snapshot.maxQueuedAgeSeconds, snapshot.maxRunningAgeSeconds);
+  const timeoutSeconds = Math.max(1, snapshot.queueStuckTimeoutSeconds);
+  const nearTimeout = maxAgeSeconds >= timeoutSeconds * 0.8;
+  const level: LifecycleSummary["level"] =
+    staleTotal > 0 ? "critical" : nearTimeout ? "degraded" : "ok";
+  return { level, staleTotal, maxAgeSeconds, timeoutSeconds };
+}
+
+function lifecycleLabel(locale: Locale, level: LifecycleSummary["level"]): string {
+  if (level === "critical") {
+    return t(locale, "kpiLifecycleBad");
+  }
+  if (level === "degraded") {
+    return t(locale, "kpiLifecycleWarn");
+  }
+  return t(locale, "kpiLifecycleOk");
 }
 
 export function HealthDashboard({ client, connected, locale }: HealthDashboardProps) {
@@ -73,6 +105,11 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
         evalTotal: evalDash.latest_total ?? null,
         toolLoopSuccessRate: metrics.tool_loop_tool_success_rate ?? null,
         toolLoopCompletionRate: metrics.tool_loop_completion_rate ?? null,
+        staleQueuedRuns: metrics.stale_queued_runs ?? 0,
+        staleRunningRuns: metrics.stale_running_runs ?? 0,
+        maxQueuedAgeSeconds: metrics.max_queued_age_seconds ?? 0,
+        maxRunningAgeSeconds: metrics.max_running_age_seconds ?? 0,
+        queueStuckTimeoutSeconds: metrics.queue_stuck_timeout_seconds ?? 120,
         trainingSignals: training.training_signals_count,
         latestDataset: training.latest_dataset ?? null,
         tuningHint,
@@ -103,38 +140,54 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
       {error && <p className="hint error-text">{error}</p>}
       {snapshot ? (
         <ul className="health-stats">
-          <li>
-            {t(locale, "queue")}: {snapshot.queueSize}/{snapshot.queueCapacity} ({snapshot.queueUtil.toFixed(0)}%)
-          </li>
-          <li>
-            agents: <span className={`health-tag ${snapshot.healthStatus}`}>{snapshot.healthStatus}</span>
-          </li>
-          <li>
-            {t(locale, "index")}: {snapshot.indexedFiles} files · {snapshot.indexedChunks} chunks ·{" "}
-            {snapshot.retrievalMode}
-          </li>
-          <li>
-            {t(locale, "readiness")}: {snapshot.readiness}
-          </li>
-          <li>
-            {t(locale, "kpiEval")}: {formatRate(snapshot.evalPassRate)}
-            {snapshot.evalTotal != null ? ` · ${snapshot.evalTotal} ${t(locale, "kpiScenarios")}` : ""}
-            {snapshot.evalP95Ms != null ? ` · p95 ${snapshot.evalP95Ms}ms` : ""}
-            {snapshot.evalCostUsd != null ? ` · ~$${snapshot.evalCostUsd.toFixed(4)}` : ""}
-          </li>
-          <li>
-            {t(locale, "kpiToolLoop")}: {formatRate(snapshot.toolLoopSuccessRate)} ·{" "}
-            {t(locale, "kpiCompletion")} {formatRate(snapshot.toolLoopCompletionRate)}
-          </li>
-          <li>
-            {t(locale, "kpiTraining")}: {snapshot.trainingSignals ?? "—"} {t(locale, "kpiSignals")}
-            {snapshot.latestDataset ? ` · ${snapshot.latestDataset}` : ""}
-          </li>
-          {snapshot.tuningHint && (
-            <li className="hint muted">
-              {t(locale, "kpiTuning")}: {snapshot.tuningHint}
-            </li>
-          )}
+          {(() => {
+            const lifecycle = buildLifecycleSummary(snapshot);
+            return (
+              <>
+                <li>
+                  {t(locale, "queue")}: {snapshot.queueSize}/{snapshot.queueCapacity} ({snapshot.queueUtil.toFixed(0)}
+                  %)
+                </li>
+                <li>
+                  agents: <span className={`health-tag ${snapshot.healthStatus}`}>{snapshot.healthStatus}</span>
+                </li>
+                <li>
+                  {t(locale, "index")}: {snapshot.indexedFiles} files · {snapshot.indexedChunks} chunks ·{" "}
+                  {snapshot.retrievalMode}
+                </li>
+                <li>
+                  {t(locale, "readiness")}: {snapshot.readiness}
+                </li>
+                <li>
+                  {t(locale, "kpiEval")}: {formatRate(snapshot.evalPassRate)}
+                  {snapshot.evalTotal != null ? ` · ${snapshot.evalTotal} ${t(locale, "kpiScenarios")}` : ""}
+                  {snapshot.evalP95Ms != null ? ` · p95 ${snapshot.evalP95Ms}ms` : ""}
+                  {snapshot.evalCostUsd != null ? ` · ~$${snapshot.evalCostUsd.toFixed(4)}` : ""}
+                </li>
+                <li>
+                  {t(locale, "kpiToolLoop")}: {formatRate(snapshot.toolLoopSuccessRate)} · {t(locale, "kpiCompletion")}{" "}
+                  {formatRate(snapshot.toolLoopCompletionRate)}
+                </li>
+                <li>
+                  {t(locale, "kpiLifecycle")}:{" "}
+                  <span className={`health-tag ${lifecycle.level}`}>{lifecycleLabel(locale, lifecycle.level)}</span> ·{" "}
+                  {t(locale, "kpiCompletion")} {formatRate(snapshot.toolLoopCompletionRate)} ·{" "}
+                  {t(locale, "kpiLifecycleStale")} q:{snapshot.staleQueuedRuns} r:{snapshot.staleRunningRuns} · max age{" "}
+                  {lifecycle.maxAgeSeconds.toFixed(0)}s / {t(locale, "kpiLifecycleTimeout")} {lifecycle.timeoutSeconds}
+                  s
+                </li>
+                <li>
+                  {t(locale, "kpiTraining")}: {snapshot.trainingSignals ?? "—"} {t(locale, "kpiSignals")}
+                  {snapshot.latestDataset ? ` · ${snapshot.latestDataset}` : ""}
+                </li>
+                {snapshot.tuningHint && (
+                  <li className="hint muted">
+                    {t(locale, "kpiTuning")}: {snapshot.tuningHint}
+                  </li>
+                )}
+              </>
+            );
+          })()}
         </ul>
       ) : (
         <p className="hint muted">{connected ? "…" : "—"}</p>

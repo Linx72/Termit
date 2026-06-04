@@ -232,6 +232,60 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ---
 
+## Следующий этап после parity-релиза 0.3.4 (4–8 недель)
+
+**Цель этапа:** перейти от parity к устойчивому production-режиму: меньше флейков, выше автономность run, предсказуемые релизы и измеримая пользовательская ценность.
+
+### Трек 1 — Stability hardening (недели 1–2)
+
+- [ ] Закрыть источники `ResourceWarning` (unclosed sqlite connections) в runtime и тестах
+- [ ] Дожать флейки e2e для фоновых run (`running -> completed`)
+- [ ] Разделить unstable integration тесты в nightly-контур
+
+**DoD:** 20 последовательных прогонов smoke/release smoke без критичных флейков.
+
+### Трек 2 — Agent autonomy vNext (недели 2–4)
+
+- [ ] Усилить stop-conditions и recovery path в tool loop при деградации
+- [ ] Добавить policy-level fallback (constrained-plan + safe-exec)
+- [ ] Ввести явные outcome classes: success / partial / blocked-external / blocked-policy
+
+**DoD:** рост completion-rate и снижение repeat/empty-final кейсов на типовых coding run.
+
+### Трек 3 — Desktop product UX (недели 3–5)
+
+- [ ] Улучшить post-run follow-up в стиле next best action
+- [ ] Довести onboarding до first-run за < 2 минут
+- [ ] Вывести runtime status в UI (SLA, retries, active runs)
+
+**DoD:** P95 до первого осмысленного шага остаётся < 5s в реальном использовании.
+
+### Трек 4 — Eval/quality 2.0 (недели 4–6)
+
+- [ ] Расширить parity-сценарии до 40+ (сложные multi-file/multi-step кейсы)
+- [ ] Развести quality gates: fast (PR), deep (nightly), release (обязательный)
+- [ ] Автоматизировать отчёт деградаций относительно предыдущего релиза
+
+**DoD:** каждый релиз проходит release gate; каждая регрессия имеет сценарий воспроизведения.
+
+### Трек 5 — Release discipline & ops (недели 5–8)
+
+- [ ] Формализовать поток `rc -> stable -> hotfix`
+- [ ] Автоматизировать пакет `changelog + migration notes + rollback`
+- [ ] Закрыть операционные SLO/SLA-дашборды и алерты
+
+**DoD:** релиз выполняется одной командой без ручных патчей скриптов.
+
+### Следующий спринт (5–7 дней, immediate)
+
+1. [ ] Убрать unclosed sqlite warnings
+2. [ ] Стабилизировать `test_platform_e2e`/`test_agents_api` без тайминговых флейков
+3. [ ] Разделить release smoke на deterministic core и extended suite
+4. [ ] Добавить lifecycle summary в UI (completion/timeout/stale)
+5. [ ] Подготовить и выпустить `0.3.5` как stability release
+
+---
+
 ## Порядок выполнения
 
 ```text

@@ -4,6 +4,7 @@ import json
 import sqlite3
 import threading
 import time
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -49,7 +50,7 @@ class AgentScheduleService:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS agent_schedules (
@@ -90,7 +91,7 @@ class AgentScheduleService:
         schedule_id = f"sched_{uuid4().hex[:10]}"
         now = datetime.now(timezone.utc).isoformat()
         next_run = self._compute_next_run(cron)
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO agent_schedules(
@@ -116,7 +117,7 @@ class AgentScheduleService:
         }
 
     def list_schedules(self, agent_id: str | None = None) -> list[dict[str, object]]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             if agent_id:
                 rows = conn.execute(
                     "SELECT * FROM agent_schedules WHERE agent_id = ? ORDER BY created_at DESC",
@@ -139,7 +140,7 @@ class AgentScheduleService:
     def _tick(self) -> None:
         now = datetime.now(timezone.utc)
         due: list[tuple[str, str, str, str]] = []
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT schedule_id, agent_id, cron, payload_json, next_run_at FROM agent_schedules WHERE enabled = 1"
             ).fetchall()
@@ -160,7 +161,7 @@ class AgentScheduleService:
             run_id = self._enqueue_fn(agent_id, payload)
             next_run = self._compute_next_run(cron)
             fired_at = datetime.now(timezone.utc).isoformat()
-            with self._lock, self._connect() as conn:
+            with self._lock, closing(self._connect()) as conn:
                 conn.execute(
                     """
                     UPDATE agent_schedules

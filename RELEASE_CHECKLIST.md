@@ -50,6 +50,10 @@
 
 ## 6) Cursor parity release gates
 
+- Release smoke profiles:
+  - Deterministic core (default): `TERMIT_RELEASE_SMOKE_PROFILE=core ./scripts/release_smoke.sh`
+  - Extended suite (nightly/integration): `TERMIT_RELEASE_SMOKE_PROFILE=extended ./scripts/release_smoke.sh`
+
 - Parity eval gate (20 scenarios):
   - `POST /api/eval/run-suite` with payload `{"category":"cursor_parity","limit":20,"persist_report":false}`
   - pass result through `scripts/eval_ci_gate.py`

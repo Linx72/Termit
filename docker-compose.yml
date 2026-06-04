@@ -30,7 +30,7 @@ services:
       - "443:443"
       - "80:80"
     environment:
-      DOMAIN: ${TERMIT_PUBLIC_DOMAIN:-}
+      DOMAIN: ${TERMIT_PUBLIC_DOMAIN:-localhost}
       ACME_EMAIL: ${TERMIT_ACME_EMAIL:-ops@example.com}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro

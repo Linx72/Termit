@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -24,7 +25,7 @@ class AgentMemoryStore:
 
     def _init_db(self) -> None:
         Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS agent_memory (
@@ -66,7 +67,7 @@ class AgentMemoryStore:
         safe_scope = (workspace_scope or "").strip()[:200] or None
         if not safe_summary:
             return
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO agent_memory(agent_id, outcome, summary, detail, run_id, created_at, workspace_scope)
@@ -97,7 +98,7 @@ class AgentMemoryStore:
     ) -> list[str]:
         safe_limit = max(1, min(limit, 20))
         scope = (workspace_scope or "").strip()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             if scope:
                 rows = conn.execute(
                     """
@@ -130,7 +131,7 @@ class AgentMemoryStore:
 
     def list_entries(self, agent_id: str, limit: int = 20) -> list[dict[str, str]]:
         safe_limit = max(1, min(limit, 100))
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT id, agent_id, outcome, summary, detail, run_id, created_at

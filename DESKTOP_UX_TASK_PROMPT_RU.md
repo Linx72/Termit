@@ -31,6 +31,13 @@
 
 Тексты блоков: `clients/termit-desktop/src/i18n.ts` (`sg*Title`, `sg*Purpose`, `sg*Steps`).
 
+### Единый UI-поток (desktop + web)
+
+- Выбор файлов/папок (`Open file`, `@file`, `@folder`, `Composer @file`) — через `WorkspaceFilePickerModal`.
+- Короткие вводы (`@symbol`, `@web`, path inputs) — через `PromptInputModal`.
+- Не использовать `window.prompt` и platform-specific picker ветки в core UX.
+- `runtimeMode` (`auto|desktop|web`) использовать для server-control семантики, а не для расхождения UI-поведения.
+
 ---
 
 ## Guided vs Autopilot
@@ -73,6 +80,8 @@ Backend: `data/desktop_policy_presets.json`, `AgentPolicyPresetService.apply_to_
 | i18n | `clients/termit-desktop/src/i18n.ts` |
 | SectionGuide | `clients/termit-desktop/src/SectionGuide.tsx` |
 | App | `clients/termit-desktop/src/App.tsx` |
+| Unified file picker | `clients/termit-desktop/src/WorkspaceFilePickerModal.tsx` |
+| Unified input modal | `clients/termit-desktop/src/PromptInputModal.tsx` |
 | Presets | `data/desktop_policy_presets.json` |
 | Prompts | `data/prompts/*.md` |
 | Skills | `data/skills/*/SKILL.md` |
@@ -85,6 +94,7 @@ Backend: `data/desktop_policy_presets.json`, `AgentPolicyPresetService.apply_to_
 ```bash
 source .venv/bin/activate
 python3 -m unittest discover -s tests -q
+python3 -m unittest tests.test_desktop_runtime_mode_smoke -q
 cd clients/termit-desktop && npm run build
 ./scripts/package_desktop.sh
 curl -s http://127.0.0.1:8765/api/desktop/policy-presets | python3 -m json.tool

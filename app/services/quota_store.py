@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from datetime import date
 from pathlib import Path
 from threading import Lock
@@ -17,7 +18,7 @@ class QuotaStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS api_usage (
@@ -45,7 +46,7 @@ class QuotaStore:
 
     def get_usage(self, api_key: str) -> int:
         usage_day = self._today()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT request_count FROM api_usage WHERE api_key = ? AND usage_day = ?",
                 (api_key, usage_day),
@@ -54,7 +55,7 @@ class QuotaStore:
 
     def consume(self, api_key: str, daily_limit: int) -> tuple[bool, int, int]:
         usage_day = self._today()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT request_count FROM api_usage WHERE api_key = ? AND usage_day = ?",
                 (api_key, usage_day),
@@ -80,7 +81,7 @@ class QuotaStore:
 
     def reset_usage(self, api_key: str, usage_day: Optional[str] = None) -> bool:
         day = usage_day or self._today()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             cursor = conn.execute(
                 "DELETE FROM api_usage WHERE api_key = ? AND usage_day = ?",
                 (api_key, day),
@@ -90,7 +91,7 @@ class QuotaStore:
 
     def list_usage_for_day(self, usage_day: Optional[str] = None) -> dict[str, int]:
         day = usage_day or self._today()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT api_key, request_count FROM api_usage WHERE usage_day = ?",
                 (day,),
@@ -99,7 +100,7 @@ class QuotaStore:
 
     def get_team_usage(self, team: str) -> int:
         usage_day = self._today()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT request_count FROM team_usage WHERE team = ? AND usage_day = ?",
                 (team, usage_day),
@@ -108,7 +109,7 @@ class QuotaStore:
 
     def list_team_usage_for_day(self, usage_day: Optional[str] = None) -> dict[str, int]:
         day = usage_day or self._today()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT team, request_count FROM team_usage WHERE usage_day = ?",
                 (day,),
@@ -117,7 +118,7 @@ class QuotaStore:
 
     def reset_team_usage(self, team: str, usage_day: Optional[str] = None) -> bool:
         day = usage_day or self._today()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             cursor = conn.execute(
                 "DELETE FROM team_usage WHERE team = ? AND usage_day = ?",
                 (team, day),
@@ -133,7 +134,7 @@ class QuotaStore:
         team_daily_limit: Optional[int],
     ) -> tuple[bool, int, int, Optional[int], Optional[int]]:
         usage_day = self._today()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             key_row = conn.execute(
                 "SELECT request_count FROM api_usage WHERE api_key = ? AND usage_day = ?",
                 (api_key, usage_day),
