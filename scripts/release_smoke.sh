@@ -3,13 +3,21 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_URL="${TERMIT_BASE_URL:-http://127.0.0.1:8765}"
+PYTHON_BIN="${ROOT}/.venv/bin/python"
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  PYTHON_BIN="python3"
+fi
 
 cd "$ROOT"
 echo "== Python tests =="
-python3 -m unittest discover -s tests -q
+"${PYTHON_BIN}" -m unittest discover -s tests -q
 
 echo "== Platform e2e =="
-python3 -m unittest tests.test_platform_e2e -q
+if "${PYTHON_BIN}" -c "import fastapi" >/dev/null 2>&1; then
+  "${PYTHON_BIN}" -m unittest tests.test_platform_e2e -q
+else
+  echo "Skip platform e2e: fastapi is not installed in active environment."
+fi
 
 echo "== Smoke HTTP =="
 if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
@@ -18,7 +26,7 @@ echo "== Cursor parity eval gate =="
   curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
     -H 'Content-Type: application/json' \
   -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
-    | TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-0.95}" python3 scripts/eval_ci_gate.py
+    | TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-0.95}" "${PYTHON_BIN}" scripts/eval_ci_gate.py
 elif [[ "${TERMIT_SMOKE_REQUIRE_SERVER:-}" == "1" ]]; then
   echo "TERMIT_SMOKE_REQUIRE_SERVER=1 but server not reachable at $BASE_URL" >&2
   exit 1
@@ -31,5 +39,5 @@ if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
   curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
     -H 'Content-Type: application/json' \
     -d '{"persist_report":false}' \
-    | python3 scripts/eval_ci_gate.py
+    | "${PYTHON_BIN}" scripts/eval_ci_gate.py
 fi

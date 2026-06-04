@@ -5,13 +5,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 TAG="v${VERSION}"
+PYTHON_BIN="${ROOT}/.venv/bin/python"
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  PYTHON_BIN="python3"
+fi
 
 cd "$ROOT"
 
 echo "== Termit release-all ($TAG) =="
 
 echo "== 1/4 Python tests =="
-python3 -m unittest discover -s tests -q
+"${PYTHON_BIN}" -m unittest discover -s tests -q
 
 echo "== 2/4 Smoke (requires server on :8765) =="
 if curl -s --max-time 5 -o /dev/null "http://127.0.0.1:8765/health"; then
