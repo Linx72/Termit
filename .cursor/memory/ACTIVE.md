@@ -1,18 +1,18 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-04T19:37:18Z
+**Последнее обновление:** 2026-06-04T19:38:47Z
 
 **Причина:** session stop
 
-**Последний checkpoint:** [`20260604-193718_06986105-b954-42b6-85d0-.md`](checkpoints/20260604-193718_06986105-b954-42b6-85d0-.md)
+**Последний checkpoint:** [`20260604-193847_06986105-b954-42b6-85d0-.md`](checkpoints/20260604-193847_06986105-b954-42b6-85d0-.md)
 
 ## Сводка
-- Не открываю Electron — сейчас поток переведён на `termit-shell` (Swift + WKWebView), без Electron. Почему могло выглядеть как Electron: - старый процесс `termit-desktop` мог остаться запущенным из прошлых запусков; - привычный UI тот же, поэтому визуально похоже; - запускался `T…
 - Продолжаю `do all`: фоновый сабагент уже выполняет эту задачу и ещё не завершился. Как только закончит текущий цикл, сразу двинем следующий шаг без остановки.
 - Сделал следующий полный шаг `do all`: убрал риск случайного Electron-пути и закрепил no‑Electron как дефолт. Что добил сейчас - Перевёл `termit-desktop` в **web-first по умолчанию**: - `file:///Users/amoros/Projects/Termit/clients/termit-desktop/package.json` - `dev` → `vite` -…
 - Продолжаем по плану ✅ Уточните, по какому именно пункту идём дальше: - убрать legacy Electron полностью из `termit-desktop` - довести release до signed/notarized (`codesign` + `notarytool`) - добавить post-release launch smoke в `release.yml` - подготовить финальный PR/commit Мо…
 - Сделал `do all` до конца по текущему направлению, включая финализацию и commit. Что выполнено - Полностью убран legacy Electron из `termit-desktop`: - `clients/termit-desktop/package.json` — удалены electron-скрипты и зависимости, оставлен web-first (`vite`). - Доведён no-Electr…
 - Сделал ещё один полный `do all`-шаг после финализации. Что довёл - Добавил игнор shell-артефактов, чтобы дерево не засорялось локальными сборками: - `file:///Users/amoros/Projects/Termit/.gitignore` - добавлено: - `clients/termit-shell/.build/` - `clients/termit-shell/build/` -…
+- Сделал полный `do all` по оставшемуся хвосту и закрыл его отдельным коммитом. Что завершено - Подтянул и зафиксировал весь блок `termit-platform`: - `.cursor/skills/termit-platform/SKILL.md` (новый) - `data/skills/termit-platform/SKILL.md` (новый) - `.cursor/skills/termit-prompt…
 
 ## Файлы сессии
 - `/Users/amoros/Projects/Termit/clients/termit-desktop/electron/main.ts`
