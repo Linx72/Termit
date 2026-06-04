@@ -25,6 +25,7 @@ echo "== Deterministic core tests =="
   tests.test_platform_e2e \
   tests.test_agents_api \
   tests.test_desktop_runtime_mode_smoke \
+  tests.test_desktop_runtime_state_smoke \
   -q
 
 if [[ "${PROFILE}" == "extended" ]]; then
