@@ -139,6 +139,7 @@ class AgentService:
         patch_outcome_store: Optional[PatchOutcomeStore] = None,
         verify_after_patch: bool = False,
         verify_cmd: str = "",
+        verify_max_retries: int = 1,
         auto_confirm_risky_tools: bool = False,
         guardrail_service: Optional[GuardrailService] = None,
         hook_service: Optional[AgentHookService] = None,
@@ -175,6 +176,7 @@ class AgentService:
         self._patch_outcomes = patch_outcome_store
         self._verify_after_patch = verify_after_patch
         self._verify_cmd = verify_cmd.strip()
+        self._verify_max_retries = max(0, verify_max_retries)
         self._auto_confirm_risky_tools = auto_confirm_risky_tools
         self._guardrails = guardrail_service
         self._guardrails_enabled = guardrails_enabled
@@ -977,6 +979,12 @@ class AgentService:
                     event_type = "tool_loop_tool_error"
                 else:
                     event_type = "tool_loop_tool"
+            elif step.action == "verify_failed":
+                event_type = "tool_loop_verify_failed"
+            elif step.action == "verify_pass":
+                event_type = "tool_loop_verify_pass"
+            elif step.action == "verify_retry":
+                event_type = "verify_retry_scheduled"
             else:
                 event_type = "tool_loop_step"
             self._append_event(
@@ -1083,6 +1091,7 @@ class AgentService:
             native_chat_fn=native_chat_fn if tools_schema else None,
             verify_fn=verify_fn if verify_cmd else None,
             escalation_models=escalation_models,
+            max_verify_retries=self._verify_max_retries,
         )
         return AgentRunResponse(
             agent_id=profile.agent_id,

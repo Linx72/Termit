@@ -40,6 +40,95 @@ class LoopChatStub:
 
 
 class SprintTop5Tests(unittest.TestCase):
+    def test_finalize_verify_failure_retries_in_loop_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            profile = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="verify-loop-agent",
+                    description="test",
+                    system_prompt="You are a test agent.",
+                    task_type=TaskType.coding,
+                    enabled_tools=["execute_command"],
+                    use_tool_loop=True,
+                )
+            )
+            loop = AgentLoopService()
+            stub = LoopChatStub(
+                [
+                    '{"action":"tool","tool":"execute_command","arguments":{"command":"echo ok","path":".","dry_run":false,"confirmed":true}}',
+                    '{"action":"final","answer":"done"}',
+                    '{"action":"final","answer":"done after fix"}',
+                ]
+            )
+
+            def tool_fn(_tool_name: str, _arguments: dict[str, object]) -> str:
+                return json.dumps({"executed": True, "exit_code": 0, "stdout": "ok"})
+
+            verify_results = [(False, "tests failed"), (True, "all good")]
+
+            def verify_fn() -> tuple[bool, str]:
+                return verify_results.pop(0)
+
+            result = asyncio.run(
+                loop.run(
+                    profile=profile,
+                    payload=AgentRunRequest(input="run verify"),
+                    chat_fn=stub.chat,
+                    tool_fn=tool_fn,
+                    memory_context=[],
+                    max_steps=5,
+                    verify_fn=verify_fn,
+                    max_verify_retries=1,
+                )
+            )
+            self.assertEqual(result.response, "done after fix")
+            actions = [step.action for step in result.steps]
+            self.assertIn("verify_retry", actions)
+            self.assertIn("verify_pass", actions)
+
+    def test_finalize_verify_failure_exhausted_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            profile = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="verify-loop-agent",
+                    description="test",
+                    system_prompt="You are a test agent.",
+                    task_type=TaskType.coding,
+                    enabled_tools=["execute_command"],
+                    use_tool_loop=True,
+                )
+            )
+            loop = AgentLoopService()
+            stub = LoopChatStub(
+                [
+                    '{"action":"tool","tool":"execute_command","arguments":{"command":"echo ok","path":".","dry_run":false,"confirmed":true}}',
+                    '{"action":"final","answer":"done"}',
+                    '{"action":"final","answer":"done again"}',
+                ]
+            )
+
+            def tool_fn(_tool_name: str, _arguments: dict[str, object]) -> str:
+                return json.dumps({"executed": True, "exit_code": 0, "stdout": "ok"})
+
+            def verify_fn() -> tuple[bool, str]:
+                return (False, "still failing")
+
+            with self.assertRaisesRegex(Exception, "Verify retries exhausted"):
+                asyncio.run(
+                    loop.run(
+                        profile=profile,
+                        payload=AgentRunRequest(input="run verify"),
+                        chat_fn=stub.chat,
+                        tool_fn=tool_fn,
+                        memory_context=[],
+                        max_steps=5,
+                        verify_fn=verify_fn,
+                        max_verify_retries=1,
+                    )
+                )
+
     def test_repeat_tool_call_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
