@@ -61,6 +61,23 @@ class OpsServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("tool_safety", names)
             self.assertIn("rbac_boundaries", names)
 
+    async def test_readiness_degraded_on_low_verify_pass_rate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = build_settings(tmp)
+            store = QuotaStore(settings.quota_sqlite_path)
+            service = OpsService(settings=settings, quota_store=store)
+            result = await service.readiness(
+                agent_metrics_cb=lambda: {
+                    "tool_loop_verify_passes": 3,
+                    "tool_loop_verify_failures": 3,
+                    "tool_loop_verify_pass_rate": 0.50,
+                }
+            )
+            self.assertEqual(result.status, "degraded")
+            check = next(item for item in result.checks if item.name == "agent_verify_quality")
+            self.assertFalse(check.passed)
+            self.assertIn("below threshold", check.detail)
+
     async def test_incident_drill_includes_recommendations_on_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             settings = replace(build_settings(tmp, auth_enabled=False), auth_enabled=True, api_keys={})
