@@ -40,6 +40,62 @@ class LoopChatStub:
 
 
 class SprintTop5Tests(unittest.TestCase):
+    def test_resume_checkpoint_restores_verify_retry_counter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            profile = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="resume-verify-agent",
+                    description="test",
+                    system_prompt="You are a test agent.",
+                    task_type=TaskType.coding,
+                    enabled_tools=["execute_command"],
+                    use_tool_loop=True,
+                )
+            )
+            loop = AgentLoopService()
+            stub = LoopChatStub(
+                [
+                    '{"action":"final","answer":"done after resume"}',
+                ]
+            )
+
+            def tool_fn(_tool_name: str, _arguments: dict[str, object]) -> str:
+                return json.dumps({"executed": True, "exit_code": 0, "stdout": "ok"})
+
+            def verify_fn() -> tuple[bool, str]:
+                return (False, "still failing")
+
+            with self.assertRaisesRegex(Exception, "Verify retries exhausted"):
+                asyncio.run(
+                    loop.run(
+                        profile=profile,
+                        payload=AgentRunRequest(input="resume verify"),
+                        chat_fn=stub.chat,
+                        tool_fn=tool_fn,
+                        memory_context=[],
+                        max_steps=3,
+                        verify_fn=verify_fn,
+                        max_verify_retries=1,
+                        resume_checkpoint={
+                            "history": [
+                                {"role": "system", "content": "test"},
+                                {"role": "user", "content": "resume"},
+                            ],
+                            "pending_tool": "execute_command",
+                            "pending_arguments": {
+                                "command": "echo ok",
+                                "path": ".",
+                                "dry_run": False,
+                                "confirmed": True,
+                            },
+                            "step": 1,
+                            "active_model": "ollama:test",
+                            "verify_retries_used": 1,
+                        },
+                    )
+                )
+
     def test_finalize_verify_failure_retries_in_loop_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
@@ -259,6 +315,53 @@ class SprintTop5Tests(unittest.TestCase):
             approved = service.confirm_run(run_id, approved=True)
             self.assertTrue(approved.resumed)
             self.assertEqual(approved.state, AgentRunState.queued)
+
+    def test_confirm_run_keeps_verify_retry_counter_in_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            profile = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="confirm-retry-counter",
+                    description="test",
+                    system_prompt="test",
+                    task_type=TaskType.coding,
+                    enabled_tools=["apply_patch"],
+                    use_tool_loop=True,
+                )
+            )
+            service = AgentService(
+                chat_service=LoopChatStub(['{"action":"final","answer":"ok"}']),
+                registry=registry,
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                verify_after_patch=False,
+                max_concurrency=1,
+            )
+            created = service.create_run(profile.agent_id, AgentRunRequest(input="patch"))
+            run_id = created.run_id
+            checkpoint = json.dumps(
+                {
+                    "history": [{"role": "user", "content": "patch"}],
+                    "pending_tool": "apply_patch",
+                    "pending_arguments": {"path": "a.txt", "content": "x", "create": True},
+                    "step": 1,
+                    "verify_retries_used": 1,
+                }
+            )
+            with service._lock:
+                record = service._run_store.get_run(run_id)
+                assert record is not None
+                record.state = AgentRunState.awaiting_confirmation
+                record.checkpoint_json = checkpoint
+                service._run_store.put_run(record)
+            approved = service.confirm_run(run_id, approved=True)
+            self.assertTrue(approved.resumed)
+            with service._lock:
+                record = service._run_store.get_run(run_id)
+                assert record is not None
+                data = json.loads(record.checkpoint_json or "{}")
+            self.assertEqual(data.get("verify_retries_used"), 1)
 
     def test_reindex_path_updates_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

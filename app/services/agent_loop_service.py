@@ -288,6 +288,8 @@ class AgentLoopService:
         run_mode = (payload.run_mode or "agent").strip().lower()
         plan_only = run_mode == "plan"
         allow_mutating_tools = not plan_only
+        if resume_checkpoint:
+            verify_retries_used = int(resume_checkpoint.get("verify_retries_used", 0))
 
         def _checkpoint(step: int) -> dict[str, object]:
             return {
@@ -532,6 +534,7 @@ class AgentLoopService:
                         "pending_arguments": json_safe(arguments),
                         "step": step,
                         "active_model": active_model,
+                        "verify_retries_used": verify_retries_used,
                     }
                 )
             step_result = LoopStepResult(
@@ -561,7 +564,6 @@ class AgentLoopService:
                 pending_args = {}
             start_step = int(resume_checkpoint.get("step", 1))
             active_model = str(resume_checkpoint.get("active_model") or active_model or profile.model or "default")
-            verify_retries_used = int(resume_checkpoint.get("verify_retries_used", 0))
             observation = tool_fn(pending_tool, pending_args)
             flags = _observation_flags(observation)
             if flags.get("requires_confirmation"):
@@ -571,6 +573,8 @@ class AgentLoopService:
                         "pending_tool": pending_tool,
                         "pending_arguments": json_safe(pending_args),
                         "step": start_step,
+                        "active_model": active_model,
+                        "verify_retries_used": verify_retries_used,
                     }
                 )
             step_result = LoopStepResult(
@@ -582,6 +586,9 @@ class AgentLoopService:
             steps.append(step_result)
             if on_step:
                 on_step(step_result)
+            used_tool_names.add(pending_tool)
+            if allow_mutating_tools and pending_tool in {"apply_patch", "execute_command", "browser_click"}:
+                used_mutating_tool = True
             history.append(
                 ChatMessage(
                     role="assistant",
