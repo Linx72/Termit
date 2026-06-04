@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.domain.schemas import (
     AgentProfileCreateRequest,
+    ExecuteCommandResponse,
     AgentRunRequest,
     AgentRunState,
     ChatResponse,
@@ -395,6 +396,97 @@ class AgentServiceTests(unittest.TestCase):
                 asyncio.run(asyncio.sleep(0.02))
             events = service.get_run_events(queued.run_id, limit=100)
             self.assertLessEqual(len(events), 3)
+
+    def test_verify_failure_schedules_run_retry(self) -> None:
+        class NativeLoopChatService(StubChatService):
+            def __init__(self) -> None:
+                super().__init__()
+                self._responses = [
+                    '{"action":"tool","tool":"execute_command","arguments":{"command":"echo ok","path":".","dry_run":false,"confirmed":true}}',
+                    '{"action":"final","answer":"first final"}',
+                    '{"action":"final","answer":"second final"}',
+                ]
+
+            async def chat(self, payload):  # type: ignore[no-untyped-def]
+                text = self._responses.pop(0)
+                model = payload.model or "ollama:default"
+                return ChatResponse(
+                    provider="ollama",
+                    model=model,
+                    task_type=payload.task_type,
+                    session_id=payload.session_id or "sess-test",
+                    history_size=len(payload.history) + 1,
+                    attempted_models=[model],
+                    response=text,
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            service = AgentService(
+                chat_service=NativeLoopChatService(),
+                registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=StubBrowserWorkflow(),
+                verify_after_patch=True,
+                verify_cmd="echo verify",
+                verify_max_retries=1,
+                max_concurrency=1,
+            )
+            original_execute = service._tooling.execute_command  # type: ignore[attr-defined]
+            verify_calls = {"count": 0}
+
+            def execute_with_verify_flake(payload):  # type: ignore[no-untyped-def]
+                if payload.command == "echo verify":
+                    verify_calls["count"] += 1
+                    if verify_calls["count"] == 1:
+                        return ExecuteCommandResponse(
+                            command=payload.command,
+                            path=payload.path,
+                            dry_run=False,
+                            confirmed=True,
+                            executed=True,
+                            exit_code=1,
+                            stdout="",
+                            stderr="verify failed",
+                        )
+                    return ExecuteCommandResponse(
+                        command=payload.command,
+                        path=payload.path,
+                        dry_run=False,
+                        confirmed=True,
+                        executed=True,
+                        exit_code=0,
+                        stdout="verify ok",
+                        stderr="",
+                    )
+                return original_execute(payload)
+
+            service._tooling.execute_command = execute_with_verify_flake  # type: ignore[attr-defined]
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Verify Events",
+                    description="verify events",
+                    system_prompt="test",
+                    task_type=TaskType.coding,
+                    enabled_tools=["execute_command"],
+                    use_tool_loop=True,
+                )
+            )
+            queued = service.create_run(agent.agent_id, AgentRunRequest(input="verify loop"))
+            final = None
+            for _ in range(80):
+                record = service.get_run(queued.run_id)
+                if record.state in {AgentRunState.completed, AgentRunState.failed}:
+                    final = record
+                    break
+                asyncio.run(asyncio.sleep(0.02))
+            self.assertIsNotNone(final)
+            assert final is not None
+            self.assertEqual(final.state, AgentRunState.completed)
+            events = service.get_run_events(queued.run_id, limit=200)
+            event_types = [event.event_type for event in events]
+            self.assertIn("run_retry_scheduled", event_types)
+            self.assertIn("run_completed", event_types)
 
     def test_worker_lifecycle_stop_and_start(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

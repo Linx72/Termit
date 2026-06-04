@@ -234,8 +234,10 @@ class AgentLoopService:
         native_chat_fn: Optional[Callable[[ChatRequest], Awaitable[object]]] = None,
         verify_fn: Optional[Callable[[], tuple[bool, str]]] = None,
         escalation_models: Optional[list[str]] = None,
+        max_verify_retries: int = 1,
     ) -> AgentLoopResult:
         safe_steps = max(1, min(max_steps, 20))
+        safe_verify_retries = max(0, min(max_verify_retries, 5))
         memory_block = ""
         if memory_context:
             memory_block = "\n\nLong-term agent memory:\n" + "\n".join(f"- {line}" for line in memory_context)
@@ -279,6 +281,7 @@ class AgentLoopService:
         start_step = 1
         parse_errors = 0
         verify_failures = 0
+        verify_retries_used = 0
         repeat_blocks = 0
         active_model = profile.model
         escalation = list(escalation_models or [])
@@ -291,6 +294,7 @@ class AgentLoopService:
                 "history": _serialize_history(history),
                 "step": step,
                 "active_model": active_model,
+                "verify_retries_used": verify_retries_used,
             }
 
         def _maybe_escalate() -> None:
@@ -307,6 +311,7 @@ class AgentLoopService:
                     break
 
         async def _finalize(step: int, answer: str) -> AgentLoopResult | None:
+            nonlocal verify_failures, verify_retries_used
             if needs_file_write and "apply_patch" in set(profile.enabled_tools or []) and "apply_patch" not in used_tool_names:
                 direct_args = _extract_direct_file_create_args(payload.input)
                 if direct_args is not None:
@@ -425,9 +430,20 @@ class AgentLoopService:
                 if on_step:
                     on_step(step_result)
                 if not ok:
-                    nonlocal verify_failures
                     verify_failures += 1
+                    verify_retries_used += 1
                     _maybe_escalate()
+                    retry_step = LoopStepResult(
+                        step=step,
+                        action="verify_retry",
+                        tool=None,
+                        observation=f"verify_retry={verify_retries_used}/{safe_verify_retries}",
+                    )
+                    steps.append(retry_step)
+                    if on_step:
+                        on_step(retry_step)
+                    if verify_retries_used > safe_verify_retries:
+                        raise AgentLoopError("Verify retries exhausted before final answer.", _checkpoint(step))
                     history.append(ChatMessage(role="assistant", content=answer))
                     history.append(
                         ChatMessage(
@@ -438,7 +454,7 @@ class AgentLoopService:
                             ),
                         )
                     )
-                    raise AgentLoopError("Verify phase failed before final answer.", _checkpoint(step))
+                    return None
             step_result = LoopStepResult(step=step, action="final", tool=None, observation=answer[:500])
             steps.append(step_result)
             if on_step:
@@ -545,6 +561,7 @@ class AgentLoopService:
                 pending_args = {}
             start_step = int(resume_checkpoint.get("step", 1))
             active_model = str(resume_checkpoint.get("active_model") or active_model or profile.model or "default")
+            verify_retries_used = int(resume_checkpoint.get("verify_retries_used", 0))
             observation = tool_fn(pending_tool, pending_args)
             flags = _observation_flags(observation)
             if flags.get("requires_confirmation"):

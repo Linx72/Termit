@@ -123,6 +123,7 @@ class Settings:
     agent_verify_after_patch: bool = True
     agent_auto_confirm_risky: bool = False
     agent_verify_cmd: str = "python3 -m unittest discover -s tests -q"
+    agent_verify_max_retries: int = 1
     dual_pass_enabled: bool = True
     dual_pass_task_types: str = "coding,review,debug"
     task_use_agent: bool = False
@@ -346,6 +347,7 @@ def get_settings() -> Settings:
             "TERMIT_AGENT_VERIFY_CMD",
             "python3 -m unittest discover -s tests -q",
         ),
+        agent_verify_max_retries=max(0, int(os.getenv("TERMIT_AGENT_VERIFY_MAX_RETRIES", "1"))),
         dual_pass_enabled=os.getenv("TERMIT_DUAL_PASS_ENABLED", "true").lower() in {"1", "true", "yes"},
         dual_pass_task_types=os.getenv(
             "TERMIT_DUAL_PASS_TASK_TYPES",
