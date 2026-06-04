@@ -475,6 +475,7 @@ class AgentAlertThresholds(BaseModel):
     queue_utilization_percent: float = 80.0
     dead_letter_rate: float = 0.15
     min_worker_alive_ratio: float = 1.0
+    min_verify_pass_rate: float = 0.70
 
 
 class MetricsActiveThresholds(BaseModel):

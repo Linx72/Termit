@@ -164,6 +164,7 @@ class Settings:
     agent_alert_queue_utilization_percent: float = 80.0
     agent_alert_dead_letter_rate: float = 0.15
     agent_alert_min_worker_alive_ratio: float = 1.0
+    agent_alert_min_verify_pass_rate: float = 0.70
     team_quotas: Dict[str, int] = field(default_factory=dict)
     repo_model_profiles_path: str = "./data/repo_model_profiles.json"
     routing_benchmarks_path: str = "./data/routing_benchmarks.json"
@@ -417,6 +418,10 @@ def get_settings() -> Settings:
         agent_alert_min_worker_alive_ratio=_parse_clamped_float_env(
             "TERMIT_AGENT_ALERT_MIN_WORKER_ALIVE_RATIO",
             1.0,
+        ),
+        agent_alert_min_verify_pass_rate=_parse_clamped_float_env(
+            "TERMIT_AGENT_ALERT_MIN_VERIFY_PASS_RATE",
+            0.70,
         ),
         team_quotas=_parse_team_quotas(os.getenv("TERMIT_TEAM_QUOTAS", "")),
         repo_model_profiles_path=os.getenv(

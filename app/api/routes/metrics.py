@@ -38,6 +38,7 @@ async def metrics_thresholds(
             queue_utilization_percent=settings.agent_alert_queue_utilization_percent,
             dead_letter_rate=settings.agent_alert_dead_letter_rate,
             min_worker_alive_ratio=settings.agent_alert_min_worker_alive_ratio,
+            min_verify_pass_rate=settings.agent_alert_min_verify_pass_rate,
         ),
     )
 

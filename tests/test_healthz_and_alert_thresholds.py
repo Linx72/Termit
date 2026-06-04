@@ -97,11 +97,34 @@ class AlertHealthServiceTests(unittest.TestCase):
             queue_utilization_percent=80.0,
             dead_letter_rate=0.15,
             min_worker_alive_ratio=1.0,
+            min_verify_pass_rate=0.70,
         )
         status, reasons, dead_letter_rate = evaluate_agent_health(metrics, thresholds)
         self.assertEqual(status, "degraded")
         self.assertGreaterEqual(dead_letter_rate, 0.15)
         self.assertTrue(any("queue utilization" in item.lower() for item in reasons))
+
+    def test_evaluate_agent_health_degraded_on_low_verify_pass_rate(self) -> None:
+        metrics = AgentRunsMetricsResponse(
+            queue_size=1,
+            queue_capacity=100,
+            queue_utilization_percent=1.0,
+            worker_count=2,
+            alive_workers=2,
+            total_runs=10,
+            by_state={"completed": 10},
+            active_runs=0,
+            tool_loop_verify_pass_rate=0.55,
+        )
+        thresholds = AgentAlertThresholds(
+            queue_utilization_percent=80.0,
+            dead_letter_rate=0.15,
+            min_worker_alive_ratio=1.0,
+            min_verify_pass_rate=0.70,
+        )
+        status, reasons, _dead_letter_rate = evaluate_agent_health(metrics, thresholds)
+        self.assertEqual(status, "degraded")
+        self.assertTrue(any("verify pass rate" in item.lower() for item in reasons))
 
 
 class HealthzApiTests(unittest.TestCase):
