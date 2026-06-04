@@ -209,7 +209,11 @@ async def dispatch_ops_alerts(
         title="Termit agent ops alert",
         status=str(metrics.health_status),
         detail=detail,
-        payload={"dead_letter_rate": metrics.dead_letter_rate},
+        payload={
+            "dead_letter_rate": metrics.dead_letter_rate,
+            "tool_loop_verify_pass_rate": metrics.tool_loop_verify_pass_rate,
+            "min_verify_pass_rate": metrics.active_thresholds.min_verify_pass_rate,
+        },
     )
     return {"health_status": metrics.health_status, **result}
 
