@@ -47,3 +47,22 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"limit":53,"persist_report":false}' \
             | python3 scripts/eval_ci_gate.py
+
+  termit-shell-smoke:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build Termit shell app bundle
+        run: ./scripts/package_termit_shell.sh
+      - name: Validate app bundle structure
+        run: |
+          test -x clients/termit-shell/release/TermitShell.app/Contents/MacOS/termit-shell
+          test -f clients/termit-shell/release/TermitShell.app/Contents/Info.plist
+          test -f clients/termit-shell/release/TermitShell.app/Contents/Resources/TermitShell.icns
+          test -f clients/termit-shell/release/TermitShell.app/Contents/Resources/renderer/index.html
+          test -f clients/termit-shell/release/TermitShell.app/Contents/Resources/docs/pdf/TERMIT_HELP_RU.pdf
+      - name: Runtime smoke tests for shell bridge
+        run: python3 -m unittest tests.test_termit_shell_runtime_smoke -v

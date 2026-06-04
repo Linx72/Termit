@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Ollama (optional), Termit API, and desktop app.
+# Start Ollama (optional), Termit API, and web desktop client (no Electron).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

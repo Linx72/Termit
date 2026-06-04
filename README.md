@@ -85,7 +85,8 @@ main.py
 clients/
   termit-client/      # TypeScript SDK
   vscode-extension/   # VS Code extension (Chat, Composer, Cmd+Alt+K, agents)
-  termit-desktop/     # Electron app (Monaco Editor, Composer, agents)
+  termit-desktop/     # Web-first desktop UI (Monaco Editor, Composer, agents)
+  termit-shell/       # Native macOS shell app (Swift + WKWebView, no Electron)
 ```
 
 ## Client integration
@@ -138,9 +139,9 @@ Settings: `termit.baseUrl`, `termit.apiKey`, `termit.includeEditorContext`.
 
 ### Desktop app (Termit) — основной клиент
 
-See [`DESKTOP_QUICKSTART.md`](DESKTOP_QUICKSTART.md) and [`clients/termit-desktop/README.md`](clients/termit-desktop/README.md).
+See [`DESKTOP_QUICKSTART.md`](DESKTOP_QUICKSTART.md), [`clients/termit-desktop/README.md`](clients/termit-desktop/README.md), and [`clients/termit-shell/README.md`](clients/termit-shell/README.md).
 
-Electron app **Termit** — chat, composer, editor, tasks, agents via Termit API + local Ollama. No Cursor API key.
+Web-first desktop UI + native `TermitShell.app` (Swift) — chat, composer, editor, tasks, agents via Termit API + local Ollama. No Cursor API key.
 
 Desktop/web UX parity baseline:
 - file/folder flows use one built-in selection modal (`Open file`, `@file`, `@folder`, `Composer @file`);
@@ -150,6 +151,7 @@ Desktop/web UX parity baseline:
 ```bash
 ./scripts/run_termit_stack.sh          # Ollama + server + desktop dev
 ./scripts/package_desktop.sh           # build Termit.app in release/
+./scripts/package_termit_shell.sh      # build TermitShell.app (no Electron)
 ```
 
 ## Multi-machine sync

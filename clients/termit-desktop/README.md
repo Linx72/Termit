@@ -1,12 +1,12 @@
-# Termit (desktop app)
+# Termit desktop UI (web-first)
 
-Standalone **Termit** desktop client — chat, tasks, and agents over your **Termit API**. Uses local Ollama / finetuned models through Termit routing. **No Cursor account or CURSOR_API_KEY.**
+Standalone **Termit** desktop UI — chat, tasks, and agents over your **Termit API**. Uses local Ollama / finetuned models through Termit routing. **No Cursor account or CURSOR_API_KEY.**
 
-## Architecture
+## Runtime architecture
 
 ```text
 ┌──────────────────────────────────────┐
-│ Termit app (Electron + React)        │
+│ Termit UI (React, web-first)         │
 │  Chat · Composer · Editor · Tasks · Agents │
 └──────────────────┬───────────────────┘
                    │ HTTP / SSE
@@ -27,7 +27,7 @@ Standalone **Termit** desktop client — chat, tasks, and agents over your **Ter
 - **Ollama** (if using local models): `./scripts/start_ollama_local.sh`
 - **X-API-Key** only when `TERMIT_AUTH_ENABLED=true` (e.g. `dev-key` from `.env`)
 
-## Install and run
+## Install and run (web-first, no Electron)
 
 ```bash
 # Terminal 1 — Termit backend
@@ -35,22 +35,41 @@ cd /path/to/Termit
 source .venv/bin/activate
 uvicorn app.main:app --host 127.0.0.1 --port 8765
 
-# Terminal 2 — desktop app
+# Terminal 2 — desktop UI
 cd clients/termit-client && npm install && npm run build
 cd ../termit-desktop
 npm install
 npm run dev
 ```
 
-Packaged build:
+Production web build:
 
 ```bash
 npm run build
-npm start
-npm run package   # output in release/
+npm start   # vite preview
 ```
 
-The packaged app name is **Termit** (`productName` in electron-builder).
+## Native shell (recommended app bundle, no Electron)
+
+Build and run `TermitShell.app`:
+
+```bash
+./scripts/package_termit_shell.sh
+open clients/termit-shell/release/TermitShell.app
+```
+
+Or run shell directly:
+
+```bash
+./scripts/run_termit_shell.sh
+```
+
+Details: [`../termit-shell/README.md`](../termit-shell/README.md).
+
+## Electron status
+
+Electron mode is removed from this package. Native desktop distribution now goes through
+`TermitShell.app` only.
 
 ## One-command dev stack (from repo root)
 
