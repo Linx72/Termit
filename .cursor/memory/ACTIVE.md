@@ -1,14 +1,13 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-04T16:36:35Z
+**Последнее обновление:** 2026-06-04T16:42:00Z
 
-**Причина:** preCompact @ 245.7K tokens (≥ threshold)
+**Причина:** session stop
 
-**Последний checkpoint:** [`20260604-163635_3e90ad38-5f58-4943-84d5-.md`](checkpoints/20260604-163635_3e90ad38-5f58-4943-84d5-.md)
+**Последний checkpoint:** [`20260604-164200_3e90ad38-5f58-4943-84d5-.md`](checkpoints/20260604-164200_3e90ad38-5f58-4943-84d5-.md)
 
 ## Сводка
-- (пусто — начните задачу)
-
+- Сделал ещё один полный `do all`-цикл до merge в `main`. Что реализовано: - Добавил **per-run override** лимита verify-retry: - `app/domain/schemas.py`: в `AgentRunRequest` новое поле `verify_max_retries` (`0..5`). - `app/services/agent_service.py`: при запуске loop теперь берётс…
 
 ## Файлы сессии
 - `/Users/amoros/Projects/Termit/app/state.py`
@@ -21,6 +20,14 @@
 - `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/terminals/220935.txt`
 - `/Users/amoros/Projects/Termit/app/services/verify_command_resolver.py`
 - `/Users/amoros/Projects/Termit/app/services/workspace_scripts.py`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/terminals/289313.txt`
+- `/Users/amoros/Projects/Termit/app/domain/schemas.py`
+- `/Users/amoros/Projects/Termit/.cursor/memory/ACTIVE.md`
+- `/Users/amoros/Projects/Termit/tests/test_agent_loop_service.py`
+- `/Users/amoros/Projects/Termit/tests/test_agents_api.py`
+- `/Users/amoros/Projects/Termit/clients/termit-client/src/types.ts`
+- `/Users/amoros/Projects/Termit/clients`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/terminals/396315.txt`
 
 ## Открытые задачи
 - [ ] Заполните вручную или через compact-chat после крупной сессии
