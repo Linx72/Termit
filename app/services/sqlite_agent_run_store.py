@@ -239,6 +239,7 @@ class SQLiteAgentRunStore:
                 SELECT run_id, event_type, message
                 FROM agent_run_events
                 WHERE event_type LIKE 'tool_loop_%'
+                   OR event_type = 'verify_retry_scheduled'
                 """
             ).fetchall()
             completed_rows = conn.execute(

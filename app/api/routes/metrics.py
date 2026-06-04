@@ -174,11 +174,14 @@ async def metrics_prometheus(
         ("tool_loop_tool_errors", "Failed tool-loop tool steps."),
         ("tool_loop_parse_errors", "Tool-loop JSON parse errors."),
         ("tool_loop_final_steps", "Tool-loop final steps."),
+        ("tool_loop_verify_passes", "Tool-loop verify pass events."),
+        ("tool_loop_verify_failures", "Tool-loop verify failed events."),
+        ("tool_loop_verify_retries", "Tool-loop verify retry scheduled events."),
     ):
         lines.append(f"# HELP termit_{key} {help_text}")
         lines.append(f"# TYPE termit_{key} gauge")
         lines.append(_prom_line(f"termit_{key}", float(queue.get(key, 0))))
-    for key in ("tool_loop_tool_success_rate", "tool_loop_completion_rate"):
+    for key in ("tool_loop_tool_success_rate", "tool_loop_completion_rate", "tool_loop_verify_pass_rate"):
         lines.append(f"# HELP termit_{key} Tool-loop success ratio.")
         lines.append(f"# TYPE termit_{key} gauge")
         lines.append(_prom_line(f"termit_{key}", float(queue.get(key, 0.0))))

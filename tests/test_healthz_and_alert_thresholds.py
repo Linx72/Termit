@@ -139,6 +139,10 @@ class HealthzApiTests(unittest.TestCase):
         self.assertIn("active_thresholds", body)
         self.assertIn("tool_loop_runs", body)
         self.assertIn("tool_loop_tool_success_rate", body)
+        self.assertIn("tool_loop_verify_passes", body)
+        self.assertIn("tool_loop_verify_failures", body)
+        self.assertIn("tool_loop_verify_retries", body)
+        self.assertIn("tool_loop_verify_pass_rate", body)
 
 
 class OpsServiceHealthzTests(unittest.IsolatedAsyncioTestCase):
