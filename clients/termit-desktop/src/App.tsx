@@ -64,7 +64,7 @@ import {
   CROSS_PLATFORM_PRESETS,
   launchCrossPlatformPreset,
 } from "./crossPlatformPresets";
-import { buildCompletionSuggestions, formatActivityTape } from "./activityTape";
+import { appendTapeHeartbeat, buildCompletionSuggestions, formatActivityTape } from "./activityTape";
 import { executionModeLabel, isBuildTask } from "./buildTask";
 import {
   desktopRuntime,
@@ -105,7 +105,7 @@ type ChatBlock =
   | { id: string; kind: "suggestions"; text: string; actions?: string[] }
   | { id: string; kind: "meta" | "error"; text: string };
 
-const DEFAULT_AGENT_TEMPLATE = "web-app-vite";
+const FALLBACK_AGENT_TEMPLATE = "web-app-vite";
 
 function blockId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -557,9 +557,9 @@ export function App() {
     if (selectedAgentId?.trim()) {
       return selectedAgentId.trim();
     }
-    const templateId =
-      taskInput && isBuildTask(taskInput) ? "web-app-vite" : DEFAULT_AGENT_TEMPLATE;
-    if (agents.length > 0 && templateId === DEFAULT_AGENT_TEMPLATE) {
+    const preferredTemplate = settings.defaultAgentTemplate || "desktop-cursor-parity-stable";
+    const templateId = taskInput && isBuildTask(taskInput) ? "web-app-vite" : preferredTemplate;
+    if (agents.length > 0 && templateId === preferredTemplate) {
       return agents[0].agent_id;
     }
     try {
@@ -570,12 +570,17 @@ export function App() {
         setSelectedAgentId(matched.agent_id);
         return matched.agent_id;
       }
-      if (list.length > 0 && templateId === DEFAULT_AGENT_TEMPLATE) {
+      if (list.length > 0 && templateId === preferredTemplate) {
         const id = list[0].agent_id;
         setSelectedAgentId(id);
         return id;
       }
-      const profile = await client.ensureAgentFromTemplate(templateId);
+      let profile;
+      try {
+        profile = await client.ensureAgentFromTemplate(templateId);
+      } catch {
+        profile = await client.ensureAgentFromTemplate(FALLBACK_AGENT_TEMPLATE);
+      }
       setAgents((prev) => {
         if (prev.some((item) => item.agent_id === profile.agent_id)) {
           return prev;
@@ -1815,13 +1820,6 @@ export function App() {
       return;
     }
 
-    setBlocks((prev) =>
-      prev.map((block) =>
-        block.id === runMetaId
-          ? { ...block, text: `Agent run: ${run.run_id} (${run.state})` }
-          : block
-      )
-    );
     trackWorkflowEvent(client, {
       event_type: "agent_run_created",
       journey_id: settings.activeJourneyId,
@@ -1837,6 +1835,18 @@ export function App() {
     void refreshLiveChanges();
 
     let lastEvents: AgentRunEvent[] = [];
+    const startedAt = Date.now();
+    const heartbeat = window.setInterval(() => {
+      const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+      setBlocks((prev) =>
+        prev.map((block) => {
+          if (block.id !== runTapeId || block.kind !== "tape") {
+            return block;
+          }
+          return { ...block, text: appendTapeHeartbeat(locale, block.text, elapsedSec) };
+        })
+      );
+    }, 3000);
 
     try {
       await watchAgentRun(
@@ -1855,9 +1865,7 @@ export function App() {
               }
               if (block.id === runOutputId) {
                 const last = events[events.length - 1];
-                const liveLine = last
-                  ? `[${live.state}] ${last.event_type}: ${last.message}`
-                  : `[${live.state}]`;
+                const liveLine = last ? `[${live.state}] ${last.event_type}: ${last.message}` : `[${live.state}]`;
                 if (live.response?.trim()) {
                   return { ...block, text: live.response.trim() };
                 }
@@ -1878,7 +1886,6 @@ export function App() {
         },
         { pollMs: 500, timeoutSeconds: 900 }
       );
-
       const finalRun = await client.getAgentRun(run.run_id);
       if (lastEvents.length === 0) {
         lastEvents = await client.getAgentRunEvents(run.run_id);
@@ -1932,6 +1939,8 @@ export function App() {
           return block;
         })
       );
+    } finally {
+      window.clearInterval(heartbeat);
     }
   };
 

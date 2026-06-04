@@ -45,3 +45,16 @@
 - Tag release version in git (for example `v0.1.0`)
 - Capture known limitations (provider availability, local runtime assumptions)
 - Publish quick start commands for users
+- Write migration notes for the release (example: `docs/MIGRATION_NOTES_0.3.3.md`)
+- Write rollback plan with explicit smoke/health verification
+
+## 6) Cursor parity release gates
+
+- Parity eval gate (20 scenarios):
+  - `POST /api/eval/run-suite` with payload `{"category":"cursor_parity","limit":20,"persist_report":false}`
+  - pass result through `scripts/eval_ci_gate.py`
+- Queue lifecycle gates from `/api/ops/agent-runs/metrics`:
+  - `stale_queued_runs` and `stale_running_runs` stay near zero under normal load
+  - `max_queued_age_seconds` and `max_running_age_seconds` stay below SLA budget
+- Confirm stable desktop profile exists:
+  - template id `desktop-cursor-parity-stable`

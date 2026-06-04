@@ -14,10 +14,10 @@ python3 -m unittest tests.test_platform_e2e -q
 echo "== Smoke HTTP =="
 if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
   ./scripts/smoke_http.sh
-  echo "== Eval CI gate =="
+echo "== Cursor parity eval gate =="
   curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
     -H 'Content-Type: application/json' \
-    -d '{"limit":53,"persist_report":false}' \
+  -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
     | TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-0.95}" python3 scripts/eval_ci_gate.py
 elif [[ "${TERMIT_SMOKE_REQUIRE_SERVER:-}" == "1" ]]; then
   echo "TERMIT_SMOKE_REQUIRE_SERVER=1 but server not reachable at $BASE_URL" >&2
@@ -27,7 +27,7 @@ else
 fi
 
 if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
-  echo "== Eval CI gate =="
+  echo "== Full eval CI gate =="
   curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
     -H 'Content-Type: application/json' \
     -d '{"persist_report":false}' \

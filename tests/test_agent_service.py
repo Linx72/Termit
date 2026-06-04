@@ -98,6 +98,7 @@ class AgentServiceTests(unittest.TestCase):
             run_max_attempts=kwargs.get("run_max_attempts", 3),
             run_retry_backoff_ms=kwargs.get("run_retry_backoff_ms", 1),
             run_timeout_seconds=kwargs.get("run_timeout_seconds", 180),
+            queue_stuck_timeout_seconds=kwargs.get("queue_stuck_timeout_seconds", 120),
             max_events_per_run=kwargs.get("max_events_per_run", 500),
             max_response_chars=kwargs.get("max_response_chars", 12000),
             retention_days=kwargs.get("retention_days", 14),
@@ -289,6 +290,9 @@ class AgentServiceTests(unittest.TestCase):
             metrics = service.queue_metrics()
             self.assertEqual(metrics["worker_count"], 1)
             self.assertEqual(metrics["queue_capacity"], 10)
+            self.assertIn("stale_queued_runs", metrics)
+            self.assertIn("stale_running_runs", metrics)
+            self.assertIn("queue_stuck_timeout_seconds", metrics)
 
             agent = service.create_agent(
                 AgentProfileCreateRequest(
@@ -317,6 +321,30 @@ class AgentServiceTests(unittest.TestCase):
             self.assertEqual(applied["deleted_runs"], 1)
             with self.assertRaises(AgentRunNotFoundError):
                 service.get_run(queued.run_id)
+
+    def test_queue_metrics_detect_stale_states(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(tmp, queue_stuck_timeout_seconds=1)
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Metrics Agent",
+                    description="stale metrics",
+                    system_prompt="noop",
+                    task_type=TaskType.general,
+                )
+            )
+            stale_queued = service.create_run(agent.agent_id, AgentRunRequest(input="queued stale"))
+            stale_running = service.create_run(agent.agent_id, AgentRunRequest(input="running stale"))
+            queued_record = service.get_run(stale_queued.run_id)
+            running_record = service.get_run(stale_running.run_id)
+            queued_record.updated_at = "2000-01-01T00:00:00+00:00"
+            running_record.state = AgentRunState.running
+            running_record.updated_at = "2000-01-01T00:00:00+00:00"
+            service._run_store.put_run(queued_record)  # type: ignore[attr-defined]
+            service._run_store.put_run(running_record)  # type: ignore[attr-defined]
+            metrics = service.queue_metrics()
+            self.assertGreaterEqual(metrics["stale_queued_runs"], 1)
+            self.assertGreaterEqual(metrics["stale_running_runs"], 1)
 
     def test_cleanup_stale_active_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

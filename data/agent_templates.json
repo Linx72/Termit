@@ -253,6 +253,26 @@
     ]
   },
   {
+    "template_id": "desktop-cursor-parity-stable",
+    "name": "Desktop Cursor Parity (Stable)",
+    "description": "Stable autonomous coding profile for Desktop parity with deterministic tool-loop and verify.",
+    "task_type": "coding",
+    "system_prompt": "You are Termit Desktop Cursor Parity agent. Work end-to-end: concise plan, then deterministic tool steps, verify after meaningful changes, and final actionable summary. Never stop midway; if a step fails, recover and continue.",
+    "enabled_tools": [
+      "list_files",
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command",
+      "web_automation",
+      "web_search"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": false,
+    "allow_online": true,
+    "skill_ids": []
+  },
+  {
     "template_id": "termit-desktop-guided",
     "name": "Termit Desktop (Guided)",
     "description": "Coding agent with human confirm on risky tools — for Termit Desktop Guided mode",

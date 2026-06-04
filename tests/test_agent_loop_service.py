@@ -341,6 +341,46 @@ class AgentLoopIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(result.response, "ok")
 
+    def test_plan_mode_blocks_mutating_tools(self) -> None:
+        chat = LoopChatStub(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "apply_patch",
+                        "arguments": {"path": "README.md", "content": "x", "confirmed": True},
+                    }
+                ),
+                json.dumps({"action": "final", "answer": "plan ok"}),
+            ]
+        )
+        profile = AgentProfileCreateRequest(
+            name="Plan Guard Agent",
+            description="plan mode blocks mutation",
+            system_prompt="Return a plan in plan mode.",
+            task_type=TaskType.general,
+            enabled_tools=["list_files", "read_file", "apply_patch", "execute_command"],
+            use_tool_loop=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            service = AgentService(
+                chat_service=chat,
+                registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                agent_loop_service=AgentLoopService(),
+                max_concurrency=1,
+            )
+            created = service.create_agent(profile)
+            result = asyncio.run(
+                service.run_agent(
+                    created.agent_id,
+                    AgentRunRequest(input="Сделай план без изменений файлов.", run_mode="plan"),
+                )
+            )
+            self.assertEqual(result.response, "plan ok")
+
 
 if __name__ == "__main__":
     unittest.main()

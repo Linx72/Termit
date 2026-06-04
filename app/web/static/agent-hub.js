@@ -127,10 +127,26 @@ window.TermitAgentHub = (function () {
       const status = metrics.health_status || "ok";
       els.health.className = `hub-health-pill ${status}`;
       const reasons = (metrics.health_reasons || []).join("; ");
-      els.health.textContent =
+      const staleQueued = Number(metrics.stale_queued_runs || 0);
+      const staleRunning = Number(metrics.stale_running_runs || 0);
+      const maxQueuedAge = Number(metrics.max_queued_age_seconds || 0);
+      const maxRunningAge = Number(metrics.max_running_age_seconds || 0);
+      const timeoutSeconds = Number(metrics.queue_stuck_timeout_seconds || 0);
+      const completionRate = Math.max(
+        0,
+        Math.min(100, Math.round((1 - Number(metrics.dead_letter_rate || 0)) * 100))
+      );
+      const statusSummary =
         status === "ok"
           ? `● ${t("agentHub.healthOk")}`
           : `● ${status}${reasons ? `: ${reasons}` : ""}`;
+      const lifecycle =
+        timeoutSeconds > 0
+          ? `${t("agentHub.lifecycle")}: q-stale ${staleQueued}, r-stale ${staleRunning}, ` +
+            `q-max ${maxQueuedAge.toFixed(1)}s, r-max ${maxRunningAge.toFixed(1)}s, SLA ${timeoutSeconds}s`
+          : `${t("agentHub.lifecycle")}: q-stale ${staleQueued}, r-stale ${staleRunning}`;
+      const completion = `${t("agentHub.completionRate")}: ${completionRate}%`;
+      els.health.textContent = `${statusSummary} · ${completion} · ${lifecycle}`;
     }
   }
 

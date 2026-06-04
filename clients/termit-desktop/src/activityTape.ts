@@ -50,6 +50,19 @@ export function formatActivityTape(
   return `${header}\n\n${lines.join("\n")}`;
 }
 
+export function appendTapeHeartbeat(
+  locale: "ru" | "en",
+  tapeText: string,
+  elapsedSeconds: number
+): string {
+  const cleaned = tapeText.replace(/\n💓 heartbeat:.*$/m, "");
+  const line =
+    locale === "ru"
+      ? `\n💓 heartbeat: run активен ${Math.max(0, elapsedSeconds)}с`
+      : `\n💓 heartbeat: run active ${Math.max(0, elapsedSeconds)}s`;
+  return `${cleaned}${line}`;
+}
+
 function formatTapeLine(locale: "ru" | "en", ev: AgentRunEvent, index: number): string {
   const eventType = ev.event_type.toLowerCase();
   const marker = tapeMarker(ev.event_type);

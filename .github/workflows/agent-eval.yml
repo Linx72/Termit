@@ -43,6 +43,10 @@ jobs:
         run: |
           curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
             -H 'Content-Type: application/json' \
+            -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
+            | python3 scripts/eval_ci_gate.py
+          curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
+            -H 'Content-Type: application/json' \
             -d '{"persist_report":false}' \
             | python3 scripts/eval_ci_gate.py
 

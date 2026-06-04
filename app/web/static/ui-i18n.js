@@ -189,6 +189,8 @@ window.TERMIT_I18N = {
       stateCompleted: "completed",
       stateFailed: "failed",
       stateCancelled: "cancelled",
+      lifecycle: "lifecycle",
+      completionRate: "completion",
     },
     helpHtml: {
       dashboard: `<summary>Queue, workers, dead-letter trend</summary>
@@ -477,6 +479,8 @@ curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics</span>`,
       stateCompleted: "завершён",
       stateFailed: "ошибка",
       stateCancelled: "отменён",
+      lifecycle: "lifecycle",
+      completionRate: "completion",
     },
     helpHtml: {
       dashboard: `<summary>Панель: очередь, воркеры, dead-letter</summary>

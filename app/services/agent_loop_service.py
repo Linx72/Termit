@@ -267,6 +267,7 @@ class AgentLoopService:
         seen_tools: set[str] = set()
         used_tool_names: set[str] = set()
         used_mutating_tool = False
+        tool_error_streak = 0
         file_write_source = _extract_user_instruction_for_file_write_detection(payload.input.lower())
         needs_file_write = bool(
             re.search(
@@ -281,6 +282,9 @@ class AgentLoopService:
         repeat_blocks = 0
         active_model = profile.model
         escalation = list(escalation_models or [])
+        run_mode = (payload.run_mode or "agent").strip().lower()
+        plan_only = run_mode == "plan"
+        allow_mutating_tools = not plan_only
 
         def _checkpoint(step: int) -> dict[str, object]:
             return {
@@ -448,10 +452,26 @@ class AgentLoopService:
             )
 
         async def _handle_tool(step: int, tool_name: str, arguments: dict[str, object], assistant_text: str) -> None:
-            nonlocal verify_failures, used_mutating_tool
+            nonlocal verify_failures, used_mutating_tool, tool_error_streak, repeat_blocks
+            if plan_only and tool_name in {"apply_patch", "execute_command"}:
+                observation = (
+                    f"Tool {tool_name} blocked in plan mode. "
+                    "Use read-only analysis tools or return a final plan."
+                )
+                step_result = LoopStepResult(
+                    step=step,
+                    action="phase_guard_blocked",
+                    tool=tool_name,
+                    observation=observation,
+                )
+                steps.append(step_result)
+                if on_step:
+                    on_step(step_result)
+                history.append(ChatMessage(role="assistant", content=assistant_text))
+                history.append(ChatMessage(role="user", content=f"{observation}\n\nRespond with next action."))
+                return
             fingerprint = _tool_fingerprint(tool_name, arguments)
             if fingerprint in seen_tools:
-                nonlocal repeat_blocks
                 repeat_blocks += 1
                 _maybe_escalate()
                 observation = (
@@ -474,12 +494,18 @@ class AgentLoopService:
                 return
             seen_tools.add(fingerprint)
             used_tool_names.add(tool_name)
-            if tool_name in {"apply_patch", "execute_command", "browser_click"}:
+            if allow_mutating_tools and tool_name in {"apply_patch", "execute_command", "browser_click"}:
                 used_mutating_tool = True
             try:
                 observation = tool_fn(tool_name, arguments)
             except Exception as exc:  # noqa: BLE001
                 observation = f"Tool error ({tool_name}): {exc}"
+                tool_error_streak += 1
+                if tool_error_streak >= 2:
+                    repeat_blocks += 1
+                    _maybe_escalate()
+            else:
+                tool_error_streak = 0
             flags = _observation_flags(observation)
             if flags.get("requires_confirmation"):
                 history.append(ChatMessage(role="assistant", content=assistant_text))

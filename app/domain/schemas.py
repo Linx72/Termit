@@ -507,6 +507,11 @@ class AgentRunsMetricsResponse(BaseModel):
     tool_loop_final_steps: int = 0
     tool_loop_tool_success_rate: float = 0.0
     tool_loop_completion_rate: float = 0.0
+    stale_queued_runs: int = 0
+    stale_running_runs: int = 0
+    max_queued_age_seconds: float = 0.0
+    max_running_age_seconds: float = 0.0
+    queue_stuck_timeout_seconds: int = 120
 
 
 class AgentRunsCleanupRequest(BaseModel):

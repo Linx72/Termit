@@ -131,6 +131,7 @@ class AgentService:
         run_max_attempts: int = 2,
         run_retry_backoff_ms: int = 250,
         run_timeout_seconds: int = 180,
+        queue_stuck_timeout_seconds: int = 120,
         max_events_per_run: int = 500,
         max_response_chars: int = 12000,
         retention_days: int = 14,
@@ -166,6 +167,7 @@ class AgentService:
         self._run_max_attempts = max(1, run_max_attempts)
         self._run_retry_backoff_ms = max(0, run_retry_backoff_ms)
         self._run_timeout_seconds = max(10, run_timeout_seconds)
+        self._queue_stuck_timeout_seconds = max(10, queue_stuck_timeout_seconds)
         self._max_events_per_run = max(1, max_events_per_run)
         self._max_response_chars = max(256, max_response_chars)
         self._retention_days = max(1, retention_days)
@@ -339,6 +341,24 @@ class AgentService:
             total_runs = self._run_store.count_runs()
             queue_size = self._run_queue.qsize()
             alive_workers = sum(1 for worker in self._workers if worker.is_alive())
+            runs = self._run_store.list_runs(limit=5000)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        stale_queued = 0
+        stale_running = 0
+        max_queued_age = 0.0
+        max_running_age = 0.0
+        for run in runs:
+            if run.state not in {AgentRunState.queued, AgentRunState.running}:
+                continue
+            age = self._safe_run_age_seconds(run.updated_at, now_ts)
+            if run.state == AgentRunState.queued:
+                max_queued_age = max(max_queued_age, age)
+                if age >= self._queue_stuck_timeout_seconds:
+                    stale_queued += 1
+            elif run.state == AgentRunState.running:
+                max_running_age = max(max_running_age, age)
+                if age >= self._queue_stuck_timeout_seconds:
+                    stale_running += 1
         active_runs = int(by_state.get(AgentRunState.running.value, 0))
         utilization = round((queue_size / self._queue_capacity) * 100, 2)
         metrics: dict[str, object] = {
@@ -350,6 +370,11 @@ class AgentService:
             "total_runs": total_runs,
             "by_state": by_state,
             "active_runs": active_runs,
+            "stale_queued_runs": stale_queued,
+            "stale_running_runs": stale_running,
+            "max_queued_age_seconds": round(max_queued_age, 2),
+            "max_running_age_seconds": round(max_running_age, 2),
+            "queue_stuck_timeout_seconds": self._queue_stuck_timeout_seconds,
         }
         metrics.update(self._run_store.tool_loop_event_metrics())
         return metrics
@@ -1822,6 +1847,14 @@ class AgentService:
         if isinstance(exc, TimeoutError):
             return "run_timeout"
         return "execution_error"
+
+    @staticmethod
+    def _safe_run_age_seconds(updated_at_iso: str, now_ts: float) -> float:
+        try:
+            updated = datetime.fromisoformat(updated_at_iso).timestamp()
+        except ValueError:
+            return 0.0
+        return max(0.0, now_ts - updated)
 
     def _publish_run(self, record: AgentRunRecordResponse) -> None:
         payload = record.model_dump(mode="json")

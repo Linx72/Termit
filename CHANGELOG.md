@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.3] - 2026-06-04
+
+### Added
+- Runtime queue stuck SLA metrics in `/api/ops/agent-runs/metrics` (`stale_queued_runs`, `stale_running_runs`, `max_queued_age_seconds`, `max_running_age_seconds`, `queue_stuck_timeout_seconds`)
+- New config knob `TERMIT_AGENT_QUEUE_STUCK_TIMEOUT_SECONDS` for queue watchdog visibility threshold
+- Desktop default stable profile template `desktop-cursor-parity-stable` for Cursor-like autonomous coding path
+- Cursor parity eval pack (`category=cursor_parity`, 20 scenarios CP1..CP20)
+
+### Changed
+- Tool loop determinism: `run_mode=plan` now blocks mutating tools (`apply_patch`, `execute_command`) with explicit phase-guard event
+- Desktop activity tape now includes periodic heartbeat while run is in progress
+- CI/release smoke now enforce Cursor parity eval gate before full eval suite
+- Agent Hub health summary now includes completion rate and run lifecycle dwell/stale indicators
+
+### Notes
+- This release is parity-focused and does not change public API authentication semantics.
+
 ## [0.3.2] - 2026-05-31
 
 ### Added

@@ -180,6 +180,7 @@ def _build_agent_service() -> AgentService:
         run_max_attempts=settings.agent_run_max_attempts,
         run_retry_backoff_ms=settings.agent_run_retry_backoff_ms,
         run_timeout_seconds=settings.agent_run_timeout_seconds,
+        queue_stuck_timeout_seconds=settings.agent_queue_stuck_timeout_seconds,
         max_events_per_run=settings.agent_run_max_events_per_run,
         max_response_chars=settings.agent_run_max_response_chars,
         retention_days=settings.agent_run_retention_days,

@@ -53,6 +53,7 @@ class AgentMaintenanceSchedulerServiceTests(unittest.TestCase):
             status = scheduler.status()
             self.assertFalse(status["thread_alive"])
             self.assertIsNotNone(status["last_metrics_snapshot_at"])
+            self.assertIn("stale_run_timeout_seconds", status)
 
 
 if __name__ == "__main__":
