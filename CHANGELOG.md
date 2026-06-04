@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.4] - 2026-06-04
+
+### Fixed
+- Stabilized release smoke e2e polling for background agent runs in `tests/test_agents_api.py` and `tests/test_platform_e2e.py` to avoid transient `running` state flakes under load.
+- Ensured eval patch fixture baseline is always restored after each scenario run in `app/services/eval_service.py` (`finally` reset path).
+- Confirmed release scripts run Python checks via repository virtualenv for consistent dependency resolution across environments.
+
+### Reliability
+- Full release contour (`release_smoke.sh` + push + tag + release) now completes deterministically with parity gates enabled.
+
 ## [0.3.3] - 2026-06-04
 
 ### Added
