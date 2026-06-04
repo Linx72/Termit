@@ -79,6 +79,14 @@ class SkillSelectorServiceTests(unittest.TestCase):
         fix_ci = next(item for item in result.selections if item.skill_id == "fix-ci")
         self.assertTrue(any(term.startswith("file:") for term in fix_ci.matched_terms))
 
+    def test_selects_termit_platform_for_ops_readiness(self) -> None:
+        result = self.selector.select_skills(
+            instruction="Improve ops readiness verify pass rate threshold in agent loop",
+            task_type=TaskType.coding,
+            changed_files=["app/services/ops_service.py"],
+        )
+        self.assertIn("termit-platform", result.selected_skill_ids)
+
     def test_relative_cutoff_drops_weak_matches(self) -> None:
         result = self.selector.select_skills(
             instruction="Add pytest unit tests for finetune_service",

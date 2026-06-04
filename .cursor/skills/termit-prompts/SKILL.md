@@ -27,11 +27,13 @@ description: >-
 | `desktop-guided-agent.md` | `termit-desktop-guided` |
 | `desktop-autopilot-agent.md` | `termit-desktop-autopilot` |
 | `desktop-ux-authoring.md` | (Cursor / human — UI work) |
+| `termit-platform-agent.md` | `termit-platform-dev`, `desktop-cursor-parity-stable` |
 
 ## Platform skill catalog
 
 | skill_id | Purpose |
 |----------|---------|
+| `termit-platform` | Termit repo backend, ops, agent loop, smoke |
 | `web-app` | Vite/React verify loop |
 | `online-research` | Fast/deep web research |
 | `online-project` | Assignment deliverables |
@@ -67,6 +69,7 @@ Seed: `./scripts/seed_web_agents.sh` or Desktop **Задания** buttons.
 ## Cursor skills (this repo)
 
 - `termit-agent` — general Termit orchestrator
+- `termit-platform` — develop Termit codebase (backend/ops/agents)
 - `termit-automation` — do_all_automatic
 - `termit-desktop` — Electron UI
 - `web-app`, `online-project` — vertical workflows

@@ -257,7 +257,7 @@
     "name": "Desktop Cursor Parity (Stable)",
     "description": "Stable autonomous coding profile for Desktop parity with deterministic tool-loop and verify.",
     "task_type": "coding",
-    "system_prompt": "You are Termit Desktop Cursor Parity agent. Work end-to-end: concise plan, then deterministic tool steps, verify after meaningful changes, and final actionable summary. Never stop midway; if a step fails, recover and continue.",
+    "system_prompt": "You are Termit Desktop Cursor Parity agent. Follow skill termit-platform and data/prompts/termit-platform-agent.md. Work end-to-end: concise plan, deterministic tool steps, verify after meaningful changes, final actionable summary. Never stop midway; if a step fails, recover and continue.",
     "enabled_tools": [
       "list_files",
       "read_file",
@@ -270,7 +270,29 @@
     "use_tool_loop": true,
     "use_retrieval": false,
     "allow_online": true,
-    "skill_ids": []
+    "skill_ids": [
+      "termit-platform"
+    ]
+  },
+  {
+    "template_id": "termit-platform-dev",
+    "name": "Termit Platform Dev",
+    "description": "Develop Termit backend, agent loop, ops, platform API, and clients",
+    "task_type": "coding",
+    "system_prompt": "You are Termit Platform Agent. Follow skill termit-platform and data/prompts/termit-platform-agent.md. Minimal diff, unittest + smoke, report in Russian.",
+    "enabled_tools": [
+      "list_files",
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "allow_online": false,
+    "skill_ids": [
+      "termit-platform"
+    ]
   },
   {
     "template_id": "termit-desktop-guided",

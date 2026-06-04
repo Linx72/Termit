@@ -219,6 +219,18 @@ _SKILL_HINTS: dict[str, tuple[str, ...]] = {
         "approve",
         "guided",
     ),
+    "termit-platform": (
+        "termit platform",
+        "platform parity",
+        "agent loop",
+        "tool loop",
+        "ops readiness",
+        "healthz",
+        "verify pass rate",
+        "termit backend",
+        "fastapi",
+        "smoke_all",
+    ),
 }
 
 _FILE_HINTS: tuple[tuple[tuple[str, ...], str, float], ...] = (
@@ -226,6 +238,7 @@ _FILE_HINTS: tuple[tuple[tuple[str, ...], str, float], ...] = (
     (("test_", "_test.", "/tests/", "spec.", ".spec."), "write-tests", 3.5),
     (("auth", "security", "secret", "rbac"), "security-review", 3.0),
     (("clients/termit-desktop", "termit-desktop"), "termit-desktop", 3.0),
+    (("app/services/agent_", "app/api/routes/ops", "tool_loop_metrics"), "termit-platform", 3.5),
 )
 
 _TASK_TYPE_BOOSTS: dict[str, dict[str, float]] = {
