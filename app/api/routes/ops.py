@@ -48,6 +48,7 @@ def _agent_runs_metrics_payload(
         queue_utilization_percent=settings.agent_alert_queue_utilization_percent,
         dead_letter_rate=settings.agent_alert_dead_letter_rate,
         min_worker_alive_ratio=settings.agent_alert_min_worker_alive_ratio,
+        min_verify_pass_rate=settings.agent_alert_min_verify_pass_rate,
     )
     health_status, health_reasons, dead_letter_rate = evaluate_agent_health(raw, thresholds)
     return AgentRunsMetricsResponse.model_validate(

@@ -57,12 +57,14 @@ def evaluate_agent_health(
         alive_workers = metrics.alive_workers
         by_state = metrics.by_state
         total_runs = metrics.total_runs
+        verify_pass_rate = metrics.tool_loop_verify_pass_rate
     else:
         queue_util = float(metrics.get("queue_utilization_percent", 0))
         worker_count = int(metrics.get("worker_count", 0))
         alive_workers = int(metrics.get("alive_workers", 0))
         by_state = metrics.get("by_state", {})
         total_runs = int(metrics.get("total_runs", 0))
+        verify_pass_rate = float(metrics.get("tool_loop_verify_pass_rate", 0.0))
 
     warning_reasons: list[str] = []
     degraded_reasons: list[str] = []
@@ -113,6 +115,17 @@ def evaluate_agent_health(
     elif worker_ratio < 1.0:
         warning_reasons.append(
             f"Some agent workers are down ({alive_workers}/{worker_count} alive)."
+        )
+
+    if verify_pass_rate < thresholds.min_verify_pass_rate:
+        degraded_reasons.append(
+            f"Tool-loop verify pass rate is {verify_pass_rate:.2%} "
+            f"(threshold {thresholds.min_verify_pass_rate:.2%})."
+        )
+    elif verify_pass_rate < min(1.0, thresholds.min_verify_pass_rate + 0.10):
+        warning_reasons.append(
+            f"Tool-loop verify pass rate is near threshold: "
+            f"{verify_pass_rate:.2%}/{thresholds.min_verify_pass_rate:.2%}."
         )
 
     if total_runs == 0 and not degraded_reasons and not warning_reasons:
