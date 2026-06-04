@@ -52,7 +52,12 @@ export function FirstRunWizard({
         <div className="field">
           <label htmlFor="wizard-repo">{t(locale, "wizardRepo")}</label>
           <input id="wizard-repo" value={settings.repoRoot} readOnly placeholder="/path/to/Termit" />
-          <button type="button" className="secondary" onClick={() => void onPickRepo()}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={() => void onPickRepo()}
+          >
             {t(locale, "wizardChooseRepo")}
           </button>
         </div>
@@ -60,7 +65,12 @@ export function FirstRunWizard({
         <div className="field">
           <label htmlFor="wizard-workspace">{t(locale, "wizardWorkspace")}</label>
           <input id="wizard-workspace" value={settings.workspace} readOnly />
-          <button type="button" className="secondary" onClick={() => void onPickWorkspace()}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={() => void onPickWorkspace()}
+          >
             {t(locale, "wizardChooseFolder")}
           </button>
         </div>
@@ -93,6 +103,7 @@ export function FirstRunWizard({
           <input
             type="checkbox"
             checked={settings.autoStartServer}
+            disabled={settings.runtimeMode === "web"}
             onChange={(event) => void onToggleAutoStartServer(event.target.checked)}
           />
           {t(locale, "wizardAutoStartServer")}
@@ -108,7 +119,7 @@ export function FirstRunWizard({
         </label>
 
         <div className="row">
-          <button type="button" className="primary" onClick={() => void onConnect()}>
+          <button type="button" className="primary" disabled={busy} onClick={() => void onConnect()}>
             {t(locale, "connect")}
           </button>
         </div>
@@ -119,7 +130,7 @@ export function FirstRunWizard({
           <button
             type="button"
             className="primary"
-            disabled={!canFinish}
+            disabled={!canFinish || busy}
             onClick={() => {
               if (!canFinish) {
                 return;

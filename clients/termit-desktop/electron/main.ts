@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { DocId } from "../shared/ipc";
@@ -152,42 +152,6 @@ app.on("window-all-closed", () => {
   }
 });
 
-ipcMain.handle("dialog:pickFile", async (_event, workspace: string) => {
-  const result = await dialog.showOpenDialog({
-    defaultPath: workspace || undefined,
-    properties: ["openFile"],
-  });
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
-  }
-  const fullPath = result.filePaths[0];
-  if (workspace && fullPath.startsWith(workspace)) {
-    return path.relative(workspace, fullPath).replace(/\\/g, "/");
-  }
-  return fullPath;
-});
-
-ipcMain.handle("dialog:pickWorkspace", async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ["openDirectory", "createDirectory"],
-  });
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
-  }
-  return result.filePaths[0];
-});
-
-ipcMain.handle("dialog:pickRepoRoot", async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ["openDirectory"],
-    title: "Select Termit repository (contains app/ and .venv)",
-  });
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
-  }
-  return result.filePaths[0];
-});
-
 ipcMain.handle("launcher:getConfig", () => {
   return readLauncherConfig(app.getPath("userData"));
 });
@@ -198,15 +162,6 @@ ipcMain.handle("launcher:setConfig", (_event, config: LauncherConfig) => {
 
 ipcMain.handle("server:ensure", (_event, baseUrl: string) => {
   return ensureServer(app.getPath("userData"), baseUrl);
-});
-
-ipcMain.handle("server:restart", () => {
-  return restartServer(app.getPath("userData"));
-});
-
-ipcMain.handle("logs:open", async () => {
-  const result = await openLogs(app.getPath("userData"));
-  return { ok: result.ok, path: result.message };
 });
 
 ipcMain.on("notify:show", (_event, payload: { title: string; body: string }) => {

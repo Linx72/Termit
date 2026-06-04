@@ -179,6 +179,7 @@ def _build_agent_service() -> AgentService:
         max_queue_size=settings.agent_max_queue_size,
         run_max_attempts=settings.agent_run_max_attempts,
         run_retry_backoff_ms=settings.agent_run_retry_backoff_ms,
+        run_timeout_seconds=settings.agent_run_timeout_seconds,
         max_events_per_run=settings.agent_run_max_events_per_run,
         max_response_chars=settings.agent_run_max_response_chars,
         retention_days=settings.agent_run_retention_days,
@@ -241,6 +242,7 @@ def _build_agent_maintenance_scheduler_service() -> AgentMaintenanceSchedulerSer
         enabled=settings.agent_maintenance_enabled,
         cleanup_interval_seconds=settings.agent_cleanup_interval_seconds,
         metrics_snapshot_interval_seconds=settings.agent_metrics_snapshot_interval_seconds,
+        stale_run_timeout_seconds=settings.agent_stale_run_timeout_seconds,
     )
 
 

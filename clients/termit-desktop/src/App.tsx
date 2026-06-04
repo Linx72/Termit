@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   TermitClient,
   buildComposerMessage,
@@ -66,6 +66,13 @@ import {
 } from "./crossPlatformPresets";
 import { buildCompletionSuggestions, formatActivityTape } from "./activityTape";
 import { executionModeLabel, isBuildTask } from "./buildTask";
+import {
+  desktopRuntime,
+  getDesktopRuntimeMeta,
+  setDesktopRuntimePreference,
+} from "./desktopRuntime";
+import { WorkspaceFilePickerModal } from "./WorkspaceFilePickerModal";
+import { PromptInputModal } from "./PromptInputModal";
 
 
 type AgentFolder = {
@@ -113,6 +120,52 @@ function parseGitShortstat(output: string): { added: number; deleted: number } {
   };
 }
 
+const URL_RE = /(https?:\/\/[^\s)]+|www\.[^\s)]+)/gi;
+
+function renderLinkedText(text: string, keyPrefix: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+  const regex = new RegExp(URL_RE);
+  while ((match = regex.exec(text)) !== null) {
+    const urlText = match[0];
+    const start = match.index;
+    if (start > lastIndex) {
+      parts.push(text.slice(lastIndex, start));
+    }
+    const href = urlText.startsWith("http://") || urlText.startsWith("https://")
+      ? urlText
+      : `https://${urlText}`;
+    parts.push(
+      <a key={`${keyPrefix}-url-${start}`} href={href} target="_blank" rel="noreferrer">
+        {urlText}
+      </a>
+    );
+    lastIndex = start + urlText.length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
+}
+
+function tapeLineTone(line: string): "change" | "search" | "default" {
+  const lower = line.toLowerCase();
+  if (
+    /search|web_search|search_repo|find_related|lookup|query|retriev|index|rg\b/.test(lower)
+  ) {
+    return "search";
+  }
+  if (
+    /действие|action|apply_patch|patch|write|create file|edit|modify|execute_command|tool_loop_tool|run_completed|verify_pass|diff/.test(
+      lower
+    )
+  ) {
+    return "change";
+  }
+  return "default";
+}
+
 function workspacePrefix(workspace: string): string {
   if (!workspace) {
     return "";
@@ -143,6 +196,7 @@ export function App() {
   const [apiReachable, setApiReachable] = useState(false);
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [atomicBusy, setAtomicBusy] = useState(false);
   const [atomicProgress, setAtomicProgress] = useState("");
   const [statusLine, setStatusLine] = useState("Not connected");
@@ -230,6 +284,11 @@ export function App() {
   const [mcpImportBusy, setMcpImportBusy] = useState(false);
   const [runSpansText, setRunSpansText] = useState("Select a run to view trace spans.");
   const [platformStatus, setPlatformStatus] = useState("Platform services not loaded.");
+  const [runtimeMeta, setRuntimeMeta] = useState(() => getDesktopRuntimeMeta());
+  const [filePickerTarget, setFilePickerTarget] = useState<"attachments" | "composer" | "folder" | null>(null);
+  const [symbolModalOpen, setSymbolModalOpen] = useState(false);
+  const [webModalOpen, setWebModalOpen] = useState(false);
+  const [pathModalTarget, setPathModalTarget] = useState<"workspace" | "repo" | null>(null);
 
   const projectId = useMemo(() => workspacePrefix(settings.workspace), [settings.workspace]);
   const activeAgentLabel = useMemo(() => {
@@ -323,28 +382,22 @@ export function App() {
     setSettings((prev) => ({ ...prev, ...patch }));
   };
 
+  useEffect(() => {
+    setDesktopRuntimePreference(settings.runtimeMode);
+    setRuntimeMeta(getDesktopRuntimeMeta());
+  }, [settings.runtimeMode]);
+
   const pickWorkspace = async () => {
-    const folder = await window.termitDesktop.pickWorkspace();
-    if (folder) {
-      updateSettings({ workspace: folder });
-    }
+    setPathModalTarget("workspace");
   };
 
   const pickRepoRoot = async () => {
-    const folder = await window.termitDesktop.pickRepoRoot();
-    if (!folder) {
-      return;
-    }
-    updateSettings({ repoRoot: folder });
-    await window.termitDesktop.setLauncherConfig({
-      repoRoot: folder,
-      autoStartServer: settings.autoStartServer,
-    });
+    setPathModalTarget("repo");
   };
 
   const toggleAutoStartServer = async (enabled: boolean) => {
     updateSettings({ autoStartServer: enabled });
-    await window.termitDesktop.setLauncherConfig({
+    await desktopRuntime.setLauncherConfig({
       repoRoot: settings.repoRoot,
       autoStartServer: enabled,
     });
@@ -353,11 +406,11 @@ export function App() {
   const syncLauncherConfig = async (patch?: Partial<Pick<StoredSettings, "repoRoot" | "autoStartServer">>) => {
     const repoRoot = patch?.repoRoot ?? settings.repoRoot;
     const autoStartServer = patch?.autoStartServer ?? settings.autoStartServer;
-    await window.termitDesktop.setLauncherConfig({ repoRoot, autoStartServer });
+    await desktopRuntime.setLauncherConfig({ repoRoot, autoStartServer });
   };
 
   const startServer = async (): Promise<boolean> => {
-    const result = await window.termitDesktop.ensureServer(settings.baseUrl);
+    const result = await desktopRuntime.ensureServer(settings.baseUrl);
     setStatusLine(result.message);
     if (result.ok) {
       setApiReachable(true);
@@ -367,6 +420,7 @@ export function App() {
   };
 
   const connect = async (): Promise<boolean> => {
+    setConnecting(true);
     try {
       setStatusLine("Connecting...");
       const [statuses, providers, profiles, adaptersResponse, healthz, localStatus] =
@@ -454,6 +508,8 @@ export function App() {
       setStatusLine(message);
       setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text: message }]);
       return false;
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -871,7 +927,7 @@ export function App() {
           setCheckpointLine(parseCheckpointSummary(record.checkpoint_json));
         });
         if (run.state === "completed") {
-          window.termitDesktop.showNotification({
+          desktopRuntime.showNotification({
             title: "Agent run completed",
             body: `${run.run_id} · ${selectedAgentId ?? "agent"}`,
           });
@@ -881,7 +937,7 @@ export function App() {
             void refreshAgentRuns(selectedAgentId);
           }
         } else if (run.state === "failed") {
-          window.termitDesktop.showNotification({
+          desktopRuntime.showNotification({
             title: "Agent run failed",
             body: `${run.run_id} · ${selectedAgentId ?? "agent"}`,
           });
@@ -950,7 +1006,7 @@ export function App() {
     let cancelled = false;
     void (async () => {
       try {
-        const launcher = await window.termitDesktop.getLauncherConfig();
+        const launcher = await desktopRuntime.getLauncherConfig();
         if (cancelled) {
           return;
         }
@@ -959,7 +1015,7 @@ export function App() {
           autoStartServer: launcher.autoStartServer,
         });
         if (launcher.autoStartServer) {
-          const result = await window.termitDesktop.ensureServer(settings.baseUrl);
+          const result = await desktopRuntime.ensureServer(settings.baseUrl);
           if (!cancelled) {
             setStatusLine(result.message);
           }
@@ -987,54 +1043,25 @@ export function App() {
       ]);
       return;
     }
-    const relativePath = await window.termitDesktop.pickWorkspaceFile(settings.workspace);
-    if (!relativePath) {
-      return;
-    }
-    try {
-      const file = await client.readFile({ path: relativePath, max_bytes: 12000 });
-      setAttachments((prev) => [
-        ...prev.filter((item) => item.path !== relativePath),
-        { kind: "file", path: relativePath, excerpt: file.content },
-      ]);
-    } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
-      setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
-    }
+    setFilePickerTarget("attachments");
   };
 
   const attachFolder = async () => {
     if (!settings.workspace) {
       return;
     }
-    const folder = window.prompt(t(locale, "promptFolder"), "app");
-    if (!folder?.trim()) {
-      return;
-    }
-    try {
-      const response = await client.listFiles({ path: folder.trim(), pattern: "*" });
-      const files = response.files.filter((file) => !file.endsWith("/")).slice(0, 8);
-      const next: ContextAttachment[] = [];
-      for (const file of files) {
-        const content = await client.readFile({ path: file, max_bytes: 8000 });
-        next.push({ kind: "folder", path: file, excerpt: content.content, label: folder.trim() });
-      }
-      setAttachments((prev) => [...prev, ...next]);
-    } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
-      setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
-    }
+    setFilePickerTarget("folder");
   };
 
   const attachSymbol = async () => {
-    const query = window.prompt(t(locale, "promptSymbol"));
-    if (!query?.trim()) {
-      return;
-    }
+    setSymbolModalOpen(true);
+  };
+
+  const runAttachSymbol = async (query: string) => {
     try {
       const prefix = workspacePrefix(settings.workspace);
       const result = await client.searchSymbols({
-        query: query.trim(),
+        query,
         limit: 5,
         path_prefix: prefix || undefined,
       });
@@ -1090,12 +1117,12 @@ export function App() {
   };
 
   const attachWeb = async () => {
-    const query = window.prompt(t(locale, "promptWeb"));
-    if (!query?.trim()) {
-      return;
-    }
+    setWebModalOpen(true);
+  };
+
+  const runAttachWeb = async (query: string) => {
     try {
-      const result = await client.searchWeb(query.trim(), 5);
+      const result = await client.searchWeb(query, 5);
       const excerpt = result.hits
         .map((hit, index) => `[${index + 1}] ${hit.title}\n${hit.url}\n${hit.snippet}`)
         .join("\n\n");
@@ -1104,7 +1131,7 @@ export function App() {
         {
           kind: "web",
           path: result.provider,
-          label: query.trim(),
+          label: query,
           excerpt: excerpt || "No web results.",
         },
       ]);
@@ -1133,20 +1160,7 @@ export function App() {
     if (!settings.workspace) {
       return;
     }
-    const relativePath = await window.termitDesktop.pickWorkspaceFile(settings.workspace);
-    if (!relativePath) {
-      return;
-    }
-    try {
-      const file = await client.readFile({ path: relativePath, max_bytes: 12000 });
-      setComposerFiles((prev) => [
-        ...prev.filter((item) => item.path !== relativePath),
-        { path: relativePath, content: file.content },
-      ]);
-    } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
-      setComposerLog(text);
-    }
+    setFilePickerTarget("composer");
   };
 
   const runComposer = async () => {
@@ -1982,13 +1996,71 @@ export function App() {
     await runAgent(input, agentId);
   };
 
+  const applyPathModalValue = async (value: string) => {
+    if (pathModalTarget === "workspace") {
+      updateSettings({ workspace: value });
+      return;
+    }
+    if (pathModalTarget === "repo") {
+      updateSettings({ repoRoot: value });
+      await desktopRuntime.setLauncherConfig({
+        repoRoot: value,
+        autoStartServer: settings.autoStartServer,
+      });
+    }
+  };
+
+  const attachPathByTarget = async (relativePath: string) => {
+    if (filePickerTarget === "attachments") {
+      try {
+        const file = await client.readFile({ path: relativePath, max_bytes: 12000 });
+        setAttachments((prev) => [
+          ...prev.filter((item) => item.path !== relativePath),
+          { kind: "file", path: relativePath, excerpt: file.content },
+        ]);
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
+      }
+      return;
+    }
+    if (filePickerTarget === "composer") {
+      try {
+        const file = await client.readFile({ path: relativePath, max_bytes: 12000 });
+        setComposerFiles((prev) => [
+          ...prev.filter((item) => item.path !== relativePath),
+          { path: relativePath, content: file.content },
+        ]);
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        setComposerLog(text);
+      }
+      return;
+    }
+    if (filePickerTarget === "folder") {
+      try {
+        const response = await client.listFiles({ path: relativePath, pattern: "*" });
+        const files = response.files.filter((file) => !file.endsWith("/")).slice(0, 8);
+        const next: ContextAttachment[] = [];
+        for (const file of files) {
+          const content = await client.readFile({ path: file, max_bytes: 8000 });
+          next.push({ kind: "folder", path: file, excerpt: content.content, label: relativePath });
+        }
+        setAttachments((prev) => [...prev, ...next]);
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
+      }
+    }
+  };
+
   return (
     <div className="cursor-app">
       {showWizard && (
         <FirstRunWizard
           settings={settings}
           healthLine={wizardHealth}
-          busy={busy}
+          busy={connecting}
           locale={locale}
           missingOllamaModels={missingOllamaModels}
           pullingModel={pullingModel}
@@ -2001,7 +2073,7 @@ export function App() {
           onComplete={async () => {
             await syncLauncherConfig();
             if (settings.autoStartServer && settings.repoRoot.trim()) {
-              await window.termitDesktop.ensureServer(settings.baseUrl);
+              await desktopRuntime.ensureServer(settings.baseUrl);
             }
             if (settings.autoConnect) {
               await connect();
@@ -2125,7 +2197,12 @@ export function App() {
         <div className="field">
           <label htmlFor="workspace">{t(locale, "workspaceFolder")}</label>
           <input id="workspace" value={settings.workspace} readOnly />
-          <button type="button" className="secondary" onClick={() => void pickWorkspace()}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={connecting}
+            onClick={() => void pickWorkspace()}
+          >
             {t(locale, "chooseFolder")}
           </button>
         </div>
@@ -2167,6 +2244,29 @@ export function App() {
               ? "Hybrid: plan → research online → файлы локально/SSH → verify → preview."
               : "Hybrid: plan → online research → files local/SSH → verify → preview."}
           </span>
+        </div>
+
+        <div className="field">
+          <label htmlFor="runtimeMode">{t(locale, "runtimeMode")}</label>
+          <select
+            id="runtimeMode"
+            value={settings.runtimeMode}
+            onChange={(event) =>
+              updateSettings({
+                runtimeMode: event.target.value as StoredSettings["runtimeMode"],
+              })
+            }
+          >
+            <option value="auto">{t(locale, "runtimeModeAuto")}</option>
+            <option value="desktop">{t(locale, "runtimeModeDesktop")}</option>
+            <option value="web">{t(locale, "runtimeModeWeb")}</option>
+          </select>
+          {runtimeMeta.mode === "web" ? (
+            <p className="hint runtime-warning">{t(locale, "runtimeWebLimitations")}</p>
+          ) : null}
+          {settings.runtimeMode === "desktop" && !runtimeMeta.nativeAvailable ? (
+            <p className="hint runtime-warning">{t(locale, "runtimeDesktopRequestedButUnavailable")}</p>
+          ) : null}
         </div>
 
         {(settings.executionMode === "ssh" || settings.executionMode === "hybrid") && (
@@ -2282,6 +2382,7 @@ export function App() {
           <input
             type="checkbox"
             checked={settings.autoStartServer}
+            disabled={!runtimeMeta.serverControl}
             onChange={(event) => void toggleAutoStartServer(event.target.checked)}
           />
           {t(locale, "autoStartServer")}
@@ -2297,7 +2398,12 @@ export function App() {
         </label>
 
         <div className="row">
-          <button type="button" className="secondary" onClick={() => void startServer()}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!runtimeMeta.serverControl}
+            onClick={() => void startServer()}
+          >
             {t(locale, "startServerNow")}
           </button>
         </div>
@@ -2591,6 +2697,11 @@ export function App() {
         <header className="cursor-titlebar">
           <h1>{activeChatTitle}</h1>
           <span className="cursor-mode-badge">{settings.executionMode}</span>
+          <span className={`cursor-runtime-badge ${runtimeMeta.mode === "desktop" ? "ok" : "warn"}`}>
+            {runtimeMeta.mode === "desktop"
+              ? t(locale, "runtimeBadgeDesktop")
+              : t(locale, "runtimeBadgeWeb")}
+          </span>
           {!connected ? (
             <button type="button" className="secondary compact" onClick={() => void ensureApiReady()}>
               {t(locale, "connect")}
@@ -2630,8 +2741,23 @@ export function App() {
                     )}
                     {block.kind === "error" && <strong>{t(locale, "error")}</strong>}
                     {block.kind === "meta" && <strong>{t(locale, "info")}</strong>}
-                    {"\n"}
-                    {block.text}
+                    {block.kind === "tape" ? (
+                      <div className="activity-tape-text">
+                        {block.text.split("\n").map((line, index) => (
+                          <div
+                            key={`${block.id}-line-${index}`}
+                            className={`tape-line tape-line-${tapeLineTone(line)}`}
+                          >
+                            {renderLinkedText(line, `${block.id}-line-${index}`)}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        {"\n"}
+                        {block.text}
+                      </>
+                    )}
                     {block.kind === "suggestions" && block.actions && block.actions.length > 0 ? (
                       <div className="chips suggestion-actions">
                         {block.actions.map((action) => (
@@ -2802,6 +2928,54 @@ export function App() {
           </div>
         </footer>
       </section>
+      <WorkspaceFilePickerModal
+        client={client}
+        connected={connected}
+        open={filePickerTarget !== null}
+        mode={filePickerTarget === "folder" ? "folder" : "file"}
+        title={
+          filePickerTarget === "composer"
+            ? "Select file for Composer"
+            : filePickerTarget === "folder"
+              ? "Select folder to attach"
+              : "Select attachment file"
+        }
+        onClose={() => setFilePickerTarget(null)}
+        onSelect={(path) => void attachPathByTarget(path)}
+      />
+      <PromptInputModal
+        open={symbolModalOpen}
+        title={t(locale, "promptSymbol")}
+        placeholder={locale === "ru" ? "Например: AgentService" : "Example: AgentService"}
+        submitLabel={locale === "ru" ? "Найти" : "Search"}
+        onClose={() => setSymbolModalOpen(false)}
+        onSubmit={(value) => void runAttachSymbol(value)}
+      />
+      <PromptInputModal
+        open={webModalOpen}
+        title={t(locale, "promptWeb")}
+        placeholder={locale === "ru" ? "Например: FastAPI background tasks best practices" : "Example: FastAPI background tasks best practices"}
+        submitLabel={locale === "ru" ? "Искать" : "Search"}
+        onClose={() => setWebModalOpen(false)}
+        onSubmit={(value) => void runAttachWeb(value)}
+      />
+      <PromptInputModal
+        open={pathModalTarget !== null}
+        title={
+          pathModalTarget === "repo"
+            ? locale === "ru"
+              ? "Путь к репозиторию Termit"
+              : "Termit repository path"
+            : locale === "ru"
+              ? "Путь к workspace"
+              : "Workspace path"
+        }
+        placeholder={pathModalTarget === "repo" ? "/Users/name/Projects/Termit" : "/Users/name/Projects/MyApp"}
+        submitLabel={locale === "ru" ? "Применить" : "Apply"}
+        initialValue={pathModalTarget === "repo" ? settings.repoRoot : settings.workspace}
+        onClose={() => setPathModalTarget(null)}
+        onSubmit={(value) => void applyPathModalValue(value)}
+      />
 
       <aside className="cursor-review" aria-label="Review">
         <div className="cursor-review-header">

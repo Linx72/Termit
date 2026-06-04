@@ -70,13 +70,20 @@ class AgentPolicyPresetService:
 
         profile_tools = set(profile.enabled_tools or [])
         preset_tools = set(preset.enabled_tools)
-        merged_tools = sorted(profile_tools & preset_tools if profile_tools else preset_tools)
+        merged_tools = (
+            sorted(profile_tools & preset_tools)
+            if profile_tools
+            else sorted(preset_tools)
+        )
+        # Never widen explicit agent tool permissions with preset defaults.
+        # If agent already has an allowlist, keep only the intersection.
+        effective_tools = merged_tools if profile_tools else list(preset.enabled_tools)
 
         updated_profile = profile.model_copy(
             update={
                 "max_tool_steps": preset.max_tool_steps,
                 "allow_online": preset.allow_online,
-                "enabled_tools": merged_tools or list(preset.enabled_tools),
+                "enabled_tools": effective_tools,
                 "use_tool_loop": True,
             }
         )

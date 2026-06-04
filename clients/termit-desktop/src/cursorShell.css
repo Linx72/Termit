@@ -188,6 +188,31 @@
   text-transform: uppercase;
 }
 
+.cursor-runtime-badge {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #333;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.cursor-runtime-badge.ok {
+  color: #8bd9a1;
+  border-color: #2f5a3a;
+  background: rgba(47, 90, 58, 0.22);
+}
+
+.cursor-runtime-badge.warn {
+  color: #f3cf7a;
+  border-color: #5a4a2a;
+  background: rgba(90, 74, 42, 0.22);
+}
+
+.runtime-warning {
+  color: #f3cf7a;
+}
+
 .cursor-chat-scroll {
   flex: 1;
   overflow: auto;
@@ -217,6 +242,30 @@
   font-size: 0.8rem;
   max-height: 280px;
   overflow: auto;
+}
+
+.activity-tape-text {
+  margin-top: 4px;
+}
+
+.tape-line {
+  white-space: pre-wrap;
+  color: #b2b2b2;
+  line-height: 1.5;
+}
+
+.tape-line-change {
+  color: #f7f7f7;
+}
+
+.tape-line-search {
+  color: #7a7a7a;
+}
+
+.tape-line a {
+  color: #4da3ff;
+  text-decoration: underline;
+  text-decoration-color: rgba(77, 163, 255, 0.55);
 }
 
 .cursor-chat-scroll .message-block.suggestions {

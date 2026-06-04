@@ -22,6 +22,14 @@ class _StubAgentService:
             "remaining_runs": 10,
         }
 
+    def cleanup_stale_active_runs(self, *, stale_before_iso: str, dry_run: bool = False):  # type: ignore[no-untyped-def]
+        return {
+            "dry_run": dry_run,
+            "stale_before": stale_before_iso,
+            "cancelled_runs": 2 if not dry_run else 0,
+            "remaining_runs": 10,
+        }
+
 
 class AgentMaintenanceSchedulerServiceTests(unittest.TestCase):
     def test_manual_cleanup_and_snapshot(self) -> None:
@@ -38,6 +46,8 @@ class AgentMaintenanceSchedulerServiceTests(unittest.TestCase):
             )
             cleanup = scheduler.run_cleanup_once(dry_run=True)
             self.assertTrue(cleanup["dry_run"])
+            self.assertIn("stale_before", cleanup)
+            self.assertIn("cancelled_stale_runs", cleanup)
             snapshot = scheduler.run_metrics_snapshot_once()
             self.assertIn("captured_at", snapshot)
             status = scheduler.status()

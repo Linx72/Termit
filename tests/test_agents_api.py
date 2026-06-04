@@ -1,14 +1,42 @@
+import tempfile
 import time
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.agent_registry_store import AgentRegistryStore
+from app.services.agent_run_store import InMemoryAgentRunStore
+from app.services.agent_service import AgentService
+from app.services.tooling_service import ToolingService
+from tests.test_agent_service import StubBrowserWorkflow, StubChatService
+
+
+def _isolated_agent_service(tmp: str) -> AgentService:
+    return AgentService(
+        chat_service=StubChatService(),
+        registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+        run_store=InMemoryAgentRunStore(),
+        tooling=ToolingService(root_path="."),
+        browser_workflow=StubBrowserWorkflow(),
+        max_concurrency=1,
+        max_queue_size=10,
+        run_max_attempts=1,
+        run_retry_backoff_ms=1,
+    )
 
 
 class AgentsApiTests(unittest.TestCase):
     def test_create_agent_and_background_run(self) -> None:
-        client = TestClient(app)
+        with tempfile.TemporaryDirectory() as tmp:
+            service = _isolated_agent_service(tmp)
+            with patch("app.api.routes.agents.get_agent_service", return_value=service):
+                client = TestClient(app)
+                self._run_create_agent_and_background(client)
+
+    def _run_create_agent_and_background(self, client: TestClient) -> None:
         create_resp = client.post(
             "/api/agents",
             json={
@@ -56,7 +84,13 @@ class AgentsApiTests(unittest.TestCase):
         self.assertIn("event: done", stream_resp.text)
 
     def test_agent_tool_permission_enforced(self) -> None:
-        client = TestClient(app)
+        with tempfile.TemporaryDirectory() as tmp:
+            service = _isolated_agent_service(tmp)
+            with patch("app.api.routes.agents.get_agent_service", return_value=service):
+                client = TestClient(app)
+                self._run_agent_tool_permission_enforced(client)
+
+    def _run_agent_tool_permission_enforced(self, client: TestClient) -> None:
         create_resp = client.post(
             "/api/agents",
             json={

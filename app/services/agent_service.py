@@ -56,6 +56,7 @@ from app.services.playwright_browser_service import PlaywrightBrowserService, Pl
 from app.services.chat_service import ChatService
 from app.services.context_enrichment_service import ContextEnrichmentService
 from app.services.guardrail_service import GuardrailService
+from app.services.json_safe import json_dumps, json_safe
 from app.services.mcp_registry_service import McpRegistryService
 from app.services.search_provider import SearchProvider, StubSearchProvider
 from app.services.skill_store import SkillStore
@@ -129,6 +130,7 @@ class AgentService:
         max_queue_size: int = 100,
         run_max_attempts: int = 2,
         run_retry_backoff_ms: int = 250,
+        run_timeout_seconds: int = 180,
         max_events_per_run: int = 500,
         max_response_chars: int = 12000,
         retention_days: int = 14,
@@ -163,6 +165,7 @@ class AgentService:
         )
         self._run_max_attempts = max(1, run_max_attempts)
         self._run_retry_backoff_ms = max(0, run_retry_backoff_ms)
+        self._run_timeout_seconds = max(10, run_timeout_seconds)
         self._max_events_per_run = max(1, max_events_per_run)
         self._max_response_chars = max(256, max_response_chars)
         self._retention_days = max(1, retention_days)
@@ -371,12 +374,49 @@ class AgentService:
             "remaining_runs": remaining,
         }
 
+    def cleanup_stale_active_runs(
+        self,
+        *,
+        stale_before_iso: str,
+        dry_run: bool = False,
+    ) -> dict[str, object]:
+        stale_runs: list[AgentRunRecordResponse] = []
+        with self._lock:
+            for run in self._run_store.list_runs(limit=5000):
+                if run.state not in {AgentRunState.running, AgentRunState.queued}:
+                    continue
+                if run.updated_at < stale_before_iso:
+                    stale_runs.append(run)
+            if not dry_run:
+                for run in stale_runs:
+                    run.state = AgentRunState.cancelled
+                    run.updated_at = _utc_now_iso()
+                    if not run.error:
+                        run.error = "Cancelled stale run during maintenance."
+                    self._run_store.put_run(run)
+                    self._append_event(
+                        run_id=run.run_id,
+                        event_type="run_cancelled_stale",
+                        state=AgentRunState.cancelled,
+                        message="Run cancelled by maintenance due to staleness timeout.",
+                        attempt=run.attempts,
+                    )
+                    self._publish_run(run)
+            remaining = self._run_store.count_runs()
+        return {
+            "dry_run": dry_run,
+            "stale_before": stale_before_iso,
+            "cancelled_runs": len(stale_runs),
+            "remaining_runs": remaining,
+        }
+
     def cancel_run(self, run_id: str) -> AgentRunCancelResponse:
         with self._lock:
             record = self._run_store.get_run(run_id)
             if record is None:
                 raise AgentRunNotFoundError(f"Agent run not found: {run_id}")
-            if record.state == AgentRunState.queued:
+            if record.state in {AgentRunState.queued, AgentRunState.running}:
+                previous_state = record.state
                 record.state = AgentRunState.cancelled
                 record.updated_at = _utc_now_iso()
                 self._run_store.put_run(record)
@@ -384,7 +424,11 @@ class AgentService:
                     run_id=run_id,
                     event_type="run_cancelled",
                     state=AgentRunState.cancelled,
-                    message="Run cancelled before execution.",
+                    message=(
+                        "Run cancelled before execution."
+                        if previous_state == AgentRunState.queued
+                        else "Run cancelled during execution."
+                    ),
                     attempt=record.attempts,
                 )
                 return AgentRunCancelResponse(run_id=run_id, cancelled=True, state=record.state)
@@ -419,7 +463,7 @@ class AgentService:
             if isinstance(pending_args, dict):
                 pending_args["confirmed"] = True
                 checkpoint["pending_arguments"] = pending_args
-            record.checkpoint_json = json.dumps(checkpoint, ensure_ascii=True)
+            record.checkpoint_json = json_dumps(checkpoint, ensure_ascii=True)
             record.state = AgentRunState.queued
             record.updated_at = _utc_now_iso()
             self._run_store.put_run(record)
@@ -770,7 +814,7 @@ class AgentService:
                     run_id=run_id,
                     event_type="skills_mounted",
                     state=AgentRunState.running,
-                    message=json.dumps(
+                    message=json_dumps(
                         {
                             "skill_ids": skill_selection.selected_skill_ids,
                             "selections": skill_selection.to_dict()["selections"],
@@ -806,7 +850,11 @@ class AgentService:
             else self._auto_confirm_risky_tools
         )
         configured_verify = self._verify_cmd if run_verify_after_patch else ""
-        verify_cmd = resolve_verify_command(str(self._tooling.root), configured_verify)
+        verify_cmd = (
+            resolve_verify_command(str(self._tooling.root), configured_verify)
+            if run_verify_after_patch
+            else ""
+        )
 
         def verify_fn() -> tuple[bool, str]:
             if not verify_cmd:
@@ -875,7 +923,7 @@ class AgentService:
                         agent_id=profile.agent_id,
                         state=AgentRunState.running.value,
                         message=f"tool={tool_name}",
-                        extra={"tool_name": tool_name, "arguments": arguments},
+                        extra={"tool_name": tool_name, "arguments": json_safe(arguments)},
                     )
                 )
             for event_type, message in side_effects:
@@ -913,7 +961,7 @@ class AgentService:
                 message=message,
                 attempt=attempt,
             )
-            trace_payload = json.dumps(
+            trace_payload = json_dumps(
                 {
                     "step": step.step,
                     "action": step.action,
@@ -1074,7 +1122,7 @@ class AgentService:
             except PlaywrightUnavailableError as exc:
                 raise AgentOnlineError(str(exc)) from exc
             side_effects.append((tool_name, str(payload.get("url", payload.get("executed", "")))))
-            return json.dumps(payload, ensure_ascii=True), side_effects
+            return json_dumps(payload, ensure_ascii=True), side_effects
         if tool_name == "web_search":
             query = str(arguments.get("query", ""))
             max_results = int(arguments.get("max_results", 5))
@@ -1327,9 +1375,10 @@ class AgentService:
             effective_verify = (
                 verify_after_patch if verify_after_patch is not None else self._verify_after_patch
             )
-            verify_cmd = resolve_verify_command(
-                str(self._tooling.root),
-                self._verify_cmd if effective_verify else "",
+            verify_cmd = (
+                resolve_verify_command(str(self._tooling.root), self._verify_cmd)
+                if effective_verify
+                else ""
             )
             if result.applied and verify_cmd:
                 if ssh_cfg is not None:
@@ -1535,7 +1584,10 @@ class AgentService:
             try:
                 profile = self.get_agent(agent_id)
                 result = asyncio.run(
-                    self._run_with_profile(profile, payload, run_id=run_id, attempt=attempt)
+                    asyncio.wait_for(
+                        self._run_with_profile(profile, payload, run_id=run_id, attempt=attempt),
+                        timeout=self._run_timeout_seconds,
+                    )
                 )
                 with self._lock:
                     current = self._run_store.get_run(run_id)
@@ -1597,7 +1649,7 @@ class AgentService:
                         return
                     current.state = AgentRunState.awaiting_confirmation
                     current.updated_at = _utc_now_iso()
-                    current.checkpoint_json = json.dumps(exc.checkpoint, ensure_ascii=True)
+                    current.checkpoint_json = json_dumps(exc.checkpoint, ensure_ascii=True)
                     current.error = None
                     self._run_store.put_run(current)
                     self._append_event(
@@ -1617,10 +1669,102 @@ class AgentService:
                         current = self._run_store.get_run(run_id)
                         if current is None:
                             return
-                        current.checkpoint_json = json.dumps(exc.checkpoint, ensure_ascii=True)
+                        current.checkpoint_json = json_dumps(exc.checkpoint, ensure_ascii=True)
                         current.updated_at = _utc_now_iso()
                         self._run_store.put_run(current)
-                raise
+                failure_class = self._classify_failure(exc)
+                is_last = attempt >= self._run_max_attempts
+                with self._lock:
+                    current = self._run_store.get_run(run_id)
+                    if current is None:
+                        return
+                    current.updated_at = _utc_now_iso()
+                    current.error = str(exc)
+                    current.failure_class = failure_class
+                    if is_last:
+                        current.state = AgentRunState.failed
+                        self._run_store.put_run(current)
+                        self._append_event(
+                            run_id=run_id,
+                            event_type="run_dead_lettered",
+                            state=AgentRunState.failed,
+                            message=(
+                                f"Run failed after {self._run_max_attempts} attempts: "
+                                f"{failure_class}: {exc}"
+                            ),
+                            attempt=attempt,
+                        )
+                        self._emit_run_hook(
+                            event_type="run.failed",
+                            run_id=run_id,
+                            agent_id=agent_id,
+                            state=AgentRunState.failed.value,
+                            message=str(exc),
+                        )
+                        self._publish_run(current)
+                        return
+
+                    self._run_store.put_run(current)
+                    self._append_event(
+                        run_id=run_id,
+                        event_type="run_retry_scheduled",
+                        state=AgentRunState.running,
+                        message=f"Attempt {attempt} failed ({failure_class}). Scheduling retry.",
+                        attempt=attempt,
+                    )
+                if self._run_retry_backoff_ms > 0:
+                    time.sleep((self._run_retry_backoff_ms * (2 ** (attempt - 1))) / 1000.0)
+                continue
+            except TimeoutError:
+                failure_class = "run_timeout"
+                is_last = attempt >= self._run_max_attempts
+                with self._lock:
+                    current = self._run_store.get_run(run_id)
+                    if current is None:
+                        return
+                    current.updated_at = _utc_now_iso()
+                    current.error = (
+                        f"Run exceeded timeout ({self._run_timeout_seconds}s). "
+                        "Task was interrupted to keep workers healthy."
+                    )
+                    current.failure_class = failure_class
+                    if is_last:
+                        current.state = AgentRunState.failed
+                        self._run_store.put_run(current)
+                        self._append_event(
+                            run_id=run_id,
+                            event_type="run_dead_lettered",
+                            state=AgentRunState.failed,
+                            message=(
+                                f"Run failed after {self._run_max_attempts} attempts: "
+                                f"{failure_class}: timeout={self._run_timeout_seconds}s"
+                            ),
+                            attempt=attempt,
+                        )
+                        self._emit_run_hook(
+                            event_type="run.failed",
+                            run_id=run_id,
+                            agent_id=agent_id,
+                            state=AgentRunState.failed.value,
+                            message=current.error,
+                        )
+                        self._publish_run(current)
+                        return
+
+                    self._run_store.put_run(current)
+                    self._append_event(
+                        run_id=run_id,
+                        event_type="run_retry_scheduled",
+                        state=AgentRunState.running,
+                        message=(
+                            f"Attempt {attempt} failed ({failure_class}). "
+                            f"Scheduling retry after timeout={self._run_timeout_seconds}s."
+                        ),
+                        attempt=attempt,
+                    )
+                if self._run_retry_backoff_ms > 0:
+                    time.sleep((self._run_retry_backoff_ms * (2 ** (attempt - 1))) / 1000.0)
+                continue
             except Exception as exc:  # noqa: BLE001
                 failure_class = self._classify_failure(exc)
                 is_last = attempt >= self._run_max_attempts
@@ -1675,6 +1819,8 @@ class AgentService:
             return "permission_error"
         if isinstance(exc, AgentNotFoundError):
             return "agent_not_found"
+        if isinstance(exc, TimeoutError):
+            return "run_timeout"
         return "execution_error"
 
     def _publish_run(self, record: AgentRunRecordResponse) -> None:

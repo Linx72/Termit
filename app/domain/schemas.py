@@ -521,6 +521,8 @@ class AgentRunsCleanupResponse(BaseModel):
     deleted_runs: int
     deleted_events: int
     remaining_runs: int
+    cancelled_stale_runs: int = 0
+    stale_before: str = ""
 
 
 class MetricsSummaryResponse(BaseModel):

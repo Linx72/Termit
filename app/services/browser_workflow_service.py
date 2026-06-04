@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from collections.abc import Callable
@@ -49,18 +50,37 @@ class BrowserWorkflowService:
             executed_actions.append(action)
             steps.append(f"Action: {action}")
 
+        fetch_errors: list[str] = []
         try:
             status_code, body, final_url = self._fetcher(payload.url, payload.timeout_seconds)
         except Exception as exc:  # noqa: BLE001
-            duration_ms = int((time.perf_counter() - started) * 1000)
-            return WebAutomationResponse(
-                objective=payload.objective,
-                success=False,
-                blocker_detected=False,
-                blocker_reason=f"Fetch failed: {exc}",
-                steps=steps,
-                duration_ms=duration_ms,
-            )
+            fetch_errors.append(str(exc))
+            # Playwright sync API cannot run inside active asyncio loop.
+            # In that case fallback to plain HTTP fetch so online runs still work.
+            if self._is_asyncio_sync_playwright_conflict(exc):
+                try:
+                    status_code, body, final_url = self._default_fetcher(payload.url, payload.timeout_seconds)
+                except Exception as fallback_exc:  # noqa: BLE001
+                    fetch_errors.append(str(fallback_exc))
+                    duration_ms = int((time.perf_counter() - started) * 1000)
+                    return WebAutomationResponse(
+                        objective=payload.objective,
+                        success=False,
+                        blocker_detected=False,
+                        blocker_reason=f"Fetch failed: {' | '.join(fetch_errors)}",
+                        steps=steps,
+                        duration_ms=duration_ms,
+                    )
+            else:
+                duration_ms = int((time.perf_counter() - started) * 1000)
+                return WebAutomationResponse(
+                    objective=payload.objective,
+                    success=False,
+                    blocker_detected=False,
+                    blocker_reason=f"Fetch failed: {exc}",
+                    steps=steps,
+                    duration_ms=duration_ms,
+                )
 
         title = self._extract_title(body)
         links = self._extract_links(base_url=final_url, html=body, limit=payload.capture_links_limit)
@@ -140,3 +160,16 @@ class BrowserWorkflowService:
             if marker in lowered:
                 return reason
         return None
+
+    @staticmethod
+    def _is_asyncio_sync_playwright_conflict(exc: Exception) -> bool:
+        message = str(exc).lower()
+        if "playwright sync api inside the asyncio loop" in message:
+            return True
+        if "please use the async api instead" in message:
+            return True
+        try:
+            asyncio.get_running_loop()
+            return "playwright sync api" in message
+        except RuntimeError:
+            return False

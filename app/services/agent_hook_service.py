@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Optional
 
 
+from app.services.json_safe import json_safe
+
+
 @dataclass(frozen=True)
 class HookEvent:
     event_type: str
@@ -53,7 +56,7 @@ class AgentHookService:
             "agent_id": event.agent_id,
             "state": event.state,
             "message": event.message,
-            "extra": event.extra or {},
+            "extra": json_safe(event.extra or {}),
         }
         self._run_local_scripts(event.event_type, body)
         if self.webhook_url:

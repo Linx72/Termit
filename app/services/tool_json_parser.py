@@ -6,6 +6,9 @@ import re
 from typing import Optional
 
 
+from app.services.json_safe import json_safe
+
+
 class ToolJsonParseError(Exception):
     pass
 
@@ -82,7 +85,9 @@ def _normalize_action_payload(payload: dict[str, object]) -> dict[str, object]:
     if action == "tool" and "arguments" not in normalized and "args" in normalized:
         arguments = normalized["args"]
         if isinstance(arguments, dict):
-            normalized["arguments"] = arguments
+            normalized["arguments"] = json_safe(arguments)
+    if "arguments" in normalized and isinstance(normalized["arguments"], dict):
+        normalized["arguments"] = json_safe(normalized["arguments"])
     return normalized
 
 
@@ -139,7 +144,7 @@ def extract_json_objects(text: str) -> list[dict[str, object]]:
         payload = _loads_json_object(candidate)
         if payload is None:
             continue
-        fingerprint = json.dumps(payload, sort_keys=True, ensure_ascii=True)
+        fingerprint = json.dumps(json_safe(payload), sort_keys=True, ensure_ascii=True)
         if fingerprint in seen:
             continue
         seen.add(fingerprint)
@@ -168,7 +173,7 @@ def parse_loop_action(text: str) -> dict[str, object]:
             arguments = payload.get("arguments", {})
             if not isinstance(arguments, dict):
                 raise ToolJsonParseError("Tool action 'arguments' must be a JSON object.")
-            return {"action": "tool", "tool": tool, "arguments": arguments}
+            return {"action": "tool", "tool": tool, "arguments": json_safe(arguments)}
 
     for payload in reversed(objects):
         action = str(payload.get("action", "final")).lower()

@@ -209,6 +209,138 @@ class AgentLoopIntegrationTests(unittest.TestCase):
             self.assertEqual(result.response, "done")
             self.assertEqual(target.read_text(encoding="utf-8"), "value=2")
 
+    def test_single_instruction_file_create_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "tmp" / "from_instruction.txt"
+            chat = LoopChatStub([json.dumps({"action": "final", "answer": "done"})])
+            service = AgentService(
+                chat_service=chat,
+                registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                agent_loop_service=AgentLoopService(),
+                max_concurrency=1,
+            )
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Instruction File Agent",
+                    description="single instruction fallback",
+                    system_prompt="Follow instruction exactly.",
+                    task_type=TaskType.coding,
+                    enabled_tools=["apply_patch"],
+                    use_tool_loop=True,
+                )
+            )
+            result = asyncio.run(
+                service.run_agent(
+                    agent.agent_id,
+                    AgentRunRequest(
+                        input="Create file tmp/from_instruction.txt with exact text fallback-ok and finish."
+                    ),
+                )
+            )
+            self.assertEqual(result.response, "done")
+            self.assertTrue(target.is_file())
+            self.assertEqual(target.read_text(encoding="utf-8").strip(), "fallback-ok")
+
+    def test_verify_not_invoked_without_mutating_tools(self) -> None:
+        chat = LoopChatStub([json.dumps({"action": "final", "answer": "only final"})])
+        profile = AgentProfileCreateRequest(
+            name="Verify Skip Agent",
+            description="verify skip for non-mutation",
+            system_prompt="Answer directly.",
+            task_type=TaskType.general,
+            enabled_tools=["read_file"],
+            use_tool_loop=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            service = AgentService(
+                chat_service=chat,
+                registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                agent_loop_service=AgentLoopService(),
+                verify_after_patch=True,
+                verify_cmd="python3 -m unittest discover -s tests -q",
+                max_concurrency=1,
+            )
+            created = service.create_agent(profile)
+            result = asyncio.run(
+                service.run_agent(created.agent_id, AgentRunRequest(input="проверка работы"))
+            )
+            self.assertEqual(result.response, "only final")
+
+    def test_final_not_blocked_for_non_file_instruction(self) -> None:
+        chat = LoopChatStub([json.dumps({"action": "final", "answer": "ok"})])
+        profile = AgentProfileCreateRequest(
+            name="No File Write Agent",
+            description="do not require apply_patch for non file tasks",
+            system_prompt="Answer directly.",
+            task_type=TaskType.general,
+            enabled_tools=["apply_patch", "list_files", "read_file"],
+            use_tool_loop=True,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            service = AgentService(
+                chat_service=chat,
+                registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                agent_loop_service=AgentLoopService(),
+                max_concurrency=1,
+            )
+            created = service.create_agent(profile)
+            result = asyncio.run(
+                service.run_agent(
+                    created.agent_id,
+                    AgentRunRequest(
+                        input="Сделай 2 шага: 1) list_files в path app pattern *.py 2) кратко опиши, что ты сделал."
+                    ),
+                )
+            )
+            self.assertEqual(result.response, "ok")
+
+    def test_build_wrapper_uses_user_task_for_file_write_detection(self) -> None:
+        chat = LoopChatStub([json.dumps({"action": "final", "answer": "ok"})])
+        profile = AgentProfileCreateRequest(
+            name="Build Wrapped Agent",
+            description="build prompt wrapper shouldn't force apply_patch",
+            system_prompt="Answer directly.",
+            task_type=TaskType.general,
+            enabled_tools=["apply_patch", "list_files", "read_file"],
+            use_tool_loop=True,
+        )
+        wrapped_input = (
+            "Ты Termit Builder в режиме Cursor-like one-window.\n"
+            "## Фаза 1 — PLAN (без apply_patch)\n"
+            "## Фаза 3 — SCAFFOLD\n"
+            "## Фаза 4 — IMPLEMENT\n"
+            "---\n"
+            "Задача пользователя:\n"
+            "Сделай обзор repo и опиши, что можно улучшить."
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            service = AgentService(
+                chat_service=chat,
+                registry=AgentRegistryStore(file_path=str(Path(tmp) / "agents.json")),
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                agent_loop_service=AgentLoopService(),
+                max_concurrency=1,
+            )
+            created = service.create_agent(profile)
+            result = asyncio.run(
+                service.run_agent(
+                    created.agent_id,
+                    AgentRunRequest(input=wrapped_input),
+                )
+            )
+            self.assertEqual(result.response, "ok")
+
 
 if __name__ == "__main__":
     unittest.main()

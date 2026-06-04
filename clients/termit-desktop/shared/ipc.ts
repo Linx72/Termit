@@ -21,14 +21,9 @@ export interface DocOpenResult {
 }
 
 export interface TermitDesktopApi {
-  pickWorkspace(): Promise<string | null>;
-  pickWorkspaceFile(workspace: string): Promise<string | null>;
-  pickRepoRoot(): Promise<string | null>;
   getLauncherConfig(): Promise<LauncherConfig>;
   setLauncherConfig(config: LauncherConfig): Promise<void>;
   ensureServer(baseUrl: string): Promise<ServerEnsureResult>;
-  restartServer(): Promise<ServerEnsureResult>;
-  openLogs(): Promise<{ ok: boolean; path: string }>;
   showNotification(payload: DesktopNotificationPayload): void;
   getDocFileUrl(docId: DocId): Promise<string>;
   getDocPath(docId: DocId): Promise<string>;

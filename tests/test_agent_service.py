@@ -49,6 +49,18 @@ class StubChatService:
         )
 
 
+class SlowChatService(StubChatService):
+    async def chat(self, payload):  # type: ignore[no-untyped-def]
+        await asyncio.sleep(0.2)
+        return await super().chat(payload)
+
+
+class HangingChatService(StubChatService):
+    async def chat(self, payload):  # type: ignore[no-untyped-def]
+        await asyncio.sleep(15)
+        return await super().chat(payload)
+
+
 class StubBrowserWorkflow:
     def run(self, payload):  # type: ignore[no-untyped-def]
         return WebAutomationResponse(
@@ -85,6 +97,7 @@ class AgentServiceTests(unittest.TestCase):
             max_queue_size=kwargs.get("max_queue_size", 10),
             run_max_attempts=kwargs.get("run_max_attempts", 3),
             run_retry_backoff_ms=kwargs.get("run_retry_backoff_ms", 1),
+            run_timeout_seconds=kwargs.get("run_timeout_seconds", 180),
             max_events_per_run=kwargs.get("max_events_per_run", 500),
             max_response_chars=kwargs.get("max_response_chars", 12000),
             retention_days=kwargs.get("retention_days", 14),
@@ -146,6 +159,59 @@ class AgentServiceTests(unittest.TestCase):
                 asyncio.run(asyncio.sleep(0.02))
 
             self.assertEqual(final_state, "completed")
+
+    def test_background_run_timeout_transitions_to_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(
+                tmp,
+                chat=HangingChatService(),
+                run_max_attempts=1,
+                run_retry_backoff_ms=1,
+                run_timeout_seconds=10,
+            )
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Timeout Agent",
+                    description="timeout behavior",
+                    system_prompt="This should timeout.",
+                    task_type=TaskType.general,
+                )
+            )
+            queued = service.create_run(agent.agent_id, AgentRunRequest(input="hang"))
+            final = None
+            for _ in range(520):
+                record = service.get_run(queued.run_id)
+                if record.state in {AgentRunState.completed, AgentRunState.failed, AgentRunState.cancelled}:
+                    final = record
+                    break
+                asyncio.run(asyncio.sleep(0.05))
+            self.assertIsNotNone(final)
+            assert final is not None
+            self.assertEqual(final.state, AgentRunState.failed)
+            self.assertEqual(final.failure_class, "run_timeout")
+            self.assertIn("Run exceeded timeout", final.error or "")
+
+    def test_cancel_running_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(tmp, chat=SlowChatService())
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Cancelable Agent",
+                    description="Background runner",
+                    system_prompt="Process task in background.",
+                    task_type=TaskType.general,
+                    enabled_tools=["list_files"],
+                )
+            )
+            queued = service.create_run(agent.agent_id, AgentRunRequest(input="Do queue work"))
+            for _ in range(50):
+                record = service.get_run(queued.run_id)
+                if record.state == AgentRunState.running:
+                    break
+                asyncio.run(asyncio.sleep(0.01))
+            cancelled = service.cancel_run(queued.run_id)
+            self.assertTrue(cancelled.cancelled, msg=f"state={cancelled.state}")
+            self.assertEqual(cancelled.state, AgentRunState.cancelled)
 
     def test_tool_permissions_block_not_enabled_tool(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -251,6 +317,30 @@ class AgentServiceTests(unittest.TestCase):
             self.assertEqual(applied["deleted_runs"], 1)
             with self.assertRaises(AgentRunNotFoundError):
                 service.get_run(queued.run_id)
+
+    def test_cleanup_stale_active_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(tmp)
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Stale Agent",
+                    description="stale run cleanup",
+                    system_prompt="Do work.",
+                    task_type=TaskType.general,
+                )
+            )
+            queued = service.create_run(agent.agent_id, AgentRunRequest(input="stale"))
+            run = service.get_run(queued.run_id)
+            run.state = AgentRunState.running
+            run.updated_at = "2000-01-01T00:00:00+00:00"
+            service._run_store.put_run(run)  # type: ignore[attr-defined]
+            result = service.cleanup_stale_active_runs(
+                stale_before_iso="2000-01-02T00:00:00+00:00",
+                dry_run=False,
+            )
+            self.assertEqual(result["cancelled_runs"], 1)
+            updated = service.get_run(queued.run_id)
+            self.assertEqual(updated.state, AgentRunState.cancelled)
 
     def test_event_history_trimmed_to_limit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

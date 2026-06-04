@@ -10,6 +10,7 @@ import {
 } from "@termit/client";
 import { languageFromPath } from "./editorUtils";
 import { FileTreePanel } from "./FileTreePanel";
+import { WorkspaceFilePickerModal } from "./WorkspaceFilePickerModal";
 
 interface EditorPanelProps {
   client: TermitClient;
@@ -47,6 +48,7 @@ export function EditorPanel({
   const [previewOld, setPreviewOld] = useState("");
   const [previewNew, setPreviewNew] = useState("");
   const [patchDetail, setPatchDetail] = useState("");
+  const [showFilePicker, setShowFilePicker] = useState(false);
 
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const suppressDirtyRef = useRef(false);
@@ -76,11 +78,7 @@ export function EditorPanel({
       setStatus("Choose a workspace folder first.");
       return;
     }
-    const relativePath = await window.termitDesktop.pickWorkspaceFile(workspace);
-    if (!relativePath) {
-      return;
-    }
-    await openFileAtPath(relativePath);
+    setShowFilePicker(true);
   }, [workspace, openFileAtPath]);
 
   useEffect(() => {
@@ -495,6 +493,14 @@ export function EditorPanel({
           </div>
         </div>
       )}
+      <WorkspaceFilePickerModal
+        client={client}
+        connected={connected}
+        open={showFilePicker}
+        title="Select workspace file"
+        onClose={() => setShowFilePicker(false)}
+        onSelect={(path) => void openFileAtPath(path)}
+      />
       </div>
     </div>
   );

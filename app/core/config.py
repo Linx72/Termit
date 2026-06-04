@@ -112,6 +112,7 @@ class Settings:
     agent_max_queue_size: int = 100
     agent_run_max_attempts: int = 2
     agent_run_retry_backoff_ms: int = 250
+    agent_run_timeout_seconds: int = 180
     agent_run_max_events_per_run: int = 500
     agent_run_max_response_chars: int = 12000
     agent_run_retention_days: int = 14
@@ -129,6 +130,7 @@ class Settings:
     agent_maintenance_enabled: bool = True
     agent_cleanup_interval_seconds: int = 3600
     agent_metrics_snapshot_interval_seconds: int = 900
+    agent_stale_run_timeout_seconds: int = 7200
     response_cache_backend: str = "memory"
     response_cache_sqlite_path: str = "./termit_response_cache.db"
     response_cache_ttl_seconds: int = 120
@@ -318,6 +320,7 @@ def get_settings() -> Settings:
         agent_max_queue_size=int(os.getenv("TERMIT_AGENT_MAX_QUEUE_SIZE", "100")),
         agent_run_max_attempts=int(os.getenv("TERMIT_AGENT_RUN_MAX_ATTEMPTS", "2")),
         agent_run_retry_backoff_ms=int(os.getenv("TERMIT_AGENT_RUN_RETRY_BACKOFF_MS", "250")),
+        agent_run_timeout_seconds=max(10, int(os.getenv("TERMIT_AGENT_RUN_TIMEOUT_SECONDS", "180"))),
         agent_run_max_events_per_run=int(os.getenv("TERMIT_AGENT_RUN_MAX_EVENTS_PER_RUN", "500")),
         agent_run_max_response_chars=int(os.getenv("TERMIT_AGENT_RUN_MAX_RESPONSE_CHARS", "12000")),
         agent_run_retention_days=int(os.getenv("TERMIT_AGENT_RUN_RETENTION_DAYS", "14")),
@@ -351,6 +354,9 @@ def get_settings() -> Settings:
         agent_cleanup_interval_seconds=int(os.getenv("TERMIT_AGENT_CLEANUP_INTERVAL_SECONDS", "3600")),
         agent_metrics_snapshot_interval_seconds=int(
             os.getenv("TERMIT_AGENT_METRICS_SNAPSHOT_INTERVAL_SECONDS", "900")
+        ),
+        agent_stale_run_timeout_seconds=int(
+            os.getenv("TERMIT_AGENT_STALE_RUN_TIMEOUT_SECONDS", "7200")
         ),
         response_cache_backend=os.getenv("TERMIT_RESPONSE_CACHE_BACKEND", "memory"),
         response_cache_sqlite_path=os.getenv(

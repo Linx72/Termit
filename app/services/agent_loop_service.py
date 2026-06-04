@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
@@ -16,29 +17,140 @@ from app.domain.schemas import (
     ReadFileRequest,
     WebAutomationRequest,
 )
+from app.services.json_safe import json_safe
 from app.services.loop_step_budget import should_escalate_model
 from app.services.tool_json_parser import ToolJsonParseError, parse_loop_action
 
-LOOP_SYSTEM_APPENDIX = """
-You may use tools to complete the task. Respond with a single JSON object only (no markdown unless inside strings).
+_LOOP_TOOL_EXAMPLES: dict[str, str] = {
+    "list_files": '{"action":"tool","tool":"list_files","arguments":{"path":".","pattern":"*.py"}}',
+    "read_file": '{"action":"tool","tool":"read_file","arguments":{"path":"app","file":"main.py"}}',
+    "execute_command": (
+        '{"action":"tool","tool":"execute_command","arguments":{"command":"python3 -m unittest -q",'
+        '"path":".","confirmed":true}}'
+    ),
+    "apply_patch": (
+        '{"action":"tool","tool":"apply_patch","arguments":{"path":"app/main.py",'
+        '"hunks":[{"old_text":"old","new_text":"new"}],"confirmed":true}}'
+    ),
+    "web_automation": (
+        '{"action":"tool","tool":"web_automation","arguments":{"url":"https://example.com",'
+        '"objective":"Collect page evidence"}}'
+    ),
+}
 
-Tool call:
-{"action":"tool","tool":"list_files|read_file|execute_command|apply_patch|web_automation","arguments":{...}}
+_LOOP_TOOL_NOTES: dict[str, str] = {
+    "apply_patch": (
+        "apply_patch arguments: path, content OR hunks[{old_text,new_text}], create, dry_run, confirmed."
+    ),
+    "execute_command": "For execute_command use confirmed=true when applying real changes.",
+}
 
-Final answer:
-{"action":"final","answer":"..."}
 
-Examples (follow this shape exactly):
-{"action":"tool","tool":"list_files","arguments":{"path":".","pattern":"*.py"}}
-{"action":"tool","tool":"read_file","arguments":{"path":"app/main.py"}}
-{"action":"tool","tool":"apply_patch","arguments":{"path":"app/main.py","hunks":[{"old_text":"old","new_text":"new"}],"confirmed":true}}
-{"action":"final","answer":"Fixed the handler; tests should pass."}
+def _extract_direct_file_create_args(user_input: str) -> dict[str, object] | None:
+    text = user_input.strip()
+    if not text:
+        return None
+    # Strict fallback for one-shot instructions like:
+    # "Create file tmp/a.txt with exact text hello and finish."
+    patterns = [
+        re.compile(
+            r"create\s+file\s+(?P<path>[^\s]+)\s+with\s+exact\s+text\s*[:\-]?\s*\"(?P<content>.*?)\"(?:\s+and\s+finish\.?)?$",
+            re.IGNORECASE | re.DOTALL,
+        ),
+        re.compile(
+            r"create\s+file\s+(?P<path>[^\s]+)\s+with\s+exact\s+text\s*[:\-]?\s*(?P<content>.+?)(?:\s+and\s+finish\.?)?$",
+            re.IGNORECASE | re.DOTALL,
+        ),
+    ]
+    for pattern in patterns:
+        match = pattern.search(text)
+        if not match:
+            continue
+        path = match.group("path").strip()
+        content = match.group("content").strip()
+        if not path or not content:
+            continue
+        return {
+            "path": path,
+            "content": content + ("\n" if not content.endswith("\n") else ""),
+            "create": True,
+            "dry_run": False,
+            "confirmed": True,
+        }
+    return None
 
-apply_patch arguments: path, content OR hunks[{old_text,new_text}], create, dry_run, confirmed.
-For execute_command and apply_patch use confirmed=true when applying real changes.
-Allowed tools depend on agent configuration.
-If verify tests fail after a patch, fix the code and retry apply_patch.
-"""
+
+def _extract_user_instruction_for_file_write_detection(text: str) -> str:
+    """Use original user instruction when build-enriched wrappers are present."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    markers = [
+        "задача пользователя:",
+        "user task:",
+    ]
+    lowered = raw.lower()
+    for marker in markers:
+        idx = lowered.rfind(marker)
+        if idx >= 0:
+            sliced = raw[idx + len(marker) :].strip()
+            if sliced:
+                return sliced
+    return raw
+
+
+def build_loop_system_appendix(enabled_tools: list[str]) -> str:
+    """Build JSON tool-loop instructions scoped to the agent allowlist."""
+    allowed = sorted({name.strip() for name in enabled_tools if name and name.strip()})
+    if not allowed:
+        return (
+            "\n\nYou have no tools enabled for this run. Respond with a single JSON object only:\n"
+            '{"action":"final","answer":"..."}\n'
+        )
+
+    tool_union = "|".join(allowed)
+    examples = [_LOOP_TOOL_EXAMPLES[name] for name in allowed if name in _LOOP_TOOL_EXAMPLES]
+    notes = [_LOOP_TOOL_NOTES[name] for name in allowed if name in _LOOP_TOOL_NOTES]
+    examples_block = "\n".join(examples) if examples else ""
+    notes_block = "\n".join(notes)
+    verify_note = (
+        "If verify tests fail after a patch, fix the code and retry apply_patch."
+        if "apply_patch" in allowed
+        else ""
+    )
+    apply_patch_requirement = (
+        "If the user asks to create, edit, or delete files, you MUST call apply_patch first and only then return final."
+        if "apply_patch" in allowed
+        else ""
+    )
+    parts = [
+        "\n\nYou may use tools to complete the task. Respond with a single JSON object only "
+        "(no markdown unless inside strings).",
+        "",
+        "Allowed tools for this agent (use only these names):",
+        tool_union,
+        "",
+        "Tool call:",
+        '{"action":"tool","tool":"<one of allowed names>","arguments":{...}}',
+        "",
+        "Final answer:",
+        '{"action":"final","answer":"..."}',
+    ]
+    if examples_block:
+        parts.extend(["", "Examples (follow this shape exactly):", examples_block])
+    if notes_block:
+        parts.extend(["", notes_block])
+    if verify_note:
+        parts.extend(["", verify_note])
+    if apply_patch_requirement:
+        parts.extend(["", apply_patch_requirement])
+    return "\n".join(parts)
+
+
+# Backward-compatible alias for tuning docs and older references.
+LOOP_SYSTEM_APPENDIX = build_loop_system_appendix(
+    ["list_files", "read_file", "execute_command", "apply_patch"]
+)
 
 
 @dataclass(frozen=True)
@@ -70,7 +182,11 @@ class AgentAwaitingConfirmation(AgentLoopError):
 
 
 def _tool_fingerprint(tool_name: str, arguments: dict[str, object]) -> str:
-    return json.dumps({"tool": tool_name, "arguments": arguments}, sort_keys=True, ensure_ascii=True)
+    return json.dumps(
+        {"tool": tool_name, "arguments": json_safe(arguments)},
+        sort_keys=True,
+        ensure_ascii=True,
+    )
 
 
 def _observation_flags(observation: str) -> dict[str, object]:
@@ -124,13 +240,14 @@ class AgentLoopService:
         if memory_context:
             memory_block = "\n\nLong-term agent memory:\n" + "\n".join(f"- {line}" for line in memory_context)
 
+        loop_appendix = build_loop_system_appendix(list(profile.enabled_tools or []))
         if resume_checkpoint:
             history = _deserialize_history(list(resume_checkpoint.get("history", [])))
             if not history:
                 history = [
                     ChatMessage(
                         role="system",
-                        content=profile.system_prompt + LOOP_SYSTEM_APPENDIX + memory_block,
+                        content=profile.system_prompt + loop_appendix + memory_block,
                     ),
                     ChatMessage(role="user", content=payload.input),
                 ]
@@ -138,7 +255,7 @@ class AgentLoopService:
             history = [
                 ChatMessage(
                     role="system",
-                    content=profile.system_prompt + LOOP_SYSTEM_APPENDIX + memory_block,
+                    content=profile.system_prompt + loop_appendix + memory_block,
                 ),
                 ChatMessage(role="user", content=payload.input),
             ]
@@ -148,6 +265,16 @@ class AgentLoopService:
         last_model = profile.model or "default"
         attempted: list[str] = []
         seen_tools: set[str] = set()
+        used_tool_names: set[str] = set()
+        used_mutating_tool = False
+        file_write_source = _extract_user_instruction_for_file_write_detection(payload.input.lower())
+        needs_file_write = bool(
+            re.search(
+                r"\b(create|write|edit|modify|update|delete)\b.{0,30}\b(file|files)\b",
+                file_write_source,
+            )
+            or re.search(r"\bapply[_ -]?patch\b", file_write_source)
+        )
         start_step = 1
         parse_errors = 0
         verify_failures = 0
@@ -175,8 +302,114 @@ class AgentLoopService:
                     active_model = candidate
                     break
 
-        async def _finalize(step: int, answer: str) -> AgentLoopResult:
-            if verify_fn is not None:
+        async def _finalize(step: int, answer: str) -> AgentLoopResult | None:
+            if needs_file_write and "apply_patch" in set(profile.enabled_tools or []) and "apply_patch" not in used_tool_names:
+                direct_args = _extract_direct_file_create_args(payload.input)
+                if direct_args is not None:
+                    observation = tool_fn("apply_patch", direct_args)
+                    used_tool_names.add("apply_patch")
+                    tool_step = LoopStepResult(
+                        step=step,
+                        action="tool",
+                        tool="apply_patch",
+                        observation=observation[:4000],
+                    )
+                    steps.append(tool_step)
+                    if on_step:
+                        on_step(tool_step)
+                    history.append(
+                        ChatMessage(
+                            role="assistant",
+                            content=json.dumps(
+                                {
+                                    "action": "tool",
+                                    "tool": "apply_patch",
+                                    "arguments": json_safe(direct_args),
+                                },
+                                ensure_ascii=True,
+                            ),
+                        )
+                    )
+                    if isinstance(observation, str):
+                        lowered_observation = observation.lower()
+                        if '"applied": true' in lowered_observation or '"executed": true' in lowered_observation:
+                            # We have already enforced file write via fallback apply_patch.
+                            # Allow finalization in this same step to avoid exhausting loop budget.
+                            pass
+                        else:
+                            observation = (
+                                "Final blocked: user requested file changes, but apply_patch was not used."
+                            )
+                            step_result = LoopStepResult(
+                                step=step,
+                                action="final_blocked_missing_apply_patch",
+                                tool=None,
+                                observation=observation,
+                            )
+                            steps.append(step_result)
+                            if on_step:
+                                on_step(step_result)
+                            history.append(ChatMessage(role="assistant", content=answer))
+                            history.append(
+                                ChatMessage(
+                                    role="user",
+                                    content=(
+                                        "You must call apply_patch to perform the requested file change before final. "
+                                        "Respond with next JSON tool action."
+                                    ),
+                                )
+                            )
+                            return None
+                    else:
+                        observation = (
+                            "Final blocked: user requested file changes, but apply_patch was not used."
+                        )
+                        step_result = LoopStepResult(
+                            step=step,
+                            action="final_blocked_missing_apply_patch",
+                            tool=None,
+                            observation=observation,
+                        )
+                        steps.append(step_result)
+                        if on_step:
+                            on_step(step_result)
+                        history.append(ChatMessage(role="assistant", content=answer))
+                        history.append(
+                            ChatMessage(
+                                role="user",
+                                content=(
+                                    "You must call apply_patch to perform the requested file change before final. "
+                                    "Respond with next JSON tool action."
+                                ),
+                            )
+                        )
+                        return None
+                else:
+                    observation = (
+                        "Final blocked: user requested file changes, but apply_patch was not used."
+                    )
+                    step_result = LoopStepResult(
+                        step=step,
+                        action="final_blocked_missing_apply_patch",
+                        tool=None,
+                        observation=observation,
+                    )
+                    steps.append(step_result)
+                    if on_step:
+                        on_step(step_result)
+                    history.append(ChatMessage(role="assistant", content=answer))
+                    history.append(
+                        ChatMessage(
+                            role="user",
+                            content=(
+                                "You must call apply_patch to perform the requested file change before final. "
+                                "Respond with next JSON tool action."
+                            ),
+                        )
+                    )
+                    return None
+            can_verify = used_mutating_tool and "execute_command" in set(profile.enabled_tools or [])
+            if verify_fn is not None and can_verify:
                 ok, detail = verify_fn()
                 step_result = LoopStepResult(
                     step=step,
@@ -215,7 +448,7 @@ class AgentLoopService:
             )
 
         async def _handle_tool(step: int, tool_name: str, arguments: dict[str, object], assistant_text: str) -> None:
-            nonlocal verify_failures
+            nonlocal verify_failures, used_mutating_tool
             fingerprint = _tool_fingerprint(tool_name, arguments)
             if fingerprint in seen_tools:
                 nonlocal repeat_blocks
@@ -240,6 +473,9 @@ class AgentLoopService:
                 )
                 return
             seen_tools.add(fingerprint)
+            used_tool_names.add(tool_name)
+            if tool_name in {"apply_patch", "execute_command", "browser_click"}:
+                used_mutating_tool = True
             try:
                 observation = tool_fn(tool_name, arguments)
             except Exception as exc:  # noqa: BLE001
@@ -251,7 +487,7 @@ class AgentLoopService:
                     {
                         "history": _serialize_history(history),
                         "pending_tool": tool_name,
-                        "pending_arguments": arguments,
+                        "pending_arguments": json_safe(arguments),
                         "step": step,
                         "active_model": active_model,
                     }
@@ -290,7 +526,7 @@ class AgentLoopService:
                     {
                         "history": _serialize_history(history),
                         "pending_tool": pending_tool,
-                        "pending_arguments": pending_args,
+                        "pending_arguments": json_safe(pending_args),
                         "step": start_step,
                     }
                 )
@@ -307,7 +543,11 @@ class AgentLoopService:
                 ChatMessage(
                     role="assistant",
                     content=json.dumps(
-                        {"action": "tool", "tool": pending_tool, "arguments": pending_args},
+                        {
+                            "action": "tool",
+                            "tool": pending_tool,
+                            "arguments": json_safe(pending_args),
+                        },
                         ensure_ascii=True,
                     ),
                 )
@@ -358,14 +598,17 @@ class AgentLoopService:
                         {
                             "action": "tool",
                             "tool": tool_call.name,
-                            "arguments": tool_call.arguments,
+                            "arguments": json_safe(tool_call.arguments),
                         },
                         ensure_ascii=True,
                     )
                     await _handle_tool(step, tool_call.name, tool_call.arguments, assistant_text)
                     continue
                 if native_result.content.strip():
-                    return await _finalize(step, native_result.content.strip())
+                    finalized = await _finalize(step, native_result.content.strip())
+                    if finalized is not None:
+                        return finalized
+                    continue
 
             chat_result = await chat_fn(chat_request)
             last_provider = chat_result.provider
@@ -396,7 +639,10 @@ class AgentLoopService:
                 continue
             if action.get("action") == "final":
                 answer = str(action.get("answer", chat_result.response))
-                return await _finalize(step, answer)
+                finalized = await _finalize(step, answer)
+                if finalized is not None:
+                    return finalized
+                continue
 
             tool_name = str(action.get("tool", "")).strip()
             arguments = action.get("arguments", {})

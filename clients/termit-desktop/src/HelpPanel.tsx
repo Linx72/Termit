@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { t, type Locale } from "./i18n";
+import { desktopRuntime } from "./desktopRuntime";
 
 export type DocId = "help" | "training";
 
@@ -18,8 +19,8 @@ export function HelpPanel({ locale }: HelpPanelProps) {
     setActiveDoc(docId);
     try {
       const [url, path] = await Promise.all([
-        window.termitDesktop.getDocFileUrl(docId),
-        window.termitDesktop.getDocPath(docId),
+        desktopRuntime.getDocFileUrl(docId),
+        desktopRuntime.getDocPath(docId),
       ]);
       setFileUrl(url);
       setFilePath(path);
@@ -35,7 +36,7 @@ export function HelpPanel({ locale }: HelpPanelProps) {
   }, [loadDoc]);
 
   const openExternal = async (docId: DocId) => {
-    const result = await window.termitDesktop.openDocExternal(docId);
+    const result = await desktopRuntime.openDocExternal(docId);
     setStatus(result.ok ? t(locale, "docOpenedExternal") : result.message);
   };
 

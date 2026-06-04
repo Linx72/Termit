@@ -19,6 +19,7 @@ class AgentMaintenanceSchedulerService:
         enabled: bool = True,
         cleanup_interval_seconds: int = 3600,
         metrics_snapshot_interval_seconds: int = 900,
+        stale_run_timeout_seconds: int = 7200,
     ) -> None:
         self._agent_service = agent_service
         self._telemetry_store = telemetry_store
@@ -26,6 +27,7 @@ class AgentMaintenanceSchedulerService:
         self._enabled = enabled
         self._cleanup_interval_seconds = max(30, cleanup_interval_seconds)
         self._metrics_snapshot_interval_seconds = max(30, metrics_snapshot_interval_seconds)
+        self._stale_run_timeout_seconds = max(60, stale_run_timeout_seconds)
         self._stop = Event()
         self._lock = Lock()
         self._thread: Optional[Thread] = None
@@ -35,6 +37,7 @@ class AgentMaintenanceSchedulerService:
         self._cleanup_events_deleted_total = 0
         self._cleanup_errors_total = 0
         self._snapshot_errors_total = 0
+        self._stale_cancelled_total = 0
 
     def set_enabled(self, enabled: bool) -> None:
         self._enabled = enabled
@@ -65,21 +68,32 @@ class AgentMaintenanceSchedulerService:
                 "thread_alive": self._thread is not None and self._thread.is_alive(),
                 "cleanup_interval_seconds": self._cleanup_interval_seconds,
                 "metrics_snapshot_interval_seconds": self._metrics_snapshot_interval_seconds,
+                "stale_run_timeout_seconds": self._stale_run_timeout_seconds,
                 "last_cleanup_at": self._last_cleanup_at,
                 "last_metrics_snapshot_at": self._last_metrics_snapshot_at,
                 "cleanup_runs_deleted_total": self._cleanup_runs_deleted_total,
                 "cleanup_events_deleted_total": self._cleanup_events_deleted_total,
+                "stale_cancelled_total": self._stale_cancelled_total,
                 "cleanup_errors_total": self._cleanup_errors_total,
                 "snapshot_errors_total": self._snapshot_errors_total,
             }
 
     def run_cleanup_once(self, *, dry_run: bool = False) -> dict[str, object]:
+        stale_before = datetime.now(timezone.utc).timestamp() - float(self._stale_run_timeout_seconds)
+        stale_before_iso = datetime.fromtimestamp(stale_before, timezone.utc).isoformat()
+        stale_result = self._agent_service.cleanup_stale_active_runs(
+            stale_before_iso=stale_before_iso,
+            dry_run=dry_run,
+        )
         result = self._agent_service.cleanup_runs(dry_run=dry_run)
+        result["stale_before"] = stale_before_iso
+        result["cancelled_stale_runs"] = int(stale_result.get("cancelled_runs", 0))
         if not dry_run:
             with self._lock:
                 self._last_cleanup_at = datetime.now(timezone.utc).isoformat()
                 self._cleanup_runs_deleted_total += int(result.get("deleted_runs", 0))
                 self._cleanup_events_deleted_total += int(result.get("deleted_events", 0))
+                self._stale_cancelled_total += int(result.get("cancelled_stale_runs", 0))
         return result
 
     def run_metrics_snapshot_once(self) -> dict[str, object]:
