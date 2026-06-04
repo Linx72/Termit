@@ -30,10 +30,12 @@ class OpsService:
         self.quota_store = quota_store
         self.tooling = tooling or ToolingService(root_path=".")
 
-    async def readiness(self, providers_status_cb=None) -> OpsReadinessResponse:
+    async def readiness(self, providers_status_cb=None, agent_metrics_cb=None) -> OpsReadinessResponse:
         checks = self._base_checks()
         if providers_status_cb is not None:
             checks.append(await self._check_providers(providers_status_cb))
+        if agent_metrics_cb is not None:
+            checks.append(self._check_agent_verify_quality(agent_metrics_cb))
         return self._build_response(checks, OpsReadinessResponse)
 
     async def healthz(
@@ -527,6 +529,55 @@ class OpsService:
             passed=True,
             severity="info",
             detail=f"Healthy providers: {names}",
+        )
+
+    def _check_agent_verify_quality(self, agent_metrics_cb) -> OpsCheckResult:
+        try:
+            metrics = agent_metrics_cb()
+        except Exception as exc:  # noqa: BLE001
+            return OpsCheckResult(
+                name="agent_verify_quality",
+                passed=False,
+                severity="warning",
+                detail=f"Agent verify metrics probe failed: {exc}",
+            )
+        if not isinstance(metrics, dict):
+            return OpsCheckResult(
+                name="agent_verify_quality",
+                passed=False,
+                severity="warning",
+                detail="Agent verify metrics payload is invalid.",
+            )
+        verify_passes = int(metrics.get("tool_loop_verify_passes", 0))
+        verify_failures = int(metrics.get("tool_loop_verify_failures", 0))
+        total_verify = verify_passes + verify_failures
+        if total_verify <= 0:
+            return OpsCheckResult(
+                name="agent_verify_quality",
+                passed=True,
+                severity="info",
+                detail="No verify observations yet.",
+            )
+        verify_pass_rate = float(metrics.get("tool_loop_verify_pass_rate", 0.0))
+        threshold = float(self.settings.agent_alert_min_verify_pass_rate)
+        if verify_pass_rate < threshold:
+            return OpsCheckResult(
+                name="agent_verify_quality",
+                passed=False,
+                severity="warning",
+                detail=(
+                    f"Verify pass rate {verify_pass_rate:.2%} below threshold {threshold:.2%} "
+                    f"(passes={verify_passes}, failures={verify_failures})."
+                ),
+            )
+        return OpsCheckResult(
+            name="agent_verify_quality",
+            passed=True,
+            severity="info",
+            detail=(
+                f"Verify pass rate healthy at {verify_pass_rate:.2%} "
+                f"(threshold {threshold:.2%}, total={total_verify})."
+            ),
         )
 
     @staticmethod

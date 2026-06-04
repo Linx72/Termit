@@ -65,9 +65,13 @@ def _agent_runs_metrics_payload(
 @router.get("/readiness", response_model=OpsReadinessResponse)
 async def readiness(
     ops: OpsService = Depends(get_ops_service),
+    service: AgentService = Depends(get_agent_service),
 ) -> OpsReadinessResponse:
     chat = get_chat_service()
-    return await ops.readiness(providers_status_cb=chat.providers_status)
+    return await ops.readiness(
+        providers_status_cb=chat.providers_status,
+        agent_metrics_cb=service.queue_metrics,
+    )
 
 
 @router.post("/incident-drill", response_model=OpsIncidentDrillResponse)
