@@ -361,6 +361,10 @@ class MetricsApiTests(unittest.TestCase):
         self.assertIn("termit_chat_requests_total", resp.text)
         self.assertIn("termit_agent_queue_size", resp.text)
         self.assertIn("termit_tool_loop_runs", resp.text)
+        self.assertIn("termit_tool_loop_verify_passes", resp.text)
+        self.assertIn("termit_tool_loop_verify_failures", resp.text)
+        self.assertIn("termit_tool_loop_verify_retries", resp.text)
+        self.assertIn("termit_tool_loop_verify_pass_rate", resp.text)
 
 
 if __name__ == "__main__":

@@ -505,6 +505,10 @@ class AgentRunsMetricsResponse(BaseModel):
     tool_loop_tool_errors: int = 0
     tool_loop_parse_errors: int = 0
     tool_loop_final_steps: int = 0
+    tool_loop_verify_passes: int = 0
+    tool_loop_verify_failures: int = 0
+    tool_loop_verify_retries: int = 0
+    tool_loop_verify_pass_rate: float = 0.0
     tool_loop_tool_success_rate: float = 0.0
     tool_loop_completion_rate: float = 0.0
     stale_queued_runs: int = 0

@@ -1,13 +1,14 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-04T16:42:00Z
+**Последнее обновление:** 2026-06-04T16:46:32Z
 
 **Причина:** session stop
 
-**Последний checkpoint:** [`20260604-164200_3e90ad38-5f58-4943-84d5-.md`](checkpoints/20260604-164200_3e90ad38-5f58-4943-84d5-.md)
+**Последний checkpoint:** [`20260604-164632_3e90ad38-5f58-4943-84d5-.md`](checkpoints/20260604-164632_3e90ad38-5f58-4943-84d5-.md)
 
 ## Сводка
 - Сделал ещё один полный `do all`-цикл до merge в `main`. Что реализовано: - Добавил **per-run override** лимита verify-retry: - `app/domain/schemas.py`: в `AgentRunRequest` новое поле `verify_max_retries` (`0..5`). - `app/services/agent_service.py`: при запуске loop теперь берётс…
+- Сделал полный `do all` ещё одним завершённым циклом: от фикса до merge в `main`. Что улучшил: - Исправил edge-case в `app/services/agent_loop_service.py`: - `verify_retries_used` теперь восстанавливается из `resume_checkpoint` **для всех resume-путей**, а не только ветки с `pend…
 
 ## Файлы сессии
 - `/Users/amoros/Projects/Termit/app/state.py`
