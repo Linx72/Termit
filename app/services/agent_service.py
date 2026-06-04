@@ -871,6 +871,11 @@ class AgentService:
             if payload.verify_after_patch is not None
             else self._verify_after_patch
         )
+        run_verify_max_retries = (
+            payload.verify_max_retries
+            if payload.verify_max_retries is not None
+            else self._verify_max_retries
+        )
         run_auto_confirm = (
             payload.auto_confirm_risky_tools
             if payload.auto_confirm_risky_tools is not None
@@ -1091,7 +1096,7 @@ class AgentService:
             native_chat_fn=native_chat_fn if tools_schema else None,
             verify_fn=verify_fn if verify_cmd else None,
             escalation_models=escalation_models,
-            max_verify_retries=self._verify_max_retries,
+            max_verify_retries=run_verify_max_retries,
         )
         return AgentRunResponse(
             agent_id=profile.agent_id,

@@ -965,6 +965,7 @@ class AgentRunRequest(BaseModel):
     auto_select_skills: Optional[bool] = None
     auto_confirm_risky_tools: Optional[bool] = None
     verify_after_patch: Optional[bool] = None
+    verify_max_retries: Optional[int] = Field(default=None, ge=0, le=5)
     ssh_host: Optional[str] = Field(default=None, max_length=253)
     ssh_user: Optional[str] = Field(default=None, max_length=64)
     ssh_port: Optional[int] = Field(default=None, ge=1, le=65535)
