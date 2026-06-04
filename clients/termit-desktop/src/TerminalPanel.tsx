@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { TermitClient } from "@termit/client";
 import { t, type Locale } from "./i18n";
 
@@ -6,6 +6,7 @@ interface TerminalPanelProps {
   client: TermitClient;
   connected: boolean;
   locale: Locale;
+  workspace?: string;
   suggestedCommands?: string[];
 }
 
@@ -20,15 +21,42 @@ function entryId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+const DEFAULT_DEV_PREVIEW_URL = "http://127.0.0.1:5173";
+
 export function TerminalPanel({
   client,
   connected,
   locale,
+  workspace = "",
   suggestedCommands = [],
 }: TerminalPanelProps) {
   const [command, setCommand] = useState("");
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<TerminalEntry[]>([]);
+  const [webCommands, setWebCommands] = useState<string[]>([]);
+
+  const loadWorkspaceScripts = useCallback(async () => {
+    if (!connected) {
+      setWebCommands([]);
+      return;
+    }
+    try {
+      const hints = await client.workspaceScripts(workspace || undefined);
+      const cmds = [
+        hints.dev_command,
+        hints.verify_command,
+        hints.scripts?.build ? "npm run build" : "",
+        hints.scripts?.lint ? "npm run lint" : "",
+      ].filter((item): item is string => Boolean(item?.trim()));
+      setWebCommands(cmds);
+    } catch {
+      setWebCommands([]);
+    }
+  }, [client, connected, workspace]);
+
+  useEffect(() => {
+    void loadWorkspaceScripts();
+  }, [loadWorkspaceScripts]);
 
   const runCommand = async (cmd: string) => {
     const trimmed = cmd.trim();
@@ -69,6 +97,7 @@ export function TerminalPanel({
   };
 
   const quickCommands = [
+    ...webCommands,
     ...suggestedCommands,
     "git status",
     "git diff --stat",
@@ -77,7 +106,7 @@ export function TerminalPanel({
 
   return (
     <div className="panel-body terminal-panel">
-      <p className="hint">{t(locale, "terminal")} — output via Termit execute_command (RBAC).</p>
+      <p className="hint">{t(locale, "terminalHintExtended")}</p>
       <div className="row terminal-quick">
         {quickCommands.map((cmd) => (
           <button
@@ -91,6 +120,18 @@ export function TerminalPanel({
           </button>
         ))}
       </div>
+      {webCommands.some((cmd) => cmd.includes("dev")) && (
+        <div className="row">
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => window.open(DEFAULT_DEV_PREVIEW_URL, "_blank", "noopener,noreferrer")}
+          >
+            {t(locale, "devPreviewOpen")} ({DEFAULT_DEV_PREVIEW_URL})
+          </button>
+          <span className="muted">{t(locale, "devPreviewHint")}</span>
+        </div>
+      )}
       <div className="row">
         <input
           className="terminal-input"
@@ -110,7 +151,7 @@ export function TerminalPanel({
       </div>
       <div className="terminal-history">
         {history.length === 0 ? (
-          <div className="muted">No commands yet.</div>
+          <div className="muted">{t(locale, "terminalNoCommands")}</div>
         ) : (
           history.map((entry) => (
             <pre key={entry.id} className="detail-box terminal-entry">

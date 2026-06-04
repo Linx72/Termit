@@ -537,8 +537,9 @@ class FinetuneTrainerService:
         from_ref = base_model.split(":", 1)[-1] if ":" in base_model else base_model
         examples = self._load_examples(dataset_path)
         system_lines = [
-            "You are Termit, a domain-specific coding assistant trained on this repository.",
-            "Follow project conventions, cite file paths, and prefer actionable steps.",
+            "You are the local Termit orchestrator runtime for this repository.",
+            "Follow project rules and conventions; cite file paths; prefer verifiable, actionable steps.",
+            "Do not present yourself as a separate general-purpose AI product.",
         ]
         if examples:
             system_lines.append("")

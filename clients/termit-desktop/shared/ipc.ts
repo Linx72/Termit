@@ -13,6 +13,13 @@ export interface DesktopNotificationPayload {
   body: string;
 }
 
+export type DocId = "help" | "training";
+
+export interface DocOpenResult {
+  ok: boolean;
+  message: string;
+}
+
 export interface TermitDesktopApi {
   pickWorkspace(): Promise<string | null>;
   pickWorkspaceFile(workspace: string): Promise<string | null>;
@@ -23,6 +30,9 @@ export interface TermitDesktopApi {
   restartServer(): Promise<ServerEnsureResult>;
   openLogs(): Promise<{ ok: boolean; path: string }>;
   showNotification(payload: DesktopNotificationPayload): void;
+  getDocFileUrl(docId: DocId): Promise<string>;
+  getDocPath(docId: DocId): Promise<string>;
+  openDocExternal(docId: DocId): Promise<DocOpenResult>;
 }
 
 declare global {

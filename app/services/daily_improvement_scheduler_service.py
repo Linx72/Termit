@@ -27,10 +27,23 @@ class DailyImprovementSchedulerService:
         self._lock = Lock()
         self._stop = Event()
         self._thread: Optional[Thread] = None
+        self._runtime_enabled: Optional[bool] = None
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
 
+    def _is_enabled(self) -> bool:
+        if self._runtime_enabled is not None:
+            return self._runtime_enabled
+        return self._settings.daily_improvement_enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        self._runtime_enabled = enabled
+        if enabled:
+            self.start()
+        else:
+            self.stop()
+
     def start(self) -> None:
-        if not self._settings.daily_improvement_enabled:
+        if not self._is_enabled():
             return
         if self._thread is not None and self._thread.is_alive():
             return
@@ -51,7 +64,7 @@ class DailyImprovementSchedulerService:
     def status(self) -> dict[str, object]:
         last_run = self._read_state()
         return {
-            "enabled": self._settings.daily_improvement_enabled,
+            "enabled": self._is_enabled(),
             "hour_utc": self._settings.daily_improvement_hour,
             "minute_utc": self._settings.daily_improvement_minute,
             "agent_id": self._settings.daily_improvement_agent_id,

@@ -29,10 +29,23 @@ class Stage1SchedulerService:
         self._lock = Lock()
         self._stop = Event()
         self._thread: Optional[Thread] = None
+        self._runtime_enabled: Optional[bool] = None
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
 
+    def _is_enabled(self) -> bool:
+        if self._runtime_enabled is not None:
+            return self._runtime_enabled
+        return self._settings.stage1_schedule_enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        self._runtime_enabled = enabled
+        if enabled:
+            self.start()
+        else:
+            self.stop()
+
     def start(self) -> None:
-        if not self._settings.stage1_schedule_enabled:
+        if not self._is_enabled():
             return
         if self._thread is not None and self._thread.is_alive():
             return
@@ -52,7 +65,7 @@ class Stage1SchedulerService:
     def status(self) -> dict[str, object]:
         last_run = self._read_state()
         return {
-            "enabled": self._settings.stage1_schedule_enabled,
+            "enabled": self._is_enabled(),
             "weekday": self._settings.stage1_schedule_weekday,
             "hour_utc": self._settings.stage1_schedule_hour,
             "minute_utc": self._settings.stage1_schedule_minute,
@@ -148,10 +161,9 @@ class Stage1SchedulerService:
             return queued
 
     def _resolve_base_model(self) -> str:
-        configured = self._settings.stage1_schedule_base_model.strip()
-        if configured:
-            return configured
-        return self._settings.code_model
+        from app.core.model_roles import resolve_stage1_base_model
+
+        return resolve_stage1_base_model(self._settings, "")
 
     @staticmethod
     def _slot_key(moment: datetime) -> str:

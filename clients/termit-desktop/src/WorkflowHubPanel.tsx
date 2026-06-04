@@ -1,21 +1,27 @@
 import type { DesktopJourney } from "@termit/client";
 import { journeyDescription, journeyTitle, type WorkflowTab } from "./northStar";
-import { t, type Locale } from "./i18n";
+import { stepLabel, t, type Locale } from "./i18n";
 
 interface WorkflowHubPanelProps {
   journeys: DesktopJourney[];
   activeJourneyId: string;
   locale: Locale;
+  connected: boolean;
+  autoExecuteWithAgent: boolean;
   onSelectJourney: (journeyId: string) => void;
   onOpenTab: (tab: WorkflowTab) => void;
+  onRunWithAgent: (journey: DesktopJourney) => void;
 }
 
 export function WorkflowHubPanel({
   journeys,
   activeJourneyId,
   locale,
+  connected,
+  autoExecuteWithAgent,
   onSelectJourney,
   onOpenTab,
+  onRunWithAgent,
 }: WorkflowHubPanelProps) {
   const active = journeys.find((item) => item.journey_id === activeJourneyId) ?? journeys[0];
 
@@ -42,9 +48,19 @@ export function WorkflowHubPanel({
           <p className="hint">{journeyDescription(active, locale)}</p>
           <ol className="workflow-steps">
             {active.steps.map((step) => (
-              <li key={step}>{step}</li>
+              <li key={step}>{stepLabel(locale, step)}</li>
             ))}
           </ol>
+          <button
+            type="button"
+            className="primary compact workflow-run-agent"
+            disabled={!connected}
+            title={t(locale, "runJourneyAgentHint")}
+            onClick={() => onRunWithAgent(active)}
+          >
+            {t(locale, "runJourneyAgent")}
+            {autoExecuteWithAgent ? " ⚡" : ""}
+          </button>
         </>
       ) : null}
     </div>

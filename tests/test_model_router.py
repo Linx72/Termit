@@ -16,6 +16,8 @@ def build_settings() -> Settings:
         default_fallback_model="openai_compat:general",
         code_fallback_model="openai_compat:code",
         analysis_fallback_model="openai_compat:analysis",
+        teacher_model="ollama:teacher",
+        teacher_fallback_model="openai_compat:teacher",
         ollama_base_url="http://localhost:11434",
         openai_compat_base_url="http://localhost:8001",
         openai_compat_api_key="",

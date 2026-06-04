@@ -11,6 +11,7 @@
     <script src="/static/charts.js"></script>
     <script src="/static/agent-hub.js"></script>
     <script src="/static/terminal-dock.js"></script>
+    <script src="/static/web-apps-hub.js"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -25,6 +26,7 @@
         <nav class="sidebar-nav">
           <a href="#ops-dashboard-section"><span class="nav-icon">📊</span><span data-i18n="nav.sidebarDashboard">Панель</span></a>
           <a href="#chat-section"><span class="nav-icon">💬</span><span data-i18n="nav.sidebarChat">Чат</span></a>
+          <a href="#web-apps-section"><span class="nav-icon">🌐</span><span data-i18n="nav.sidebarWebApps">Веб и задания</span></a>
           <a href="#task-section"><span class="nav-icon">📋</span><span data-i18n="nav.sidebarTasks">Задачи</span></a>
           <a href="#agent-section" class="is-agents"><span class="nav-icon">🤖</span><span data-i18n="nav.sidebarAgents">Агенты</span></a>
           <a href="#finetune-section"><span class="nav-icon">🧬</span><span data-i18n="nav.sidebarFinetune">Finetune</span></a>
@@ -52,6 +54,7 @@
           <span data-i18n="help.navLabel">Разделы:</span>
           <a href="#ops-dashboard-section" id="nav-dashboard">Панель</a> ·
           <a href="#chat-section" id="nav-chat">Чат</a> ·
+          <a href="#web-apps-section" id="nav-webapps">Веб и задания</a> ·
           <a href="#task-section" id="nav-task">Задачи</a> ·
           <a href="#agent-section" id="nav-agents">Агенты</a> ·
           <a href="#finetune-section" id="nav-finetune">Finetune</a> ·
@@ -111,6 +114,8 @@
         <option value="debug">debug</option>
         <option value="explain">explain</option>
         <option value="general">general</option>
+        <option value="online_research">online_research</option>
+        <option value="online_project">online_project</option>
       </select>
 
       <label for="model" data-i18n="label.model">Model (optional override)</label>
@@ -162,6 +167,32 @@
       <label for="feedbackMessage" data-tip="feedbackMessage" data-i18n="label.feedback">Beta feedback</label>
       <textarea id="feedbackMessage" data-tip="feedbackMessage" rows="3" data-i18n-placeholder="feedbackPlaceholder" placeholder="What should we improve?"></textarea>
       <button id="sendFeedbackBtn" data-tip="sendFeedbackBtn" data-i18n="btn.sendFeedback">Send feedback</button>
+      </section>
+
+      <section class="content-section" id="web-apps-section">
+      <h3 data-i18n="section.webApps">Веб-приложения и задания</h3>
+      <details class="section-help" id="help-webapps" data-i18n-html="webApps"></details>
+      <p class="meta" data-i18n="webAppsHub.intro">Создайте assignment workspace, проверьте npm-скрипты, засейте web/online агентов.</p>
+      <label for="webAppsAssignmentTitle" data-i18n="webAppsHub.assignmentTitle">Название задания</label>
+      <input id="webAppsAssignmentTitle" type="text" placeholder="Landing page MVP" />
+      <label for="webAppsAssignmentBrief" data-i18n="webAppsHub.assignmentBrief">Brief (≥10 символов)</label>
+      <textarea id="webAppsAssignmentBrief" rows="4" placeholder="Цель, стек Vite+React, критерии приёмки..."></textarea>
+      <label for="webAppsSuccessCriteria" data-i18n="webAppsHub.successCriteria">Критерии успеха (по строке)</label>
+      <textarea id="webAppsSuccessCriteria" rows="2" placeholder="npm test passes&#10;preview on :5173"></textarea>
+      <label for="webAppsTargetUrls" data-i18n="webAppsHub.targetUrls">Целевые URL (по строке)</label>
+      <textarea id="webAppsTargetUrls" rows="2" placeholder="https://example.com/docs"></textarea>
+      <div class="row">
+        <button type="button" id="webAppsCreateAssignmentBtn" class="primary" data-i18n="webAppsHub.createAssignment">Создать задание</button>
+        <button type="button" id="webAppsRefreshAssignmentsBtn" class="secondary" data-i18n="webAppsHub.refreshAssignments">Обновить список</button>
+      </div>
+      <div id="webAppsAssignmentList" class="agent-cards-grid" style="margin:12px 0;"></div>
+      <label for="webAppsWorkspace" data-i18n="webAppsHub.workspace">Workspace (optional)</label>
+      <input id="webAppsWorkspace" type="text" placeholder="/path/to/vite-app" />
+      <button type="button" id="webAppsLoadScriptsBtn" class="secondary" data-i18n="webAppsHub.loadScripts">Workspace scripts</button>
+      <pre id="webAppsScriptsPanel" class="meta" style="max-height:160px;overflow:auto;"></pre>
+      <h4 data-i18n="webAppsHub.seedTitle">Быстрый seed агентов</h4>
+      <div id="webAppsSeedAgents" class="row"></div>
+      <pre id="webAppsStatus" class="meta" style="margin-top:8px;"></pre>
       </section>
 
       <section class="content-section">
@@ -362,7 +393,7 @@
       <label for="finetuneRunName" data-tip="finetuneRunName" data-i18n="label.pipelineName">Pipeline name</label>
       <input id="finetuneRunName" data-tip="finetuneRunName" placeholder="stage1-weekly" />
       <label for="finetuneBaseModel" data-tip="finetuneBaseModel" data-i18n="label.baseModel">Base model</label>
-      <input id="finetuneBaseModel" data-tip="finetuneBaseModel" placeholder="ollama:deepseek-coder" value="ollama:deepseek-coder" />
+      <input id="finetuneBaseModel" data-tip="finetuneBaseModel" placeholder="teacher (empty = TERMIT_TEACHER_MODEL)" value="" />
       <label>
         <input id="finetuneRunBaseline" data-tip="finetuneRunBaseline" type="checkbox" checked />
         <span data-i18n="label.runBaseline">Run baseline eval before pipeline</span>
@@ -1541,7 +1572,7 @@
               name: lastFinetuneExport.name,
               dataset_path: lastFinetuneExport.dataset_path,
               sample_count: lastFinetuneExport.sample_count,
-              base_model: "ollama:deepseek-coder",
+              base_model: finetuneBaseModelEl.value.trim(),
               notes: "Created from web UI",
             }),
           });
@@ -1598,7 +1629,7 @@
         responseMeta.textContent = "Loading training recipe...";
         try {
           const resp = await fetch(
-            "/api/finetune/recipe?base_model=ollama%3Adeepseek-coder",
+            "/api/finetune/recipe",
             { headers: authHeaders() },
           );
           const data = await resp.json();
@@ -1625,7 +1656,7 @@
             body: JSON.stringify({
               name: `${profileId}-adapter`,
               model,
-              base_model: "ollama:deepseek-coder",
+              base_model: finetuneBaseModelEl.value.trim(),
               repo_profile_id: profileId,
               description: "Registered from web UI",
             }),
@@ -1973,7 +2004,7 @@
             headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({
               name,
-              base_model: finetuneBaseModelEl.value.trim() || "ollama:deepseek-coder",
+              base_model: finetuneBaseModelEl.value.trim(),
               run_eval_baseline: finetuneRunBaselineEl.checked,
               min_samples: 5,
               limit: 500,
@@ -2262,6 +2293,9 @@
       }
       if (window.TermitTerminalDock) {
         TermitTerminalDock.init();
+      }
+      if (window.TermitWebAppsHub) {
+        TermitWebAppsHub.init({ authHeaders });
       }
       if (finetuneRunIdEl.value.trim()) {
         startFinetuneRunStream(finetuneRunIdEl.value.trim());

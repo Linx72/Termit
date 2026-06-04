@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from app.services.agent_hook_service import AgentHookService, HookEvent
@@ -29,6 +30,32 @@ class PlatformParityTests(unittest.TestCase):
         self.assertIn("Fix CI", block)
         cp_block = store.build_prompt_block(["cross-platform-atomic"])
         self.assertIn("Cross-platform atomic", cp_block)
+        self.assertIn("online-project", ids)
+        self.assertIn("web-app", ids)
+        self.assertIn("termit-desktop", ids)
+        self.assertIn("agent-guided", ids)
+        self.assertIn("agent-autopilot", ids)
+        online_block = store.build_prompt_block(["online-project"])
+        self.assertIn("Online Project", online_block)
+        web_block = store.build_prompt_block(["web-app"])
+        self.assertIn("Web App", web_block)
+
+    def test_skill_select_endpoint(self) -> None:
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/platform/skills/select",
+            json={
+                "instruction": "Fix GitHub Actions CI workflow failure",
+                "task_type": "coding",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("fix-ci", payload["selected_skill_ids"])
+        self.assertTrue(payload["auto_select_enabled"])
 
     def test_stub_search_returns_citations(self) -> None:
         provider = StubSearchProvider()
@@ -72,6 +99,87 @@ class PlatformParityTests(unittest.TestCase):
             spans = store.list_for_run("run_test")
             self.assertEqual(len(spans), 1)
             self.assertEqual(spans[0]["span_id"], span_id)
+
+    def test_mcp_registry_loads_wrapped_servers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "mcp.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "servers": [
+                            {
+                                "server_id": "github-publish",
+                                "name": "GitHub",
+                                "command": "npx",
+                                "args": ["-y", "demo"],
+                                "enabled": False,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry = McpRegistryService(str(path))
+            servers = registry.list_servers()
+            self.assertEqual(len(servers), 1)
+            self.assertEqual(servers[0].server_id, "github-publish")
+
+    def test_mcp_registry_import_cursor_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "cursor-mcp.json"
+            source.write_text(
+                json.dumps(
+                    {
+                        "mcpServers": {
+                            "Exa Search": {
+                                "command": "npx",
+                                "args": ["-y", "exa-mcp"],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_path = Path(tmp) / "registry.json"
+            registry = McpRegistryService(str(registry_path))
+            imported = registry.import_from_mcp_file(source, merge=True)
+            self.assertEqual(len(imported), 1)
+            self.assertEqual(imported[0].command, "npx")
+            self.assertEqual(len(registry.list_servers()), 1)
+
+    def test_hook_service_runs_local_script(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "hook.out"
+            config = Path(tmp) / "hooks.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "hooks": {
+                            "run.stop": [
+                                {
+                                    "command": (
+                                        f"python3 -c \"import sys, pathlib; "
+                                        f"pathlib.Path('{output}').write_text(sys.stdin.read())\""
+                                    )
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            hooks = AgentHookService(str(config), webhook_url="", enabled=True)
+            hooks.emit(
+                HookEvent(
+                    event_type="run.stop",
+                    run_id="r1",
+                    agent_id="a1",
+                    state="completed",
+                )
+            )
+            self.assertTrue(output.is_file())
+            self.assertIn("run.stop", output.read_text(encoding="utf-8"))
 
     def test_hook_service_emit_no_crash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

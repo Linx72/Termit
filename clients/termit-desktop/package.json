@@ -7,9 +7,10 @@
   "scripts": {
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "build": "vite build && npm run build:electron",
+    "build:docs": "python3 ../../scripts/build_desktop_docs_pdf.py",
     "build:electron": "tsc -p tsconfig.electron.json",
     "start": "electron .",
-    "package": "npm run build && electron-builder --dir",
+    "package": "npm run build:docs && npm run build && electron-builder --dir",
     "package:mac": "npm run build && electron-builder --mac --dir",
     "package:dmg": "npm run build && electron-builder --mac dmg"
   },
@@ -40,7 +41,8 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "docs/pdf/**/*"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

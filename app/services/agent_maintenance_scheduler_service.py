@@ -36,6 +36,13 @@ class AgentMaintenanceSchedulerService:
         self._cleanup_errors_total = 0
         self._snapshot_errors_total = 0
 
+    def set_enabled(self, enabled: bool) -> None:
+        self._enabled = enabled
+        if enabled:
+            self.start()
+        else:
+            self.stop()
+
     def start(self) -> None:
         if not self._enabled:
             return

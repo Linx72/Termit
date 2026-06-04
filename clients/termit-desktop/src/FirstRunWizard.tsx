@@ -12,8 +12,9 @@ interface FirstRunWizardProps {
   onPickRepo: () => void | Promise<void>;
   onPickWorkspace: () => void | Promise<void>;
   onConnect: () => void | Promise<void>;
+  onToggleAutoStartServer: (enabled: boolean) => void | Promise<void>;
   onPullModel: (model: string) => void | Promise<void>;
-  onComplete: () => void;
+  onComplete: () => void | Promise<void>;
 }
 
 export function FirstRunWizard({
@@ -27,25 +28,20 @@ export function FirstRunWizard({
   onPickRepo,
   onPickWorkspace,
   onConnect,
+  onToggleAutoStartServer,
   onPullModel,
   onComplete,
 }: FirstRunWizardProps) {
-  const canFinish = Boolean(settings.repoRoot && settings.workspace && settings.baseUrl);
+  const canFinish = Boolean(settings.baseUrl.trim() && settings.workspace.trim());
 
   return (
     <div className="modal-backdrop wizard-backdrop" role="presentation">
       <div className="modal wizard-modal" role="dialog" aria-labelledby="first-run-title">
-        <h2 id="first-run-title">
-          {locale === "ru" ? "Добро пожаловать в Termit" : "Welcome to Termit"}
-        </h2>
-        <p className="hint">
-          {locale === "ru"
-            ? "Первый запуск: API → Ollama → workspace → Connect."
-            : "First run: API → Ollama → workspace → Connect."}
-        </p>
+        <h2 id="first-run-title">{t(locale, "wizardTitle")}</h2>
+        <p className="hint">{t(locale, "wizardIntro")}</p>
 
         <div className="field">
-          <label htmlFor="wizard-baseUrl">URL API Termit</label>
+          <label htmlFor="wizard-baseUrl">{t(locale, "wizardApiUrl")}</label>
           <input
             id="wizard-baseUrl"
             value={settings.baseUrl}
@@ -54,18 +50,18 @@ export function FirstRunWizard({
         </div>
 
         <div className="field">
-          <label htmlFor="wizard-repo">{locale === "ru" ? "Репозиторий Termit" : "Termit repo"}</label>
+          <label htmlFor="wizard-repo">{t(locale, "wizardRepo")}</label>
           <input id="wizard-repo" value={settings.repoRoot} readOnly placeholder="/path/to/Termit" />
           <button type="button" className="secondary" onClick={() => void onPickRepo()}>
-            {locale === "ru" ? "Выбрать repo" : "Choose repo"}
+            {t(locale, "wizardChooseRepo")}
           </button>
         </div>
 
         <div className="field">
-          <label htmlFor="wizard-workspace">Workspace</label>
+          <label htmlFor="wizard-workspace">{t(locale, "wizardWorkspace")}</label>
           <input id="wizard-workspace" value={settings.workspace} readOnly />
           <button type="button" className="secondary" onClick={() => void onPickWorkspace()}>
-            {locale === "ru" ? "Выбрать папку" : "Choose folder"}
+            {t(locale, "wizardChooseFolder")}
           </button>
         </div>
 
@@ -73,7 +69,7 @@ export function FirstRunWizard({
           <h3>{t(locale, "wizardOllama")}</h3>
           <p className="hint">{t(locale, "wizardOllamaHint")}</p>
           {missingOllamaModels.length === 0 ? (
-            <p className="hint muted">Ollama models: OK</p>
+            <p className="hint muted">{t(locale, "wizardOllamaOk")}</p>
           ) : (
             <ul className="wizard-model-list">
               {missingOllamaModels.map((model) => (
@@ -96,14 +92,23 @@ export function FirstRunWizard({
         <label className="checkbox-row">
           <input
             type="checkbox"
+            checked={settings.autoStartServer}
+            onChange={(event) => void onToggleAutoStartServer(event.target.checked)}
+          />
+          {t(locale, "wizardAutoStartServer")}
+        </label>
+
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
             checked={settings.autoConnect}
             onChange={(event) => onUpdate({ autoConnect: event.target.checked })}
           />
-          {locale === "ru" ? "Подключаться при запуске" : "Connect on launch"}
+          {t(locale, "wizardConnectOnLaunch")}
         </label>
 
         <div className="row">
-          <button type="button" className="primary" disabled={busy} onClick={() => void onConnect()}>
+          <button type="button" className="primary" onClick={() => void onConnect()}>
             {t(locale, "connect")}
           </button>
         </div>
@@ -111,8 +116,18 @@ export function FirstRunWizard({
         {healthLine && <pre className="detail-box wizard-health">{healthLine}</pre>}
 
         <div className="row">
-          <button type="button" className="primary" disabled={!canFinish} onClick={onComplete}>
-            {locale === "ru" ? "Начать работу" : "Get started"}
+          <button
+            type="button"
+            className="primary"
+            disabled={!canFinish}
+            onClick={() => {
+              if (!canFinish) {
+                return;
+              }
+              void onComplete();
+            }}
+          >
+            {t(locale, "wizardGetStarted")}
           </button>
         </div>
       </div>

@@ -23,6 +23,8 @@ npm test
 
 cd "$ROOT/clients/termit-desktop"
 npm install
+source "$ROOT/.venv/bin/activate" 2>/dev/null || true
+python3 "$ROOT/scripts/build_desktop_docs_pdf.py"
 npm run package
 
 echo "Desktop build output: $ROOT/clients/termit-desktop/release/"

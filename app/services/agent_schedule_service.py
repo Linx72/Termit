@@ -26,7 +26,22 @@ class AgentScheduleService:
         self._lock = Lock()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._enabled = True
         self._init_db()
+
+    def set_enabled(self, enabled: bool) -> None:
+        self._enabled = enabled
+        if enabled:
+            self.start()
+        else:
+            self.stop()
+
+    def status(self) -> dict[str, object]:
+        return {
+            "enabled": self._enabled,
+            "thread_alive": self._thread is not None and self._thread.is_alive(),
+            "poll_interval_seconds": self._poll_interval_seconds,
+        }
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30.0)
@@ -52,6 +67,8 @@ class AgentScheduleService:
             conn.commit()
 
     def start(self) -> None:
+        if not self._enabled:
+            return
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()

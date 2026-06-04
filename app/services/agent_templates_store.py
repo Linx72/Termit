@@ -35,6 +35,7 @@ class AgentTemplatesStore:
                     enabled_tools=[str(tool) for tool in item.get("enabled_tools", [])],
                     use_tool_loop=bool(item.get("use_tool_loop", False)),
                     use_retrieval=bool(item.get("use_retrieval", False)),
+                    allow_online=bool(item.get("allow_online", False)),
                     skill_ids=[str(skill) for skill in item.get("skill_ids", [])],
                 )
             )
@@ -58,5 +59,6 @@ class AgentTemplatesStore:
             enabled_tools=list(template.enabled_tools),
             use_tool_loop=template.use_tool_loop,
             use_retrieval=template.use_retrieval,
+            allow_online=template.allow_online,
             skill_ids=list(template.skill_ids),
         )

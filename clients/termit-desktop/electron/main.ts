@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import type { DocId } from "../shared/ipc";
 import {
   ensureServer,
   openLogs,
@@ -12,6 +14,19 @@ import {
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+
+function rendererIndexPath(): string {
+  return path.join(app.getAppPath(), "dist", "index.html");
+}
+
+const DOC_FILES: Record<DocId, string> = {
+  help: "TERMIT_HELP_RU.pdf",
+  training: "TERMIT_TRAINING_RU.pdf",
+};
+
+function docPdfPath(docId: DocId): string {
+  return path.join(app.getAppPath(), "docs", "pdf", DOC_FILES[docId]);
+}
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -28,11 +43,15 @@ function createWindow(): BrowserWindow {
     },
   });
 
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`Renderer failed to load (${errorCode}): ${errorDescription} — ${validatedURL}`);
+  });
+
   if (isDev) {
     void window.loadURL("http://127.0.0.1:5173");
     window.webContents.openDevTools({ mode: "detach" });
   } else {
-    void window.loadFile(path.join(__dirname, "../dist/index.html"));
+    void window.loadFile(rendererIndexPath());
   }
 
   mainWindow = window;
@@ -195,4 +214,25 @@ ipcMain.on("notify:show", (_event, payload: { title: string; body: string }) => 
     return;
   }
   new Notification({ title: payload.title, body: payload.body }).show();
+});
+
+ipcMain.handle("docs:fileUrl", (_event, docId: DocId) => {
+  const filePath = docPdfPath(docId);
+  return pathToFileURL(filePath).href;
+});
+
+ipcMain.handle("docs:path", (_event, docId: DocId) => docPdfPath(docId));
+
+ipcMain.handle("docs:openExternal", async (_event, docId: DocId) => {
+  const filePath = docPdfPath(docId);
+  try {
+    const result = await shell.openPath(filePath);
+    if (result) {
+      return { ok: false, message: result };
+    }
+    return { ok: true, message: filePath };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, message };
+  }
 });

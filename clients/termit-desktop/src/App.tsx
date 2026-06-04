@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   TermitClient,
   buildComposerMessage,
+  buildComponentComposerMessage,
+  filterComposerPatchesToPaths,
   parseComposerPatches,
   stripComposerJsonBlock,
   formatAgentTimeline,
   watchAgentRun,
   type AgentProfile,
   type AgentRunRecord,
+  type AgentRunEvent,
   type ApplyPatchRequest,
   type ApplyPatchResponse,
   type ComposerFileContext,
@@ -18,20 +21,14 @@ import {
   type AgentPolicyPreset,
   type DesktopJourney,
 } from "@termit/client";
-import { EditorPanel } from "./EditorPanel";
 import { FirstRunWizard } from "./FirstRunWizard";
-import { ChangedFilesPanel } from "./ChangedFilesPanel";
-import { HealthDashboard } from "./HealthDashboard";
-import { ModelManager } from "./ModelManager";
-import { PlanPanel } from "./PlanPanel";
-import { TerminalPanel } from "./TerminalPanel";
 import {
   attachmentPaths,
   buildMessageWithAttachments,
   excerptAroundLine,
   type ContextAttachment,
 } from "./contextAttachments";
-import { t } from "./i18n";
+import { t, stepLabel } from "./i18n";
 import {
   createEmptySession,
   deriveSessionSummary,
@@ -51,11 +48,8 @@ import {
   saveSettings,
   type StoredSettings,
 } from "./settings";
-import { KpiGatePanel } from "./KpiGatePanel";
-import { AgentObservabilityPanel } from "./AgentObservabilityPanel";
-import { OnlineAcceleratorPanel } from "./OnlineAcceleratorPanel";
 import { PolicyPresetSelector } from "./PolicyPresetSelector";
-import { WorkflowHubPanel } from "./WorkflowHubPanel";
+import { MediaStudioPanel } from "./MediaStudioPanel";
 import {
   dryRunAllPatches,
   formatSafeApplyHint,
@@ -63,22 +57,60 @@ import {
   type SafeApplySummary,
 } from "./composerSafeApply";
 import { suggestContextFiles, type ContextSuggestion } from "./contextSuggestions";
-import { DEFAULT_VERIFY_COMMANDS, parseCheckpointSummary, type WorkflowTab } from "./northStar";
+import { journeyDescription, journeyTitle, parseCheckpointSummary } from "./northStar";
+import { trackWorkflowEvent } from "./workflowTelemetry";
 import {
   buildPresetDraft,
   CROSS_PLATFORM_PRESETS,
   launchCrossPlatformPreset,
 } from "./crossPlatformPresets";
+import { buildCompletionSuggestions, formatActivityTape } from "./activityTape";
+import { executionModeLabel, isBuildTask } from "./buildTask";
 
-type Tab = WorkflowTab;
+
+type AgentFolder = {
+  id: string;
+  label: string;
+  sessions: StoredChatSession[];
+};
+
+type GitChange = {
+  status: string;
+  path: string;
+};
+
+function parseGitPorcelain(output: string): GitChange[] {
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => ({
+      status: line.slice(0, 2).trim() || "?",
+      path: line.slice(3).trim(),
+    }))
+    .filter((item) => item.path.length > 0);
+}
 
 type ChatBlock =
   | { id: string; kind: "user"; text: string }
   | { id: string; kind: "assistant"; text: string }
+  | { id: string; kind: "tape"; text: string }
+  | { id: string; kind: "suggestions"; text: string; actions?: string[] }
   | { id: string; kind: "meta" | "error"; text: string };
+
+const DEFAULT_AGENT_TEMPLATE = "web-app-vite";
 
 function blockId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function parseGitShortstat(output: string): { added: number; deleted: number } {
+  const insertMatch = output.match(/(\d+)\s+insertion/i);
+  const deleteMatch = output.match(/(\d+)\s+deletion/i);
+  return {
+    added: insertMatch ? Number(insertMatch[1]) : 0,
+    deleted: deleteMatch ? Number(deleteMatch[1]) : 0,
+  };
 }
 
 function workspacePrefix(workspace: string): string {
@@ -107,7 +139,6 @@ function countToolSteps(events: Array<{ event_type: string }>): number {
 
 export function App() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
-  const [tab, setTab] = useState<Tab>("chat");
   const [connected, setConnected] = useState(false);
   const [apiReachable, setApiReachable] = useState(false);
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
@@ -123,6 +154,7 @@ export function App() {
     const active = sessions.find((session) => session.localId === activeId) ?? sessions[0];
     return active?.blocks ?? [];
   });
+  const chatLogRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState("");
   const [tasks, setTasks] = useState<TaskStatusResponse[]>([]);
   const [taskDetail, setTaskDetail] = useState("Select a task.");
@@ -150,6 +182,7 @@ export function App() {
   >({});
   const [composerBackups, setComposerBackups] = useState<Record<string, string>>({});
   const [composerBusy, setComposerBusy] = useState(false);
+  const [composerMode, setComposerMode] = useState<"multi" | "component">("multi");
   const [composerPatchDetail, setComposerPatchDetail] = useState("Select a patch to preview (dry run).");
   const [showWizard, setShowWizard] = useState(() => !isFirstRunComplete());
   const [wizardHealth, setWizardHealth] = useState("");
@@ -159,8 +192,18 @@ export function App() {
   const [reindexBusy, setReindexBusy] = useState(false);
   const [projectRulesText, setProjectRulesText] = useState("");
   const [userRulesText, setUserRulesText] = useState("");
+  const [selectedProjectSkills, setSelectedProjectSkills] = useState<string[]>([]);
   const [rulesSaving, setRulesSaving] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
+  const [folderDraft, setFolderDraft] = useState("");
+  const [selectedFolder, setSelectedFolder] = useState<string>("General");
+  const [liveChanges, setLiveChanges] = useState<GitChange[]>([]);
+  const [liveChangesLoading, setLiveChangesLoading] = useState(false);
+  const [liveChangesError, setLiveChangesError] = useState("");
+  const [selectedChangePath, setSelectedChangePath] = useState("");
+  const [selectedChangePreview, setSelectedChangePreview] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reviewStats, setReviewStats] = useState({ added: 0, deleted: 0 });
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [pullingModel, setPullingModel] = useState<string | null>(null);
@@ -184,10 +227,30 @@ export function App() {
   const [mcpDraftCommand, setMcpDraftCommand] = useState("");
   const [mcpDraftArgs, setMcpDraftArgs] = useState("");
   const [mcpSaving, setMcpSaving] = useState(false);
+  const [mcpImportBusy, setMcpImportBusy] = useState(false);
   const [runSpansText, setRunSpansText] = useState("Select a run to view trace spans.");
   const [platformStatus, setPlatformStatus] = useState("Platform services not loaded.");
 
   const projectId = useMemo(() => workspacePrefix(settings.workspace), [settings.workspace]);
+  const activeAgentLabel = useMemo(() => {
+    const agent = agents.find((item) => item.agent_id === selectedAgentId);
+    return agent?.name || "General";
+  }, [agents, selectedAgentId]);
+  const chatFolders = useMemo<AgentFolder[]>(() => {
+    const map = new Map<string, StoredChatSession[]>();
+    for (const session of chatSessions) {
+      const label = (session.agentFolder || "General").trim() || "General";
+      if (!map.has(label)) {
+        map.set(label, []);
+      }
+      map.get(label)!.push(session);
+    }
+    return [...map.entries()].map(([label, sessions]) => ({
+      id: label.toLowerCase().replace(/\s+/g, "-"),
+      label,
+      sessions: sessions.sort((a, b) => b.updatedAt - a.updatedAt),
+    }));
+  }, [chatSessions]);
 
   const client = useMemo(
     () =>
@@ -238,6 +301,8 @@ export function App() {
         sessionId: settings.sessionId,
         title: deriveSessionTitle(blocks),
         summary: deriveSessionSummary(blocks),
+        agentFolder:
+          prev.find((item) => item.localId === activeLocalId)?.agentFolder || activeAgentLabel,
         blocks,
         updatedAt: Date.now(),
       };
@@ -246,6 +311,13 @@ export function App() {
       return next;
     });
   }, [blocks, activeLocalId, settings.sessionId]);
+
+  useEffect(() => {
+    const el = chatLogRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [blocks]);
 
   const updateSettings = (patch: Partial<StoredSettings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
@@ -278,15 +350,23 @@ export function App() {
     });
   };
 
-  const startServer = async () => {
+  const syncLauncherConfig = async (patch?: Partial<Pick<StoredSettings, "repoRoot" | "autoStartServer">>) => {
+    const repoRoot = patch?.repoRoot ?? settings.repoRoot;
+    const autoStartServer = patch?.autoStartServer ?? settings.autoStartServer;
+    await window.termitDesktop.setLauncherConfig({ repoRoot, autoStartServer });
+  };
+
+  const startServer = async (): Promise<boolean> => {
     const result = await window.termitDesktop.ensureServer(settings.baseUrl);
     setStatusLine(result.message);
     if (result.ok) {
-      await connect();
+      setApiReachable(true);
+      return connect();
     }
+    return false;
   };
 
-  const connect = async () => {
+  const connect = async (): Promise<boolean> => {
     try {
       setStatusLine("Connecting...");
       const [statuses, providers, profiles, adaptersResponse, healthz, localStatus] =
@@ -329,7 +409,9 @@ export function App() {
       }
       setConnected(true);
       setApiReachable(true);
+      void refreshAgents();
       void refreshPlatformData(selectedAgentId);
+      void refreshLiveChanges();
       void listDesktopJourneys(client)
         .then((response) => setNorthStarJourneys(response.journeys))
         .catch(() => setNorthStarJourneys([]));
@@ -359,17 +441,41 @@ export function App() {
           const rules = await client.getProjectRules(projectId);
           setProjectRulesText(rules.project_rules ?? "");
           setUserRulesText(rules.user_rules ?? "");
+          setSelectedProjectSkills(Array.isArray(rules.skills) ? rules.skills : []);
         } catch {
           setProjectRulesText("");
           setUserRulesText("");
         }
       }
+      return true;
     } catch (error) {
       setConnected(false);
       const message = error instanceof Error ? error.message : String(error);
       setStatusLine(message);
       setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text: message }]);
+      return false;
     }
+  };
+
+  const ensureApiReady = async (): Promise<boolean> => {
+    if (connected) {
+      return true;
+    }
+    try {
+      await client.health();
+      setApiReachable(true);
+      const ok = await connect();
+      if (ok) {
+        return true;
+      }
+    } catch {
+      setApiReachable(false);
+    }
+    if (settings.repoRoot.trim()) {
+      setStatusLine(locale === "ru" ? "Запуск Termit API…" : "Starting Termit API…");
+      return startServer();
+    }
+    return false;
   };
 
   const refreshTasks = async () => {
@@ -380,6 +486,193 @@ export function App() {
   const refreshAgents = async () => {
     const list = await client.listAgents();
     setAgents(list);
+    if (list.length > 0) {
+      setSelectedAgentId((prev) => prev ?? list[0].agent_id);
+    }
+  };
+
+  const resolveAgentIdForRun = async (
+    preferredId?: string | null,
+    taskInput?: string
+  ): Promise<string | null> => {
+    if (preferredId?.trim()) {
+      return preferredId.trim();
+    }
+    if (selectedAgentId?.trim()) {
+      return selectedAgentId.trim();
+    }
+    const templateId =
+      taskInput && isBuildTask(taskInput) ? "web-app-vite" : DEFAULT_AGENT_TEMPLATE;
+    if (agents.length > 0 && templateId === DEFAULT_AGENT_TEMPLATE) {
+      return agents[0].agent_id;
+    }
+    try {
+      const list = await client.listAgents();
+      setAgents(list);
+      const matched = list.find((item) => item.name.toLowerCase().includes("web app"));
+      if (matched && isBuildTask(taskInput ?? "")) {
+        setSelectedAgentId(matched.agent_id);
+        return matched.agent_id;
+      }
+      if (list.length > 0 && templateId === DEFAULT_AGENT_TEMPLATE) {
+        const id = list[0].agent_id;
+        setSelectedAgentId(id);
+        return id;
+      }
+      const profile = await client.ensureAgentFromTemplate(templateId);
+      setAgents((prev) => {
+        if (prev.some((item) => item.agent_id === profile.agent_id)) {
+          return prev;
+        }
+        return [...prev, profile];
+      });
+      setSelectedAgentId(profile.agent_id);
+      return profile.agent_id;
+    } catch {
+      return null;
+    }
+  };
+
+  const testSshConnection = async () => {
+    if (!connected) {
+      return;
+    }
+    try {
+      const result = await client.testSshConnection({
+        host: settings.sshHost,
+        user: settings.sshUser,
+        remote_path: settings.sshRemotePath,
+        port: settings.sshPort || 22,
+        identity_file: settings.sshIdentity || undefined,
+      });
+      setBlocks((prev) => [
+        ...prev,
+        {
+          id: blockId(),
+          kind: result.ok ? "meta" : "error",
+          text:
+            locale === "ru"
+              ? `SSH: ${result.ok ? "OK" : "ошибка"} — ${result.detail}`
+              : `SSH: ${result.ok ? "OK" : "failed"} — ${result.detail}`,
+        },
+      ]);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
+    }
+  };
+
+  const buildRunPayload = (input: string, runMode: "ask" | "agent" = "agent") => {
+    const useSsh =
+      settings.executionMode === "ssh" ||
+      (settings.executionMode === "hybrid" && settings.sshHost.trim());
+    return {
+      input,
+      session_id: settings.sessionId || undefined,
+      project_id: projectId || undefined,
+      changed_files: attachmentPaths(attachments),
+      policy_preset: effectivePolicyPresetFromSettings(),
+      execution_mode: settings.executionMode,
+      workspace_scope: settings.workspace || undefined,
+      retrieval_path_prefix: settings.workspace || undefined,
+      run_mode: runMode,
+      auto_confirm_risky_tools: true,
+      verify_after_patch: true,
+      use_tool_loop: true,
+      ...(useSsh
+        ? {
+            ssh_host: settings.sshHost.trim(),
+            ssh_user: settings.sshUser.trim(),
+            ssh_port: settings.sshPort || 22,
+            ssh_identity: settings.sshIdentity.trim() || undefined,
+            ssh_remote_path: settings.sshRemotePath.trim(),
+          }
+        : {}),
+    };
+  };
+
+  const effectivePolicyPresetFromSettings = () =>
+    settings.agentRunMode === "autopilot" ? "autopilot" : settings.policyPreset || undefined;
+
+  const buildAgentInputFromChat = (message: string) => {
+    const recent = blocks
+      .filter((block) => block.kind === "user" || block.kind === "assistant")
+      .slice(-6);
+    if (recent.length === 0) {
+      return message;
+    }
+    const transcript = recent.map((block) => `${block.kind}: ${block.text}`).join("\n\n");
+    return `${transcript}\n\n[user follow-up]\n${message}`;
+  };
+
+  const sendAskChat = async (fullMessage: string) => {
+    const assistantId = blockId();
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: assistantId,
+        kind: "assistant",
+        text: locale === "ru" ? "Думаю…" : "Thinking…",
+      },
+    ]);
+    let responseText = "";
+    try {
+      for await (const event of client.chatStream({
+        message: fullMessage,
+        task_type: settings.taskType,
+        session_id: settings.sessionId || undefined,
+        model: settings.selectedModel || undefined,
+        repo_profile: settings.repoProfile || undefined,
+        use_retrieval: settings.useRetrieval,
+        use_repo_map: Boolean(projectId),
+        use_context_packing: true,
+        changed_files: attachmentPaths(attachments),
+        project_id: projectId || undefined,
+        retrieval_path_prefix: workspacePrefix(settings.workspace),
+      })) {
+        if (event.event === "meta") {
+          const nextSession = String(event.data.session_id ?? "");
+          if (nextSession) {
+            updateSettings({ sessionId: nextSession });
+          }
+        } else if (event.event === "token") {
+          responseText += String(event.data.text ?? "");
+          setBlocks((prev) =>
+            prev.map((block) =>
+              block.id === assistantId ? { ...block, text: responseText || "…" } : block
+            )
+          );
+        }
+      }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setBlocks((prev) =>
+        prev.map((block) => (block.id === assistantId ? { ...block, kind: "error", text } : block))
+      );
+    }
+  };
+
+  const importCursorRules = async () => {
+    if (!connected || !projectId || rulesSaving) {
+      return;
+    }
+    setRulesSaving(true);
+    try {
+      const rules = await client.importCursorProjectRules(projectId, {
+        workspace_root: settings.workspace,
+      });
+      setProjectRulesText(rules.project_rules ?? "");
+      setStatusLine(
+        locale === "ru"
+          ? `Импортированы Cursor rules для ${projectId}`
+          : `Imported Cursor rules for ${projectId}`
+      );
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setStatusLine(text);
+    } finally {
+      setRulesSaving(false);
+    }
   };
 
   const refreshAgentRuns = async (agentId: string) => {
@@ -475,14 +768,29 @@ export function App() {
     if (!watchedRunId) {
       return;
     }
+    const started = Date.now();
     try {
       const result = await client.resumeAgentRun(watchedRunId);
       setWatchedRunId(result.run_id);
       setWatchedRunState(result.state);
       setAgentTimeline(`Resumed run ${result.run_id} (${result.state})`);
+      trackWorkflowEvent(client, {
+        event_type: "agent_resume",
+        journey_id: settings.activeJourneyId,
+        duration_ms: Date.now() - started,
+        ok: true,
+        detail: result.run_id,
+      });
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       setAgentTimeline(text);
+      trackWorkflowEvent(client, {
+        event_type: "agent_resume",
+        journey_id: settings.activeJourneyId,
+        duration_ms: Date.now() - started,
+        ok: false,
+        detail: text,
+      });
     }
   };
 
@@ -512,6 +820,33 @@ export function App() {
     } finally {
       setMcpSaving(false);
     }
+  };
+
+  const importCursorMcp = async () => {
+    if (!connected || mcpImportBusy) {
+      return;
+    }
+    setMcpImportBusy(true);
+    try {
+      const result = await client.importPlatformCursorMcp({ workspace_root: settings.workspace });
+      await refreshPlatformData(selectedAgentId);
+      setPlatformStatus(
+        locale === "ru"
+          ? `Импортировано MCP из .cursor/mcp.json: ${result.imported}`
+          : `Imported MCP from .cursor/mcp.json: ${result.imported}`
+      );
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setPlatformStatus(text);
+    } finally {
+      setMcpImportBusy(false);
+    }
+  };
+
+  const toggleProjectSkill = (skillId: string) => {
+    setSelectedProjectSkills((prev) =>
+      prev.includes(skillId) ? prev.filter((item) => item !== skillId) : [...prev, skillId]
+    );
   };
 
   useEffect(() => {
@@ -567,16 +902,13 @@ export function App() {
   }, [watchedRunId, connected, client]);
 
   useEffect(() => {
-    if (tab === "tasks" && connected) {
-      void refreshTasks();
-      const timer = window.setInterval(() => void refreshTasks(), 5000);
-      return () => window.clearInterval(timer);
+    if (!connected) {
+      return;
     }
-    if (tab === "agents" && connected) {
-      void refreshAgents();
-    }
-    return undefined;
-  }, [tab, connected]);
+    void refreshLiveChanges();
+    const timer = window.setInterval(() => void refreshLiveChanges(), 4000);
+    return () => window.clearInterval(timer);
+  }, [connected, client]);
 
   useEffect(() => {
     let cancelled = false;
@@ -675,7 +1007,7 @@ export function App() {
     if (!settings.workspace) {
       return;
     }
-    const folder = window.prompt("Folder path (relative to workspace):", "app");
+    const folder = window.prompt(t(locale, "promptFolder"), "app");
     if (!folder?.trim()) {
       return;
     }
@@ -695,7 +1027,7 @@ export function App() {
   };
 
   const attachSymbol = async () => {
-    const query = window.prompt("Symbol name (function/class):");
+    const query = window.prompt(t(locale, "promptSymbol"));
     if (!query?.trim()) {
       return;
     }
@@ -758,7 +1090,7 @@ export function App() {
   };
 
   const attachWeb = async () => {
-    const query = window.prompt("Web search query:");
+    const query = window.prompt(t(locale, "promptWeb"));
     if (!query?.trim()) {
       return;
     }
@@ -825,10 +1157,28 @@ export function App() {
     setComposerBusy(true);
     setComposerLog("Running Composer...\n");
     setComposerPatches([]);
+    const composerStarted = Date.now();
     let responseText = "";
+    const scopedPaths =
+      composerMode === "component" && composerFiles.length > 0
+        ? [composerFiles[0].path]
+        : composerFiles.map((item) => item.path);
+    if (composerMode === "component" && composerFiles.length !== 1) {
+      setComposerLog(
+        locale === "ru"
+          ? "Режим компонента: добавьте ровно один @file."
+          : "Component mode: attach exactly one @file."
+      );
+      setComposerBusy(false);
+      return;
+    }
+    const composerMessage =
+      composerMode === "component" && composerFiles.length === 1
+        ? buildComponentComposerMessage(instruction, composerFiles[0])
+        : buildComposerMessage(instruction, composerFiles);
     try {
       for await (const event of client.chatStream({
-        message: buildComposerMessage(instruction, composerFiles),
+        message: composerMessage,
         task_type: "coding",
         session_id: settings.sessionId || undefined,
         model: settings.selectedModel || undefined,
@@ -850,7 +1200,10 @@ export function App() {
           setComposerLog((prev) => prev + String(event.data.text ?? ""));
         }
       }
-      const patches = parseComposerPatches(responseText);
+      let patches = parseComposerPatches(responseText);
+      if (composerMode === "component" && scopedPaths.length > 0) {
+        patches = filterComposerPatchesToPaths(patches, scopedPaths);
+      }
       setComposerPatches(patches);
       setComposerPatchPreviews({});
       setComposerBackups({});
@@ -874,6 +1227,14 @@ export function App() {
       setComposerLog(
         `${prose}\n\n---\nParsed ${patches.length} patch(es). Click a file to dry-run preview.`
       );
+      trackWorkflowEvent(client, {
+        event_type: "composer_generated",
+        journey_id: settings.activeJourneyId,
+        execution_mode: settings.executionMode,
+        duration_ms: Date.now() - composerStarted,
+        ok: patches.length > 0,
+        detail: `${patches.length} patches`,
+      });
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       setComposerLog(text);
@@ -945,6 +1306,26 @@ export function App() {
     setComposerLog((prev) => `${prev}\n\nApplied ${applied}/${composerPatches.length} patches.`);
     if (errors.length > 0) {
       setComposerPatchDetail(errors.join("\n"));
+    }
+    trackWorkflowEvent(client, {
+      event_type: "composer_applied",
+      journey_id: settings.activeJourneyId,
+      execution_mode: settings.executionMode,
+      ok: applied > 0 && errors.length === 0,
+      detail: `applied ${applied}/${composerPatches.length}`,
+    });
+    if (applied > 0 && pendingVerifyCommands.length > 0) {
+      setBlocks((prev) => [
+        ...prev,
+        {
+          id: blockId(),
+          kind: "meta",
+          text:
+            locale === "ru"
+              ? `Патчи применены. Verify: ${pendingVerifyCommands.join(" · ")}`
+              : `Patches applied. Verify: ${pendingVerifyCommands.join(" · ")}`,
+        },
+      ]);
     }
   };
 
@@ -1032,7 +1413,7 @@ export function App() {
       await client.saveProjectRules(projectId, {
         project_rules: projectRulesText,
         user_rules: userRulesText,
-        skills: [],
+        skills: selectedProjectSkills,
       });
       setStatusLine(`Project rules saved for ${projectId}`);
     } catch (error) {
@@ -1083,6 +1464,7 @@ export function App() {
 
   const newChatSession = () => {
     const created = createEmptySession();
+    created.agentFolder = selectedFolder || activeAgentLabel || "General";
     const next = upsertSession(chatSessions, created);
     saveChatSessions(next);
     saveActiveLocalId(created.localId);
@@ -1102,6 +1484,102 @@ export function App() {
     setRenameDraft("");
   };
 
+  const moveSessionToFolder = (localId: string, folder: string) => {
+    const cleaned = folder.trim() || "General";
+    const next = chatSessions.map((session) =>
+      session.localId === localId ? { ...session, agentFolder: cleaned, updatedAt: Date.now() } : session
+    );
+    saveChatSessions(next);
+    setChatSessions(next);
+  };
+
+  const createFolder = () => {
+    const name = folderDraft.trim();
+    if (!name) {
+      return;
+    }
+    setSelectedFolder(name);
+    setFolderDraft("");
+  };
+
+  const refreshLiveChanges = async (): Promise<GitChange[]> => {
+    if (!connected) {
+      return [];
+    }
+    setLiveChangesLoading(true);
+    setLiveChangesError("");
+    try {
+      const result = await client.executeCommand({
+        command: "git status --porcelain",
+        path: ".",
+        confirmed: true,
+        dry_run: false,
+        timeout_seconds: 20,
+      });
+      if (!result.executed) {
+        setLiveChangesError(result.policy_reason ?? "git status blocked");
+        setLiveChanges([]);
+        return [];
+      }
+      const parsed = parseGitPorcelain(result.stdout ?? "");
+      setLiveChanges(parsed);
+      try {
+        const statResult = await client.executeCommand({
+          command: "git diff --shortstat",
+          path: ".",
+          confirmed: true,
+          dry_run: false,
+          timeout_seconds: 20,
+        });
+        if (statResult.executed) {
+          setReviewStats(parseGitShortstat(statResult.stdout ?? ""));
+        }
+      } catch {
+        setReviewStats({ added: 0, deleted: 0 });
+      }
+      if (!selectedChangePath && parsed[0]?.path) {
+        setSelectedChangePath(parsed[0].path);
+      }
+      return parsed;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setLiveChangesError(text);
+      setLiveChanges([]);
+      return [];
+    } finally {
+      setLiveChangesLoading(false);
+    }
+  };
+
+  const openLiveChange = async (path: string) => {
+    setSelectedChangePath(path);
+    try {
+      const [diff, content] = await Promise.all([
+        client.executeCommand({
+          command: `git diff -- "${path}"`,
+          path: ".",
+          confirmed: true,
+          dry_run: false,
+          timeout_seconds: 20,
+        }),
+        client.readFile({ path, max_bytes: 12000 }).catch(() => ({ content: "" })),
+      ]);
+      const diffText = (diff.stdout || diff.stderr || "").trim();
+      const body = [
+        `Path: ${path}`,
+        "",
+        diffText ? `Diff:\n${diffText}` : "Diff is empty (maybe new/untracked).",
+        content.content ? `\n\nCurrent file:\n${content.content}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      setSelectedChangePreview(body);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setSelectedChangePreview(text);
+    }
+  };
+
   const filteredSessions = useMemo(() => {
     const query = sessionSearch.trim().toLowerCase();
     if (!query) {
@@ -1114,71 +1592,105 @@ export function App() {
     );
   }, [chatSessions, sessionSearch]);
 
+  const activeChatTitle = useMemo(() => {
+    const active = chatSessions.find((session) => session.localId === activeLocalId);
+    return active?.title || (locale === "ru" ? "Новый агент" : "New Agent");
+  }, [chatSessions, activeLocalId, locale]);
+
   const sendChat = async () => {
     const message = draft.trim();
-    if (!message || !connected || busy) {
+    if (!message || busy) {
       return;
     }
+
+    if (!connected) {
+      const ready = await ensureApiReady();
+      if (!ready) {
+        setBlocks((prev) => [
+          ...prev,
+          { id: blockId(), kind: "user", text: message },
+          {
+            id: blockId(),
+            kind: "error",
+            text:
+              locale === "ru"
+                ? "Termit API offline. Укажите repo Termit в мастере или ⚙ → auto-start сервера."
+                : "Termit API offline. Set Termit repo in wizard or ⚙ → auto-start server.",
+          },
+        ]);
+        setDraft(message);
+        if (!isFirstRunComplete()) {
+          setShowWizard(true);
+        } else {
+          setSettingsOpen(true);
+        }
+        return;
+      }
+    }
+
+    if (isBuildTask(message) && !settings.workspace.trim()) {
+      setBlocks((prev) => [
+        ...prev,
+        { id: blockId(), kind: "user", text: message },
+        {
+          id: blockId(),
+          kind: "meta",
+          text:
+            locale === "ru"
+              ? "Выберите workspace в ⚙ настройках — без него агент не сможет писать файлы."
+              : "Pick a workspace in ⚙ settings — required for agent file writes.",
+        },
+      ]);
+      setSettingsOpen(true);
+      return;
+    }
+
     const fullMessage = buildMessageWithAttachments(message, attachments);
+    setDraft("");
+    const currentAttachments = attachments;
+    setAttachments([]);
+    setBusy(true);
+    setBlocks((prev) => [...prev, { id: blockId(), kind: "user", text: fullMessage }]);
+
+    try {
+      const input = buildMessageWithAttachments(fullMessage, currentAttachments);
+      setAgentInput(input);
+      if (settings.chatInteractionMode === "ask") {
+        await sendAskChat(input);
+      } else {
+        await runAgent(input, undefined, "agent");
+      }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runChatAsAgent = async () => {
+    const message = draft.trim();
+    if (!message || busy) {
+      return;
+    }
+    const contextual = buildAgentInputFromChat(buildMessageWithAttachments(message, attachments));
     setDraft("");
     setAttachments([]);
     setBusy(true);
     setBlocks((prev) => [
       ...prev,
-      { id: blockId(), kind: "user", text: fullMessage },
-      { id: blockId(), kind: "assistant", text: "" },
+      { id: blockId(), kind: "user", text: buildMessageWithAttachments(message, attachments) },
+      {
+        id: blockId(),
+        kind: "meta",
+        text:
+          locale === "ru"
+            ? "Запуск agent run с контекстом чата…"
+            : "Starting agent run with chat context…",
+      },
     ]);
-
-    let sessionId = settings.sessionId || undefined;
-    const prefix = workspacePrefix(settings.workspace);
-    const changedFiles = attachmentPaths(attachments);
     try {
-      for await (const event of client.chatStream({
-        message: fullMessage,
-        task_type: settings.taskType,
-        session_id: sessionId,
-        model: settings.selectedModel || undefined,
-        repo_profile: settings.repoProfile || undefined,
-        use_retrieval: settings.useRetrieval,
-        use_repo_map: settings.useRetrieval && Boolean(projectId),
-        use_context_packing: settings.useRetrieval && changedFiles.length > 0,
-        changed_files: changedFiles.length > 0 ? changedFiles : undefined,
-        project_id: projectId || undefined,
-        retrieval_path_prefix: prefix,
-      })) {
-        if (event.event === "meta") {
-          const nextSession = String(event.data.session_id ?? "");
-          if (nextSession && nextSession !== settings.sessionId) {
-            sessionId = nextSession;
-            updateSettings({ sessionId: nextSession });
-          }
-          setBlocks((prev) => [
-            ...prev,
-            {
-              id: blockId(),
-              kind: "meta",
-              text: `model: ${String(event.data.model)} · retrieval hits: ${String(event.data.retrieval_hits ?? 0)}`,
-            },
-          ]);
-        } else if (event.event === "token") {
-          const token = String(event.data.text ?? "");
-          setBlocks((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.kind === "assistant") {
-              return [...prev.slice(0, -1), { ...last, text: last.text + token }];
-            }
-            return [...prev, { id: blockId(), kind: "assistant", text: token }];
-          });
-        } else if (event.event === "error") {
-          setBlocks((prev) => [
-            ...prev,
-            { id: blockId(), kind: "error", text: JSON.stringify(event.data) },
-          ]);
-        }
-      }
-    } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
-      setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
+      await runAgent(contextual, undefined, "agent");
     } finally {
       setBusy(false);
     }
@@ -1202,26 +1714,276 @@ export function App() {
     void refreshTasks();
   };
 
-  const runAgent = async () => {
-    if (!selectedAgentId || !agentInput.trim()) {
+  const runAgent = async (
+    inputOverride?: string,
+    agentIdOverride?: string,
+    runMode: "ask" | "agent" = "agent"
+  ) => {
+    const input = (inputOverride ?? agentInput).trim();
+    if (!input) {
+      setBlocks((prev) => [
+        ...prev,
+        {
+          id: blockId(),
+          kind: "error",
+          text: locale === "ru" ? "Введите задачу для агента." : "Enter a task for the agent.",
+        },
+      ]);
       return;
     }
-    const run = await client.createAgentRun(selectedAgentId, {
-      input: agentInput.trim(),
-      session_id: settings.sessionId || undefined,
-      project_id: projectId || undefined,
-      changed_files: attachmentPaths(attachments),
-      policy_preset: settings.policyPreset || undefined,
+
+    const agentId = await resolveAgentIdForRun(agentIdOverride, input);
+    if (!agentId) {
+      setBlocks((prev) => [
+        ...prev,
+        {
+          id: blockId(),
+          kind: "error",
+          text:
+            locale === "ru"
+              ? "Не удалось найти или создать агента. Проверьте API и шаблон web-app-vite."
+              : "Could not find or create an agent. Check API and web-app-vite template.",
+        },
+      ]);
+      return;
+    }
+
+    const effectivePolicyPreset = effectivePolicyPresetFromSettings();
+    const runMetaId = blockId();
+    const runTapeId = blockId();
+    const runOutputId = blockId();
+    const runSuggestionsId = blockId();
+
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: runMetaId,
+        kind: "meta",
+        text:
+          locale === "ru"
+            ? `Запускаю агента «${agents.find((a) => a.agent_id === agentId)?.name ?? agentId}» · режим ${settings.executionMode}${isBuildTask(input) ? " · plan→research→scaffold→build" : ""}…`
+            : `Starting agent «${agents.find((a) => a.agent_id === agentId)?.name ?? agentId}» · mode ${settings.executionMode}${isBuildTask(input) ? " · plan→research→scaffold→build" : ""}…`,
+      },
+      {
+        id: runTapeId,
+        kind: "tape",
+        text:
+          locale === "ru"
+            ? "⏳ Лента выполнения: подготовка run…"
+            : "⏳ Activity tape: preparing run…",
+      },
+      {
+        id: runOutputId,
+        kind: "assistant",
+        text: locale === "ru" ? "Ожидаю ответ агента…" : "Waiting for agent response…",
+      },
+    ]);
+
+    let run;
+    try {
+      run = await client.createAgentRun(agentId, buildRunPayload(input, runMode));
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setBlocks((prev) =>
+        prev.map((block) => {
+          if (block.id === runMetaId) {
+            return { ...block, kind: "error", text: locale === "ru" ? "Run не создан" : "Run not created" };
+          }
+          if (block.id === runTapeId) {
+            return { ...block, text: text };
+          }
+          if (block.id === runOutputId) {
+            return { ...block, kind: "error", text };
+          }
+          return block;
+        })
+      );
+      return;
+    }
+
+    setBlocks((prev) =>
+      prev.map((block) =>
+        block.id === runMetaId
+          ? { ...block, text: `Agent run: ${run.run_id} (${run.state})` }
+          : block
+      )
+    );
+    trackWorkflowEvent(client, {
+      event_type: "agent_run_created",
+      journey_id: settings.activeJourneyId,
       execution_mode: settings.executionMode,
+      detail: run.run_id,
     });
     setAgentDetail(`Run queued: ${run.run_id} (${run.state})`);
-    setAgentInput("");
+    if (!inputOverride) {
+      setAgentInput("");
+    }
     setWatchedRunId(run.run_id);
-    void refreshAgentRuns(selectedAgentId);
+    void refreshAgentRuns(agentId);
+    void refreshLiveChanges();
+
+    let lastEvents: AgentRunEvent[] = [];
+
+    try {
+      await watchAgentRun(
+        client,
+        run.run_id,
+        ({ run: live, events }) => {
+          lastEvents = events;
+          const tapeText = formatActivityTape(locale, live, events);
+          setBlocks((prev) =>
+            prev.map((block) => {
+              if (block.id === runMetaId) {
+                return { ...block, text: `Agent run: ${run.run_id} · ${live.state}` };
+              }
+              if (block.id === runTapeId) {
+                return { ...block, text: tapeText };
+              }
+              if (block.id === runOutputId) {
+                const last = events[events.length - 1];
+                const liveLine = last
+                  ? `[${live.state}] ${last.event_type}: ${last.message}`
+                  : `[${live.state}]`;
+                if (live.response?.trim()) {
+                  return { ...block, text: live.response.trim() };
+                }
+                return {
+                  ...block,
+                  text:
+                    locale === "ru"
+                      ? `Агент работает…\n${liveLine}`
+                      : `Agent is working…\n${liveLine}`,
+                };
+              }
+              return block;
+            })
+          );
+          if (events.length > 0 && events.length % 2 === 0) {
+            void refreshLiveChanges();
+          }
+        },
+        { pollMs: 500, timeoutSeconds: 900 }
+      );
+
+      const finalRun = await client.getAgentRun(run.run_id);
+      if (lastEvents.length === 0) {
+        lastEvents = await client.getAgentRunEvents(run.run_id);
+      }
+      const latestChanges = await refreshLiveChanges();
+      const finalTape = formatActivityTape(locale, finalRun, lastEvents);
+      const finalText =
+        finalRun.response?.trim() ||
+        (locale === "ru"
+          ? `Run завершён: ${finalRun.state}`
+          : `Run finished: ${finalRun.state}`);
+      const completion = buildCompletionSuggestions(locale, finalRun, lastEvents, latestChanges);
+
+      setBlocks((prev) => {
+        const hasSuggestions = prev.some((block) => block.id === runSuggestionsId);
+        const next = prev.map((block) => {
+          if (block.id === runMetaId) {
+            return { ...block, text: `Agent run: ${run.run_id} · ${finalRun.state}` };
+          }
+          if (block.id === runTapeId) {
+            return { ...block, text: finalTape };
+          }
+          if (block.id === runOutputId) {
+            return { ...block, text: finalText };
+          }
+          return block;
+        });
+        if (!hasSuggestions) {
+          next.push({
+            id: runSuggestionsId,
+            kind: "suggestions",
+            text: completion.text,
+            actions: completion.actions,
+          });
+        }
+        return next;
+      });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setBlocks((prev) =>
+        prev.map((block) => {
+          if (block.id === runMetaId) {
+            return { ...block, kind: "error", text: `Agent run: ${run.run_id} · failed` };
+          }
+          if (block.id === runTapeId) {
+            return { ...block, text: `${block.text}\n\n✗ ${text}` };
+          }
+          if (block.id === runOutputId) {
+            return { ...block, kind: "error", text };
+          }
+          return block;
+        })
+      );
+    }
+  };
+
+  const dispatchFollowUp = (prompt: string) => {
+    setDraft(prompt);
+    void (async () => {
+      setBusy(true);
+      setBlocks((prev) => [...prev, { id: blockId(), kind: "user", text: prompt }]);
+      try {
+        await runAgent(prompt);
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
+  const runJourneyWithAgent = async (journey: DesktopJourney) => {
+    if (!connected) {
+      return;
+    }
+    let agentId = selectedAgentId;
+    if (!agentId && agents.length > 0) {
+      agentId = agents[0].agent_id;
+      setSelectedAgentId(agentId);
+    }
+    if (!agentId) {
+      setBlocks((prev) => [
+        ...prev,
+        {
+          id: blockId(),
+          kind: "error",
+          text:
+            locale === "ru"
+              ? "Не удалось выбрать агента — будет создан автоматически при отправке задачи."
+              : "No agent selected — one will be created automatically when you send a task.",
+        },
+      ]);
+      return;
+    }
+    trackWorkflowEvent(client, {
+      event_type: "journey_started",
+      journey_id: journey.journey_id,
+      execution_mode: settings.executionMode,
+    });
+    const title = journeyTitle(journey, locale);
+    const desc = journeyDescription(journey, locale);
+    const steps = journey.steps.map((step) => `- ${stepLabel(locale, step)}`).join("\n");
+    const journeyPolicy =
+      settings.agentRunMode === "autopilot"
+        ? "autopilot"
+        : settings.policyPreset || "default";
+    const input =
+      locale === "ru"
+        ? `Выполни North Star сценарий «${title}».\n\nОписание: ${desc}\n\nШаги:\n${steps}\n\nWorkspace: ${settings.workspace || "(не выбран)"}\nРежим: ${settings.executionMode}\nPolicy: ${journeyPolicy}\n\nДоведи задачу до verify и краткого отчёта. Используй tool loop, apply_patch с preview, post-patch verify.`
+        : `Execute North Star journey "${title}".\n\nDescription: ${desc}\n\nSteps:\n${steps}\n\nWorkspace: ${settings.workspace || "(not set)"}\nMode: ${settings.executionMode}\nPolicy: ${journeyPolicy}\n\nComplete through verify and a short report. Use tool loop, apply_patch with preview, post-patch verify.`;
+    setAgentInput(input);
+    updateSettings({ activeJourneyId: journey.journey_id });
+    setDraft(input);
+    await runAgent(input, agentId);
   };
 
   return (
-    <div className="app">
+    <div className="cursor-app">
       {showWizard && (
         <FirstRunWizard
           settings={settings}
@@ -1233,17 +1995,109 @@ export function App() {
           onUpdate={updateSettings}
           onPickRepo={() => void pickRepoRoot()}
           onPickWorkspace={() => void pickWorkspace()}
-          onConnect={() => void connect()}
+          onConnect={() => void ensureApiReady()}
+          onToggleAutoStartServer={(enabled) => void toggleAutoStartServer(enabled)}
           onPullModel={(model) => void pullOllamaModel(model)}
-          onComplete={() => {
+          onComplete={async () => {
+            await syncLauncherConfig();
+            if (settings.autoStartServer && settings.repoRoot.trim()) {
+              await window.termitDesktop.ensureServer(settings.baseUrl);
+            }
+            if (settings.autoConnect) {
+              await connect();
+            }
             markFirstRunComplete();
             setShowWizard(false);
           }}
         />
       )}
-      <aside className="sidebar">
-        <h1>{t(locale, "appTitle")}</h1>
-        <p>{t(locale, "appSubtitle")}</p>
+      <nav className="cursor-rail" aria-label="Termit">
+        <button
+          type="button"
+          className="cursor-rail-btn primary"
+          title={locale === "ru" ? "Новый агент" : "New Agent"}
+          onClick={newChatSession}
+        >
+          +
+        </button>
+        {!connected ? (
+          <button
+            type="button"
+            className="cursor-rail-btn"
+            title={t(locale, "connect")}
+            onClick={() => void connect()}
+          >
+            ⎔
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="cursor-rail-btn"
+          title={locale === "ru" ? "Настройки" : "Settings"}
+          onClick={() => setSettingsOpen(true)}
+        >
+          ⚙
+        </button>
+        <div className="cursor-rail-spacer" />
+        <span
+          className={`cursor-rail-dot ${connected ? "ok" : apiReachable ? "ok" : "bad"}`}
+          title={statusLine}
+        />
+      </nav>
+
+      <aside className="cursor-sidebar" aria-label="Agent chats">
+        <div className="cursor-sidebar-top">
+          <h2>Termit</h2>
+          <input
+            className="cursor-sidebar-search"
+            placeholder={t(locale, "searchSessions")}
+            value={sessionSearch}
+            onChange={(event) => setSessionSearch(event.target.value)}
+          />
+        </div>
+        <div className="cursor-sidebar-list">
+          {chatFolders.map((folder) => (
+            <div key={folder.id} className="cursor-sidebar-folder">
+              <div className="cursor-sidebar-folder-name">{folder.label}</div>
+              {folder.sessions
+                .filter((session) =>
+                  !sessionSearch.trim()
+                    ? true
+                    : `${session.title} ${session.summary}`
+                        .toLowerCase()
+                        .includes(sessionSearch.trim().toLowerCase())
+                )
+                .map((session) => (
+                  <button
+                    key={session.localId}
+                    type="button"
+                    className={`cursor-thread ${activeLocalId === session.localId ? "active" : ""}`}
+                    onClick={() => switchChatSession(session.localId)}
+                  >
+                    <div className="cursor-thread-title">{session.title}</div>
+                    {session.summary ? (
+                      <div className="cursor-thread-meta">{session.summary}</div>
+                    ) : null}
+                  </button>
+                ))}
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {settingsOpen ? (
+        <div className="cursor-settings-backdrop" onClick={() => setSettingsOpen(false)}>
+          <aside
+            className="cursor-settings-panel sidebar"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="cursor-settings-header">
+              <strong>{locale === "ru" ? "Настройки Termit" : "Termit Settings"}</strong>
+              <button type="button" className="secondary compact" onClick={() => setSettingsOpen(false)}>
+                ×
+              </button>
+            </div>
+        <p className="hint">{t(locale, "appSubtitle")}</p>
 
         <div className="field">
           <label htmlFor="locale">{t(locale, "locale")}</label>
@@ -1261,46 +2115,143 @@ export function App() {
           {connected ? statusLine : apiReachable ? t(locale, "apiReachable") : t(locale, "apiOffline")}
         </div>
         <div className="health-indicators" aria-label="Service health">
-          <span className={`health-dot ${apiReachable ? "ok" : "bad"}`} title="Termit API" />
-          API {apiReachable ? "online" : "offline"}
-          <span className={`health-dot ${ollamaOk === true ? "ok" : ollamaOk === false ? "bad" : "unknown"}`} title="Ollama" />
-          Ollama {ollamaOk === true ? "ok" : ollamaOk === false ? "down" : "—"}
+          <span className={`health-dot ${apiReachable ? "ok" : "bad"}`} title={t(locale, "termitApiTitle")} />
+          API {apiReachable ? t(locale, "apiOnline") : t(locale, "apiOfflineShort")}
+          <span className={`health-dot ${ollamaOk === true ? "ok" : ollamaOk === false ? "bad" : "unknown"}`} title={t(locale, "ollamaTitle")} />
+          Ollama {ollamaOk === true ? t(locale, "ollamaOk") : ollamaOk === false ? t(locale, "ollamaDown") : t(locale, "ollamaUnknown")}
           {termitVersion && <span className="version-tag">v{termitVersion}</span>}
-          {settings.selectedModel && (
-            <span className="model-tag" title="Selected model">
-              {settings.selectedModel.replace(/^ollama:/, "")}
-            </span>
-          )}
         </div>
-        <HealthDashboard client={client} connected={connected} locale={locale} />
-        <KpiGatePanel client={client} connected={connected} locale={locale} />
-        <AgentObservabilityPanel client={client} connected={connected} locale={locale} />
-        {northStarJourneys.length > 0 ? (
-          <WorkflowHubPanel
-            journeys={northStarJourneys}
-            activeJourneyId={settings.activeJourneyId}
-            locale={locale}
-            onSelectJourney={(journeyId) => updateSettings({ activeJourneyId: journeyId })}
-            onOpenTab={setTab}
-          />
-        ) : null}
-        {connected && (
-          <ModelManager
-            client={client}
-            connected={connected}
-            locale={locale}
-            missingModels={missingOllamaModels}
-            onRefreshStatus={() => void connect()}
-          />
-        )}
-        {missingOllamaModels.length > 0 && (
-          <p className="hint error-text">
-            Missing Ollama: {missingOllamaModels.join(", ")} — run ollama pull …
-          </p>
-        )}
 
         <div className="field">
-          <label htmlFor="baseUrl">Termit API URL</label>
+          <label htmlFor="workspace">{t(locale, "workspaceFolder")}</label>
+          <input id="workspace" value={settings.workspace} readOnly />
+          <button type="button" className="secondary" onClick={() => void pickWorkspace()}>
+            {t(locale, "chooseFolder")}
+          </button>
+        </div>
+
+        <div className="field">
+          <label htmlFor="sidebarAgent">{locale === "ru" ? "Агент" : "Agent"}</label>
+          <select
+            id="sidebarAgent"
+            value={selectedAgentId ?? ""}
+            onChange={(event) => setSelectedAgentId(event.target.value || null)}
+          >
+            <option value="">{locale === "ru" ? "Автовыбор" : "Auto"}</option>
+            {agents.map((agent) => (
+              <option key={agent.agent_id} value={agent.agent_id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label htmlFor="executionModeMain">{t(locale, "executionMode")}</label>
+          <select
+            id="executionModeMain"
+            value={settings.executionMode}
+            onChange={(event) =>
+              updateSettings({
+                executionMode: event.target.value as StoredSettings["executionMode"],
+              })
+            }
+          >
+            <option value="hybrid">{executionModeLabel(locale, "hybrid")}</option>
+            <option value="local">{executionModeLabel(locale, "local")}</option>
+            <option value="online">{executionModeLabel(locale, "online")}</option>
+            <option value="ssh">{executionModeLabel(locale, "ssh")}</option>
+          </select>
+          <span className="hint">
+            {locale === "ru"
+              ? "Hybrid: plan → research online → файлы локально/SSH → verify → preview."
+              : "Hybrid: plan → online research → files local/SSH → verify → preview."}
+          </span>
+        </div>
+
+        {(settings.executionMode === "ssh" || settings.executionMode === "hybrid") && (
+          <div className="ssh-panel">
+            <div className="field">
+              <label htmlFor="sshHost">SSH host</label>
+              <input
+                id="sshHost"
+                value={settings.sshHost}
+                placeholder="203.0.113.10"
+                onChange={(event) => updateSettings({ sshHost: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="sshUser">SSH user</label>
+              <input
+                id="sshUser"
+                value={settings.sshUser}
+                placeholder="deploy"
+                onChange={(event) => updateSettings({ sshUser: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="sshRemotePath">{locale === "ru" ? "Путь на сервере" : "Remote path"}</label>
+              <input
+                id="sshRemotePath"
+                value={settings.sshRemotePath}
+                placeholder="/var/www/app"
+                onChange={(event) => updateSettings({ sshRemotePath: event.target.value })}
+              />
+            </div>
+            <div className="row">
+              <div className="field">
+                <label htmlFor="sshPort">Port</label>
+                <input
+                  id="sshPort"
+                  type="number"
+                  value={settings.sshPort}
+                  onChange={(event) =>
+                    updateSettings({ sshPort: Number(event.target.value) || 22 })
+                  }
+                />
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="sshIdentity">{locale === "ru" ? "SSH ключ (-i)" : "Identity file (-i)"}</label>
+              <input
+                id="sshIdentity"
+                value={settings.sshIdentity}
+                placeholder="~/.ssh/id_ed25519"
+                onChange={(event) => updateSettings({ sshIdentity: event.target.value })}
+              />
+            </div>
+            <button
+              type="button"
+              className="secondary compact"
+              disabled={!connected}
+              onClick={() => void testSshConnection()}
+            >
+              {locale === "ru" ? "Проверить SSH" : "Test SSH"}
+            </button>
+          </div>
+        )}
+
+        <div className="row">
+          <button type="button" className="primary" onClick={() => void connect()}>
+            {connected ? t(locale, "refreshConnection") : t(locale, "connect")}
+          </button>
+        </div>
+
+        <details className="settings-collapsible">
+          <summary>{locale === "ru" ? "Расширенные настройки" : "Advanced settings"}</summary>
+
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={settings.autoExecuteWithAgent}
+            onChange={(event) => updateSettings({ autoExecuteWithAgent: event.target.checked })}
+          />
+          {t(locale, "autoExecuteAgent")}
+        </label>
+        <p className="hint">{t(locale, "autoExecuteAgentHint")}</p>
+
+        <div className="field">
+          <label htmlFor="baseUrl">{t(locale, "apiUrl")}</label>
           <input
             id="baseUrl"
             value={settings.baseUrl}
@@ -1308,22 +2259,22 @@ export function App() {
           />
         </div>
         <div className="field">
-          <label htmlFor="apiKey">X-API-Key (optional)</label>
+          <label htmlFor="apiKey">{t(locale, "apiKey")}</label>
           <input
             id="apiKey"
             type="password"
             value={settings.apiKey}
-            placeholder="dev-key if auth enabled"
+            placeholder={t(locale, "apiKeyPlaceholder")}
             onChange={(event) => updateSettings({ apiKey: event.target.value })}
           />
-          <span className="hint">Only if TERMIT_AUTH_ENABLED=true in server .env</span>
+          <span className="hint">{t(locale, "apiKeyHint")}</span>
         </div>
 
         <div className="field">
-          <label htmlFor="repoRoot">Termit repo (for auto-start server)</label>
+          <label htmlFor="repoRoot">{t(locale, "repoRoot")}</label>
           <input id="repoRoot" value={settings.repoRoot} readOnly placeholder="/path/to/Termit" />
           <button type="button" className="secondary" onClick={() => void pickRepoRoot()}>
-            Choose repo
+            {t(locale, "chooseRepo")}
           </button>
         </div>
 
@@ -1333,7 +2284,7 @@ export function App() {
             checked={settings.autoStartServer}
             onChange={(event) => void toggleAutoStartServer(event.target.checked)}
           />
-          Start Termit server on app launch
+          {t(locale, "autoStartServer")}
         </label>
 
         <label className="checkbox-row">
@@ -1342,37 +2293,23 @@ export function App() {
             checked={settings.autoConnect}
             onChange={(event) => updateSettings({ autoConnect: event.target.checked })}
           />
-          Connect on launch
+          {t(locale, "connectOnLaunch")}
         </label>
 
         <div className="row">
           <button type="button" className="secondary" onClick={() => void startServer()}>
-            Start server now
+            {t(locale, "startServerNow")}
           </button>
         </div>
 
-        <div className="field">
-          <label htmlFor="workspace">Workspace folder (your code)</label>
-          <input id="workspace" value={settings.workspace} readOnly />
-          <button type="button" className="secondary" onClick={() => void pickWorkspace()}>
-            Choose folder
-          </button>
-        </div>
-
-        {settings.workspace && (
-          <ChangedFilesPanel
-            client={client}
-            connected={connected}
-            locale={locale}
-            onSelectFile={(path) => {
-              setEditorOpenPath(path);
-              setTab("editor");
-            }}
-          />
-        )}
+        <p className="hint">
+          <a href={settings.baseUrl} target="_blank" rel="noreferrer">
+            {t(locale, "wizardOpenWebDashboard")}
+          </a>
+        </p>
 
         <div className="field">
-          <label htmlFor="taskType">Default task type</label>
+          <label htmlFor="taskType">{t(locale, "defaultTaskType")}</label>
           <select
             id="taskType"
             value={settings.taskType}
@@ -1380,11 +2317,11 @@ export function App() {
               updateSettings({ taskType: event.target.value as TaskType })
             }
           >
-            <option value="coding">coding</option>
-            <option value="review">review</option>
-            <option value="debug">debug</option>
-            <option value="explain">explain</option>
-            <option value="general">general</option>
+            <option value="coding">{t(locale, "taskTypeCoding")}</option>
+            <option value="review">{t(locale, "taskTypeReview")}</option>
+            <option value="debug">{t(locale, "taskTypeDebug")}</option>
+            <option value="explain">{t(locale, "taskTypeExplain")}</option>
+            <option value="general">{t(locale, "taskTypeGeneral")}</option>
           </select>
         </div>
 
@@ -1394,7 +2331,7 @@ export function App() {
             checked={settings.useRetrieval}
             onChange={(event) => updateSettings({ useRetrieval: event.target.checked })}
           />
-          @codebase retrieval
+          {t(locale, "useRetrieval")}
         </label>
         <div className="row retrieval-row">
           <span className="badge">{retrievalMode}</span>
@@ -1404,65 +2341,139 @@ export function App() {
             disabled={!connected || reindexBusy}
             onClick={() => void reindexCodebase()}
           >
-            {reindexBusy ? "Reindex…" : "Reindex"}
+            {reindexBusy ? t(locale, "reindexing") : t(locale, "reindex")}
           </button>
         </div>
 
         {projectId && (
           <div className="field project-rules">
-            <label htmlFor="projectRules">Project rules ({projectId})</label>
+            <label htmlFor="projectRules">
+              {t(locale, "projectRules")} ({projectId})
+            </label>
             <textarea
               id="projectRules"
               rows={4}
               value={projectRulesText}
-              placeholder="Coding conventions, verify commands, architecture notes…"
+              placeholder={t(locale, "projectRulesPlaceholder")}
               onChange={(event) => setProjectRulesText(event.target.value)}
             />
-            <label htmlFor="userRules">User rules</label>
+            <label htmlFor="userRules">{t(locale, "userRules")}</label>
             <textarea
               id="userRules"
               rows={2}
               value={userRulesText}
-              placeholder="Reply in Russian, prefer minimal diffs…"
+              placeholder={t(locale, "userRulesPlaceholder")}
               onChange={(event) => setUserRulesText(event.target.value)}
             />
             <button
               type="button"
               className="secondary compact"
               disabled={!connected || rulesSaving}
+              onClick={() => void importCursorRules()}
+            >
+              {t(locale, "importCursorRules")}
+            </button>
+            <label>{t(locale, "projectSkillsLabel")}</label>
+            {platformSkills.length > 0 ? (
+              <div className="platform-skill-grid">
+                {platformSkills.map((skill) => (
+                  <label key={skill.skill_id} className="checkbox-row compact">
+                    <input
+                      type="checkbox"
+                      checked={selectedProjectSkills.includes(skill.skill_id)}
+                      onChange={() => toggleProjectSkill(skill.skill_id)}
+                    />
+                    {skill.name}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="hint">{t(locale, "noPlatformSkills")}</p>
+            )}
+            <button
+              type="button"
+              className="secondary compact"
+              disabled={!connected || rulesSaving}
               onClick={() => void saveProjectRules()}
             >
-              {rulesSaving ? "Saving…" : "Save rules"}
+              {rulesSaving ? t(locale, "saving") : t(locale, "saveRules")}
             </button>
           </div>
         )}
 
-        <div className="field">
-          <label>MCP servers</label>
-          {platformMcpServers.length > 0 ? (
+        <details className="settings-collapsible nested">
+          <summary>{locale === "ru" ? "Platform / MCP / ops" : "Platform / MCP / ops"}</summary>
+
+        <div className="field platform-panel">
+          <label>{t(locale, "platformPanelLabel")}</label>
+          <p className="hint">{platformStatus || t(locale, "platformNotLoaded")}</p>
+          <div className="row">
+            <button
+              type="button"
+              className="secondary compact"
+              disabled={!connected}
+              onClick={() => void refreshPlatformData(selectedAgentId)}
+            >
+              {t(locale, "refreshPlatform")}
+            </button>
+          </div>
+
+          <label>{t(locale, "skillsLabel")}</label>
+          {platformSkills.length > 0 ? (
             <ul className="muted compact-list">
-              {platformMcpServers.map((item) => (
-                <li key={item.server_id}>
-                  {item.name} · {item.command} {item.enabled ? "" : "(disabled)"}
+              {platformSkills.map((skill) => (
+                <li key={skill.skill_id}>
+                  {skill.name} · {skill.skill_id}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="hint">No MCP servers configured.</p>
+            <p className="hint">{t(locale, "noPlatformSkills")}</p>
+          )}
+
+          <label>{t(locale, "schedulesLabel")}</label>
+          {platformSchedules.length > 0 ? (
+            <ul className="muted compact-list">
+              {platformSchedules.map((item) => (
+                <li key={item.schedule_id}>
+                  {item.cron} · {item.agent_id} {item.enabled ? "" : t(locale, "mcpDisabled")}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="hint">{t(locale, "noSchedules")}</p>
+          )}
+
+          <label>{t(locale, "traceSpansLabel")}</label>
+          <pre className="platform-spans">{runSpansText || t(locale, "runSpansPlaceholder")}</pre>
+        </div>
+
+        <div className="field">
+          <label>{t(locale, "mcpServers")}</label>
+          {platformMcpServers.length > 0 ? (
+            <ul className="muted compact-list">
+              {platformMcpServers.map((item) => (
+                <li key={item.server_id}>
+                  {item.name} · {item.command} {item.enabled ? "" : t(locale, "mcpDisabled")}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="hint">{t(locale, "noMcp")}</p>
           )}
           <input
             value={mcpDraftName}
-            placeholder="Server name"
+            placeholder={t(locale, "mcpServerNamePlaceholder")}
             onChange={(event) => setMcpDraftName(event.target.value)}
           />
           <input
             value={mcpDraftCommand}
-            placeholder="Command (e.g. npx)"
+            placeholder={t(locale, "mcpCommandPlaceholder")}
             onChange={(event) => setMcpDraftCommand(event.target.value)}
           />
           <input
             value={mcpDraftArgs}
-            placeholder="Args (comma-separated)"
+            placeholder={t(locale, "mcpArgsPlaceholder")}
             onChange={(event) => setMcpDraftArgs(event.target.value)}
           />
           <div className="row">
@@ -1472,7 +2483,15 @@ export function App() {
               disabled={!connected || mcpSaving}
               onClick={() => void saveMcpServer()}
             >
-              {mcpSaving ? "Saving…" : "Add MCP server"}
+              {mcpSaving ? t(locale, "saving") : t(locale, "addMcp")}
+            </button>
+            <button
+              type="button"
+              className="secondary compact"
+              disabled={!connected || mcpImportBusy}
+              onClick={() => void importCursorMcp()}
+            >
+              {mcpImportBusy ? t(locale, "saving") : t(locale, "importCursorMcp")}
             </button>
             <button
               type="button"
@@ -1480,10 +2499,11 @@ export function App() {
               disabled={!connected}
               onClick={() => void refreshPlatformData(selectedAgentId)}
             >
-              Refresh MCP
+              {t(locale, "refreshMcp")}
             </button>
           </div>
         </div>
+        </details>
 
         <label className="checkbox-row">
           <input
@@ -1491,22 +2511,22 @@ export function App() {
             checked={settings.inlineCompletionEnabled}
             onChange={(event) => updateSettings({ inlineCompletionEnabled: event.target.checked })}
           />
-          Tab completion (Editor)
+          {t(locale, "tabCompletion")}
         </label>
 
         {repoProfiles.length > 0 && (
           <div className="field">
-            <label htmlFor="repoProfile">Repo profile (routing)</label>
+            <label htmlFor="repoProfile">{t(locale, "repoProfile")}</label>
             <select
               id="repoProfile"
               value={settings.repoProfile}
               onChange={(event) => updateSettings({ repoProfile: event.target.value })}
             >
-              <option value="">None</option>
+              <option value="">{t(locale, "noneOption")}</option>
               {repoProfiles.map((profile) => (
                 <option key={profile.profile_id} value={profile.profile_id}>
                   {profile.title}
-                  {profile.finetuned ? " · finetuned" : ""} → {profile.preferred_model}
+                  {profile.finetuned ? t(locale, "finetunedBadge") : ""} → {profile.preferred_model}
                 </option>
               ))}
             </select>
@@ -1514,38 +2534,47 @@ export function App() {
         )}
 
         <div className="field">
-          <label htmlFor="executionMode">Execution mode</label>
+          <label htmlFor="agentRunMode">{t(locale, "agentRunMode")}</label>
           <select
-            id="executionMode"
-            value={settings.executionMode}
+            id="agentRunMode"
+            value={settings.agentRunMode}
             onChange={(event) =>
               updateSettings({
-                executionMode: event.target.value as StoredSettings["executionMode"],
+                agentRunMode: event.target.value as StoredSettings["agentRunMode"],
               })
             }
           >
-            <option value="local">local</option>
-            <option value="hybrid">hybrid</option>
-            <option value="online">online</option>
+            <option value="guided">{t(locale, "agentRunModeGuided")}</option>
+            <option value="autopilot">{t(locale, "agentRunModeAutopilot")}</option>
           </select>
+          <p className="hint">
+            {t(
+              locale,
+              settings.agentRunMode === "autopilot"
+                ? "agentRunModeAutopilotHint"
+                : "agentRunModeGuidedHint"
+            )}
+          </p>
         </div>
 
         <PolicyPresetSelector
           presets={policyPresets}
-          value={settings.policyPreset}
+          value={settings.agentRunMode === "autopilot" ? "autopilot" : settings.policyPreset}
           locale={locale}
-          disabled={!connected}
+          disabled={!connected || settings.agentRunMode === "autopilot"}
           onChange={(presetId) => updateSettings({ policyPreset: presetId })}
         />
 
+        <MediaStudioPanel client={client} connected={connected} locale={locale} />
+
         <div className="field">
-          <label htmlFor="model">Model</label>
+          <label htmlFor="model">{t(locale, "model")}</label>
           <select
             id="model"
             value={settings.selectedModel}
             onChange={(event) => updateSettings({ selectedModel: event.target.value })}
           >
-            <option value="">Auto (router)</option>
+            <option value="">{t(locale, "modelAuto")}</option>
             {models.map((model) => (
               <option key={model} value={model}>
                 {model}
@@ -1553,391 +2582,114 @@ export function App() {
             ))}
           </select>
         </div>
-
-        <div className="row">
-          <button type="button" className="primary" onClick={() => void connect()}>
-            {connected ? "Refresh connection" : "Connect"}
-          </button>
-          <button
-            type="button"
-            className="secondary compact"
-            title="Open server logs"
-            onClick={() =>
-              void window.termitDesktop.openLogs().then((result) => {
-                if (result.path) {
-                  setStatusLine(`Log: ${result.path}`);
-                }
-              })
-            }
-          >
-            Logs
-          </button>
+        </details>
+          </aside>
         </div>
-      </aside>
+      ) : null}
 
-      <main className="main">
-        <div className="tabs">
-          {(["chat", "composer", "editor", "plan", "terminal", "tasks", "agents", "online"] as Tab[]).map((name) => (
-            <button
-              key={name}
-              type="button"
-              className={`tab ${tab === name ? "active" : ""}`}
-              onClick={() => setTab(name)}
-            >
-              {name.charAt(0).toUpperCase() + name.slice(1)}
+      <section className="cursor-main">
+        <header className="cursor-titlebar">
+          <h1>{activeChatTitle}</h1>
+          <span className="cursor-mode-badge">{settings.executionMode}</span>
+          {!connected ? (
+            <button type="button" className="secondary compact" onClick={() => void ensureApiReady()}>
+              {t(locale, "connect")}
             </button>
-          ))}
-        </div>
+          ) : null}
+        </header>
 
-        {tab === "chat" && (
-          <div className="chat-layout">
-            <aside className="chat-sessions" aria-label="Chat sessions">
-              <div className="chat-sessions-header">
-                <strong>{t(locale, "sessions")}</strong>
-                <button type="button" className="secondary compact" onClick={newChatSession}>
-                  {t(locale, "newSession")}
-                </button>
-              </div>
-              <input
-                className="chat-sessions-search"
-                placeholder={t(locale, "searchSessions")}
-                value={sessionSearch}
-                onChange={(event) => setSessionSearch(event.target.value)}
-              />
-              <div className="chat-sessions-list">
-                {filteredSessions.length === 0 ? (
-                  <div className="chat-session-item muted">No sessions yet.</div>
-                ) : (
-                  filteredSessions.map((session) => (
-                    <div
-                      key={session.localId}
-                      className={`chat-session-item ${activeLocalId === session.localId ? "active" : ""}`}
-                    >
-                      {renamingSessionId === session.localId ? (
-                        <div className="chat-session-rename">
-                          <input
-                            value={renameDraft}
-                            onChange={(event) => setRenameDraft(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                saveSessionRename(session.localId);
-                              }
-                            }}
-                          />
-                          <button type="button" className="secondary compact" onClick={() => saveSessionRename(session.localId)}>
-                            {t(locale, "save")}
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="chat-session-select"
-                          onClick={() => switchChatSession(session.localId)}
-                        >
-                          <strong>{session.title}</strong>
-                          {session.summary && <span className="muted">{session.summary}</span>}
-                          {session.sessionId && (
-                            <span className="muted session-id">{session.sessionId.slice(0, 8)}…</span>
-                          )}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="chat-session-rename-btn"
-                        aria-label={t(locale, "rename")}
-                        onClick={() => {
-                          setRenamingSessionId(session.localId);
-                          setRenameDraft(session.title);
-                        }}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        className="chat-session-delete"
-                        aria-label={`Delete ${session.title}`}
-                        onClick={() => deleteChatSession(session.localId)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </aside>
-            <div className="chat-main">
-            {settings.repoProfile && (
-              <p className="hint repo-hint">
-                Repo profile: <strong>{settings.repoProfile}</strong>
-                {repoProfiles.find((p) => p.profile_id === settings.repoProfile)?.preferred_model
-                  ? ` → ${repoProfiles.find((p) => p.profile_id === settings.repoProfile)?.preferred_model}`
-                  : ""}
-              </p>
-            )}
-            <div className="row chat-session-row">
-              <button type="button" className="secondary compact" onClick={newChatSession}>
-                New session
-              </button>
-              <span className="muted">session: {settings.sessionId || "auto"}</span>
-            </div>
-            <div className="chat-log">
+        <div className="cursor-chat-scroll" ref={chatLogRef}>
               {blocks.length === 0 ? (
-                <div className="message-block meta">
-                  Connect (or enable auto-connect), choose workspace, attach @files, chat with
-                  streaming. Models and finetune adapters load from Termit routing.
+                <div className="cursor-empty-state">
+                  {locale === "ru" ? (
+                    <>
+                      Опишите задачу — Termit спланирует, закодирует, проверит и покажет diff справа.
+                      <br />
+                      <br />
+                      <kbd>Enter</kbd> отправить · <kbd>Shift+Enter</kbd> новая строка · ⚙ workspace / SSH
+                    </>
+                  ) : (
+                    <>
+                      Describe your task — Termit plans, codes, verifies, and shows diffs on the right.
+                      <br />
+                      <br />
+                      <kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> newline · ⚙ workspace / SSH
+                    </>
+                  )}
                 </div>
               ) : (
                 blocks.map((block) => (
                   <div key={block.id} className={`message-block ${block.kind}`}>
-                    {block.kind === "user" && <strong>You</strong>}
-                    {block.kind === "assistant" && <strong>Termit</strong>}
-                    {block.kind === "error" && <strong>Error</strong>}
-                    {block.kind === "meta" && <strong>Info</strong>}
+                    {block.kind === "user" && <strong>{t(locale, "you")}</strong>}
+                    {block.kind === "assistant" && <strong>{t(locale, "termit")}</strong>}
+                    {block.kind === "tape" && (
+                      <strong>{locale === "ru" ? "Лента выполнения" : "Activity tape"}</strong>
+                    )}
+                    {block.kind === "suggestions" && (
+                      <strong>{locale === "ru" ? "Итог и рекомендации" : "Summary & next steps"}</strong>
+                    )}
+                    {block.kind === "error" && <strong>{t(locale, "error")}</strong>}
+                    {block.kind === "meta" && <strong>{t(locale, "info")}</strong>}
                     {"\n"}
                     {block.text}
+                    {block.kind === "suggestions" && block.actions && block.actions.length > 0 ? (
+                      <div className="chips suggestion-actions">
+                        {block.actions.map((action) => (
+                          <button
+                            key={`${block.id}-${action}`}
+                            type="button"
+                            className="chip primary compact"
+                            disabled={!connected || busy}
+                            onClick={() => dispatchFollowUp(action)}
+                          >
+                            {action.length > 48 ? `${action.slice(0, 48)}…` : action}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ))
               )}
-            </div>
-            <div className="composer">
-              {attachments.length > 0 && (
-                <div className="chips">
-                  {attachments.map((item) => (
-                    <span key={`${item.kind}-${item.path}-${item.label ?? ""}`} className="chip">
-                      @{item.label ?? item.path}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${item.path}`}
-                        onClick={() =>
-                          setAttachments((prev) => prev.filter((a) => a.path !== item.path))
-                        }
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="chips cross-platform-presets">
-                {CROSS_PLATFORM_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className="chip secondary compact"
-                    disabled={!connected || busy}
-                    title={preset.goal}
-                    onClick={() => {
-                      void (async () => {
-                        try {
-                          const text = await buildPresetDraft(client, preset);
-                          setDraft(text);
-                        } catch (error) {
-                          const detail =
-                            error instanceof Error ? error.message : String(error);
-                          setBlocks((prev) => [
-                            ...prev,
-                            { id: blockId(), kind: "error", text: detail },
-                          ]);
-                        }
-                      })();
-                    }}
-                  >
-                    {locale === "ru" ? preset.labelRu : preset.labelEn}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="chip primary compact"
-                  disabled={!connected || busy || atomicBusy || !settings.workspace}
-                  title={
-                    locale === "ru"
-                      ? "Все атомарные шаги через agent + verify"
-                      : "Run all atomic steps via agent with verify"
-                  }
-                  onClick={() => {
-                    void (async () => {
-                      const preset = CROSS_PLATFORM_PRESETS[0];
-                      if (!preset) {
-                        return;
-                      }
-                      setAtomicBusy(true);
-                      setAtomicProgress(
-                        locale === "ru" ? "Старт atomic workflow…" : "Starting atomic workflow…"
-                      );
-                      try {
-                        const result = await launchCrossPlatformPreset(client, preset, {
-                          stopOnVerifyFailure: true,
-                          onStep: (index, task) => {
-                            setAtomicProgress(
-                              `${index + 1}: ${task.title} (${task.step_id})`
-                            );
-                          },
-                          onVerify: (index, task, verify) => {
-                            setAtomicProgress(
-                              `${index + 1}: ${task.step_id} verify ${verify.ok ? "OK" : "FAIL"} — ${verify.detail}`
-                            );
-                          },
-                        });
-                        setBlocks((prev) => [
-                          ...prev,
-                          {
-                            id: blockId(),
-                            kind: "meta",
-                            text:
-                              (locale === "ru"
-                                ? `Atomic workflow: ${result.steps.length} шагов`
-                                : `Atomic workflow: ${result.steps.length} steps`) +
-                              (result.aborted ? " (остановлен на verify)" : " (готово)"),
-                          },
-                        ]);
-                      } catch (error) {
-                        const detail =
-                          error instanceof Error ? error.message : String(error);
-                        setBlocks((prev) => [
-                          ...prev,
-                          { id: blockId(), kind: "error", text: detail },
-                        ]);
-                      } finally {
-                        setAtomicBusy(false);
-                        setAtomicProgress("");
-                      }
-                    })();
-                  }}
-                >
-                  {locale === "ru" ? "▶ Atomic (Flutter)" : "▶ Atomic (Flutter)"}
-                </button>
-              </div>
-              {atomicProgress ? (
-                <div className="message-block meta">{atomicProgress}</div>
-              ) : null}
-              <textarea
-                value={draft}
-                placeholder="Ask Termit to implement, review, or debug..."
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                    event.preventDefault();
-                    void sendChat();
-                  }
-                }}
-              />
-              <div className="composer-actions">
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={!connected || busy}
-                  onClick={() => void sendChat()}
-                >
-                  Send
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={!connected}
-                  onClick={() => void attachFile()}
-                >
-                  {t(locale, "attachFile")}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={!connected}
-                  onClick={() => void attachFolder()}
-                >
-                  {t(locale, "attachFolder")}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={!connected}
-                  onClick={() => void attachSymbol()}
-                >
-                  {t(locale, "attachSymbol")}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={!connected}
-                  onClick={() => void attachDocs()}
-                >
-                  {t(locale, "attachDocs")}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={!connected}
-                  onClick={() => void attachWeb()}
-                >
-                  {t(locale, "attachWeb")}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={!connected || !draft.trim()}
-                  onClick={() => void queueTask()}
-                >
-                  Queue task
-                </button>
-              </div>
-              <p className="hint">Cmd/Ctrl+Enter to send · session: {settings.sessionId || "auto"}</p>
-            </div>
-            </div>
-          </div>
-        )}
+        </div>
 
-        {tab === "composer" && (
-          <div className="panel-body">
-            {settings.repoProfile && (
-              <p className="hint repo-hint">
-                Repo profile: <strong>{settings.repoProfile}</strong>
-                {repoProfiles.find((p) => p.profile_id === settings.repoProfile)?.preferred_model
-                  ? ` → ${repoProfiles.find((p) => p.profile_id === settings.repoProfile)?.preferred_model}`
-                  : ""}
-              </p>
-            )}
-            <p className="hint">
-              Composer: attach several @files, describe a multi-file change, review patches, apply all.
-            </p>
-            {safeApplySummary ? (
-              <p className="hint safe-apply-hint">{formatSafeApplyHint(safeApplySummary, locale)}</p>
-            ) : null}
-            {contextSuggestions.length > 0 ? (
-              <div className="chips context-suggestions">
-                <span className="muted">{t(locale, "contextSuggestions")}:</span>
-                {contextSuggestions.map((item) => (
-                  <button
-                    key={item.path}
-                    type="button"
-                    className="chip secondary compact"
-                    disabled={!connected}
-                    onClick={() => {
-                      void (async () => {
-                        try {
-                          const file = await client.readFile({ path: item.path, max_bytes: 12000 });
-                          setComposerFiles((prev) => [
-                            ...prev.filter((entry) => entry.path !== item.path),
-                            { path: item.path, content: file.content },
-                          ]);
-                        } catch (error) {
-                          const text = error instanceof Error ? error.message : String(error);
-                          setComposerLog(text);
-                        }
-                      })();
-                    }}
-                  >
-                    @{item.path}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+        <footer className="cursor-footer">
+          {busy ? (
+            <div className="cursor-review-bar">
+              {locale === "ru" ? "⏳ Агент работает…" : "⏳ Agent working…"}
+            </div>
+          ) : liveChanges.length > 0 || reviewStats.added > 0 || reviewStats.deleted > 0 ? (
+            <div className="cursor-review-bar">
+              <span>{locale === "ru" ? "Review" : "Review"}</span>
+              {reviewStats.added > 0 ? (
+                <span className="review-add">+{reviewStats.added}</span>
+              ) : null}
+              {reviewStats.deleted > 0 ? (
+                <span className="review-del">-{reviewStats.deleted}</span>
+              ) : null}
+              <span className="review-files">
+                {liveChanges.length} {locale === "ru" ? "файлов" : "files"}
+              </span>
+              <button
+                type="button"
+                className="secondary compact"
+                disabled={!connected || liveChangesLoading}
+                onClick={() => void refreshLiveChanges()}
+              >
+                ↻
+              </button>
+            </div>
+          ) : null}
+
+          {attachments.length > 0 ? (
             <div className="chips">
-              {composerFiles.map((file) => (
-                <span key={file.path} className="chip">
-                  @{file.path}
+              {attachments.map((item) => (
+                <span key={`${item.kind}-${item.path}-${item.label ?? ""}`} className="chip">
+                  @{item.label ?? item.path}
                   <button
                     type="button"
+                    aria-label={`Remove ${item.path}`}
                     onClick={() =>
-                      setComposerFiles((prev) => prev.filter((item) => item.path !== file.path))
+                      setAttachments((prev) => prev.filter((a) => a.path !== item.path))
                     }
                   >
                     ×
@@ -1945,341 +2697,154 @@ export function App() {
                 </span>
               ))}
             </div>
-            <div className="row">
-              <button type="button" className="secondary" disabled={!connected} onClick={() => void attachComposerFile()}>
-                @ add file
-              </button>
-              <button type="button" className="secondary" onClick={() => setComposerFiles([])}>
-                Clear files
-              </button>
-            </div>
+          ) : null}
+
+          <div className="cursor-composer">
             <textarea
-              value={composerInput}
-              placeholder="Refactor auth across api/ and tests/..."
-              onChange={(event) => setComposerInput(event.target.value)}
-            />
-            <div className="row">
-              <button
-                type="button"
-                className="primary"
-                disabled={!connected || composerBusy || !composerInput.trim()}
-                onClick={() => void runComposer()}
-              >
-                Run Composer
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={!connected || composerPatches.length === 0 || !safeApplySummary?.canApplyAll}
-                onClick={() => void applyAllComposerPatches()}
-              >
-                Apply all ({composerPatches.length})
-              </button>
-              <button
-                type="button"
-                className="danger"
-                disabled={!connected || Object.keys(composerBackups).length === 0}
-                onClick={() => void rollbackComposerPatches()}
-              >
-                Rollback
-              </button>
-            </div>
-            {composerPatches.length > 0 && (
-              <div className="composer-preview-list">
-                <strong>Preview before apply:</strong>
-                <ul>
-                  {composerPatches.map((patch) => {
-                    const preview = composerPatchPreviews[patch.path];
-                    return (
-                      <li key={patch.path}>
-                        {patch.path}
-                        {preview ? ` · risk ${preview.risk_level} · dry-run ok` : " · pending"}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-            <pre className="detail-box composer-log">{composerLog}</pre>
-            <div className="list">
-              {composerPatches.length === 0 ? (
-                <div className="list-item muted">Patches appear after Composer run.</div>
-              ) : (
-                composerPatches.map((patch) => (
-                  <div key={patch.path} className="list-item composer-patch-row">
-                    <button type="button" className="list-item-main" onClick={() => void previewComposerPatch(patch)}>
-                      <strong>{patch.path}</strong>
-                      <span className="muted">
-                        {composerPatchPreviews[patch.path]
-                          ? `risk ${composerPatchPreviews[patch.path].risk_level}`
-                          : patch.content !== undefined
-                            ? "full file"
-                            : `${patch.hunks?.length ?? 0} hunk(s)`}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary compact"
-                      disabled={!connected}
-                      onClick={() => void applyComposerPatch(patch)}
-                    >
-                      {t(locale, "applyOne")}
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-            <pre className="detail-box">{composerPatchDetail}</pre>
-          </div>
-        )}
-
-        {tab === "plan" && (
-          <PlanPanel
-            client={client}
-            connected={connected}
-            locale={locale}
-            sessionId={settings.sessionId}
-            selectedModel={settings.selectedModel}
-            repoProfile={settings.repoProfile}
-            projectId={projectId}
-            onSessionId={(id) => updateSettings({ sessionId: id })}
-            onBuild={(planText) => {
-              setComposerInput(planText);
-              setTab("composer");
-            }}
-            onBuildAndVerify={(planText) => {
-              setComposerInput(planText);
-              setPendingVerifyCommands(DEFAULT_VERIFY_COMMANDS);
-              setTab("composer");
-            }}
-          />
-        )}
-
-        {tab === "terminal" && (
-          <TerminalPanel
-            client={client}
-            connected={connected}
-            locale={locale}
-            suggestedCommands={pendingVerifyCommands}
-          />
-        )}
-
-        {tab === "editor" && (
-          <EditorPanel
-            client={client}
-            connected={connected}
-            workspace={settings.workspace}
-            selectedModel={settings.selectedModel}
-            sessionId={settings.sessionId}
-            inlineCompletionEnabled={settings.inlineCompletionEnabled}
-            onSessionId={(id) => updateSettings({ sessionId: id })}
-            openPath={editorOpenPath}
-            onOpenPathConsumed={() => setEditorOpenPath(null)}
-          />
-        )}
-
-        {tab === "tasks" && (
-          <div className="panel-body">
-            <div className="row">
-              <button type="button" className="secondary" disabled={!connected} onClick={() => void refreshTasks()}>
-                Refresh
-              </button>
-            </div>
-            <div className="list">
-              {tasks.length === 0 ? (
-                <div className="list-item muted">No tasks yet.</div>
-              ) : (
-                tasks.map((task) => (
-                  <button
-                    key={task.task_id}
-                    type="button"
-                    className="list-item"
-                    onClick={async () => {
-                      const detail = await client.getTask(task.task_id);
-                      setTaskDetail(
-                        [
-                          `task_id: ${detail.task_id}`,
-                          `state: ${detail.state}`,
-                          `type: ${detail.task_type}`,
-                          detail.error ? `error: ${detail.error}` : "",
-                          detail.report ? `report:\n${detail.report}` : "",
-                        ]
-                          .filter(Boolean)
-                          .join("\n")
-                      );
-                    }}
-                  >
-                    <strong>{task.task_id}</strong>
-                    <span className="muted">
-                      {task.state} · {task.task_type}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-            <pre className="detail-box">{taskDetail}</pre>
-          </div>
-        )}
-
-        {tab === "agents" && (
-          <div className="panel-body">
-            <div className="row">
-              <button type="button" className="secondary" disabled={!connected} onClick={() => void refreshAgents()}>
-                Refresh agents
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={!connected}
-                onClick={() => void refreshPlatformData(selectedAgentId)}
-              >
-                Refresh platform
-              </button>
-            </div>
-            <p className="muted">{platformStatus}</p>
-            {platformSkills.length > 0 ? (
-              <p className="muted">Skills: {platformSkills.map((item) => item.skill_id).join(", ")}</p>
-            ) : null}
-            {platformMcpServers.length > 0 ? (
-              <p className="muted">
-                MCP: {platformMcpServers.map((item) => `${item.name}(${item.server_id})`).join(", ")}
-              </p>
-            ) : null}
-            {platformSchedules.length > 0 ? (
-              <p className="muted">
-                Schedules: {platformSchedules.map((item) => `${item.cron}→${item.agent_id}`).join(", ")}
-              </p>
-            ) : null}
-            <div className="field">
-              <label htmlFor="agentPicker">Agent profile</label>
-              <select
-                id="agentPicker"
-                value={selectedAgentId ?? ""}
-                onChange={(event) => {
-                  const id = event.target.value || null;
-                  setSelectedAgentId(id);
-                  const agent = agents.find((item) => item.agent_id === id);
-                  if (agent) {
-                    setAgentDetail(formatAgentProfileDetail(agent));
-                    void refreshAgentRuns(agent.agent_id);
+              value={draft}
+              placeholder={
+                blocks.length > 0
+                  ? locale === "ru"
+                    ? "Send follow-up…"
+                    : "Send follow-up…"
+                  : locale === "ru"
+                    ? "Создай сайт, API, программу… Termit сделает plan → code → verify"
+                    : "Build a site, API, app… Termit runs plan → code → verify"
+              }
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  if (draft.trim() && !busy) {
+                    void sendChat();
                   }
-                }}
+                }
+              }}
+            />
+            <div className="cursor-composer-toolbar">
+              <button
+                type="button"
+                className="secondary compact"
+                disabled={!connected}
+                title={locale === "ru" ? "Прикрепить файл" : "Attach file"}
+                onClick={() => void attachFile()}
               >
-                <option value="">Select agent…</option>
+                +
+              </button>
+              <select
+                value={settings.chatInteractionMode}
+                onChange={(event) =>
+                  updateSettings({
+                    chatInteractionMode: event.target.value as StoredSettings["chatInteractionMode"],
+                  })
+                }
+                title={t(locale, "chatInteractionMode")}
+              >
+                <option value="agent">{t(locale, "chatModeAgent")}</option>
+                <option value="ask">{t(locale, "chatModeAsk")}</option>
+              </select>
+              <select
+                value={selectedAgentId ?? ""}
+                onChange={(event) => setSelectedAgentId(event.target.value || null)}
+                title={locale === "ru" ? "Агент" : "Agent"}
+              >
+                <option value="">{locale === "ru" ? "Агент: авто" : "Agent: auto"}</option>
                 {agents.map((agent) => (
                   <option key={agent.agent_id} value={agent.agent_id}>
-                    {agent.name} ({agent.agent_id})
+                    {agent.name}
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="list">
-              {agents.length === 0 ? (
-                <div className="list-item muted">No agents configured on server.</div>
-              ) : (
-                agents.map((agent) => (
-                  <button
-                    key={agent.agent_id}
-                    type="button"
-                    className={`list-item ${selectedAgentId === agent.agent_id ? "selected" : ""}`}
-                    onClick={() => {
-                      setSelectedAgentId(agent.agent_id);
-                      setAgentDetail(formatAgentProfileDetail(agent));
-                      void refreshAgentRuns(agent.agent_id);
-                    }}
-                  >
-                    <strong>{agent.name}</strong>
-                    <span className="muted">
-                      {agent.agent_id} · {agent.task_type}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-            <div className="list">
-              {agentRuns.length === 0 ? (
-                <div className="list-item muted">Select an agent to list recent runs.</div>
-              ) : (
-                agentRuns.map((run) => (
-                  <button
-                    key={run.run_id}
-                    type="button"
-                    className={`list-item ${watchedRunId === run.run_id ? "selected" : ""}`}
-                    onClick={() => setWatchedRunId(run.run_id)}
-                  >
-                    <strong>{run.run_id}</strong>
-                    <span className="muted">
-                      {run.state} · {run.updated_at}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-            {selectedAgentId ? (
-              <p className="muted">
-                Step budget: {toolStepCount} /{" "}
-                {agents.find((item) => item.agent_id === selectedAgentId)?.max_tool_steps ?? 6}
-                {watchedRunState ? ` · run ${watchedRunState}` : ""}
-              </p>
-            ) : null}
-            <textarea
-              value={agentInput}
-              placeholder="Prompt for selected agent..."
-              onChange={(event) => setAgentInput(event.target.value)}
-            />
-            <div className="row">
+              <select
+                value={settings.selectedModel}
+                onChange={(event) => updateSettings({ selectedModel: event.target.value })}
+                title={t(locale, "model")}
+              >
+                <option value="">{t(locale, "modelAuto")}</option>
+                {models.map((model) => (
+                  <option key={model} value={model}>
+                    {model.replace(/^ollama:/, "")}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
-                className="primary"
-                disabled={!connected || !selectedAgentId || !agentInput.trim()}
-                onClick={() => void runAgent()}
+                className="secondary compact"
+                disabled={!connected || busy || !draft.trim()}
+                onClick={() => void runChatAsAgent()}
+                title={t(locale, "runAsAgentHint")}
               >
-                Run agent
+                {t(locale, "runAsAgent")}
+              </button>
+              <button
+                type="button"
+                className="cursor-send-btn"
+                disabled={!connected || busy || !draft.trim()}
+                onClick={() => void sendChat()}
+              >
+                {busy
+                  ? "…"
+                  : settings.chatInteractionMode === "ask"
+                    ? t(locale, "sendAsk")
+                    : locale === "ru"
+                      ? "Отправить"
+                      : "Send"}
               </button>
             </div>
-            <pre className="detail-box">{agentDetail}</pre>
-            {awaitingConfirmationRunId ? (
-              <div className="row">
-                <button type="button" className="primary" onClick={() => void confirmAgentRun(true)}>
-                  Approve risky tool
-                </button>
-                <button type="button" className="secondary" onClick={() => void confirmAgentRun(false)}>
-                  Reject
-                </button>
-              </div>
-            ) : null}
-            {watchedRunId &&
-            (watchedRunState === "failed" ||
-              watchedRunState === "cancelled" ||
-              agentRuns.find((run) => run.run_id === watchedRunId)?.state === "failed" ||
-              agentRuns.find((run) => run.run_id === watchedRunId)?.state === "cancelled") ? (
-              <div className="row">
-                <button type="button" className="primary" onClick={() => void resumeAgentRun()}>
-                  Resume run
-                </button>
-              </div>
-            ) : null}
-            {checkpointLine ? (
-              <p className="hint">
-                {t(locale, "checkpointAvailable")}: {checkpointLine}
-              </p>
-            ) : null}
-            <pre className="detail-box">{agentTimeline}</pre>
-            <pre className="detail-box">{runSpansText}</pre>
           </div>
-        )}
 
-        {tab === "online" && (
-          <OnlineAcceleratorPanel
-            client={client}
-            connected={connected}
-            locale={locale}
-            watchedRunId={watchedRunId}
-            team={settings.teamName}
-            onTeamChange={(team) => updateSettings({ teamName: team })}
-          />
-        )}
-      </main>
+          <div className="cursor-statusbar">
+            <span>{workspacePrefix(settings.workspace) || (locale === "ru" ? "workspace не выбран" : "no workspace")}</span>
+            <span>·</span>
+            <span>{executionModeLabel(locale, settings.executionMode)}</span>
+            <span>·</span>
+            <span>{connected ? t(locale, "apiOnline") : t(locale, "apiOfflineShort")}</span>
+          </div>
+        </footer>
+      </section>
+
+      <aside className="cursor-review" aria-label="Review">
+        <div className="cursor-review-header">
+          <span>{locale === "ru" ? "Review" : "Review"}</span>
+          <button
+            type="button"
+            className="secondary compact"
+            disabled={!connected || liveChangesLoading}
+            onClick={() => void refreshLiveChanges()}
+          >
+            ↻
+          </button>
+        </div>
+        {liveChangesError ? <p className="hint error-text">{liveChangesError}</p> : null}
+        <div className="changed-files-list">
+          {liveChanges.length === 0 ? (
+            <div className="muted changed-files-empty">
+              {liveChangesLoading
+                ? "…"
+                : locale === "ru"
+                  ? "Изменения появятся после патчей агента"
+                  : "Changes appear after agent patches"}
+            </div>
+          ) : (
+            liveChanges.map((item) => (
+              <button
+                key={`${item.status}-${item.path}`}
+                type="button"
+                className={`changed-files-item ${selectedChangePath === item.path ? "selected" : ""}`}
+                title={item.path}
+                onClick={() => void openLiveChange(item.path)}
+              >
+                <span className="git-status">{item.status}</span>
+                {item.path}
+              </button>
+            ))
+          )}
+        </div>
+        <pre className="detail-box live-change-preview">
+          {selectedChangePreview ||
+            (locale === "ru" ? "Выберите файл для diff." : "Select a file to view diff.")}
+        </pre>
+      </aside>
     </div>
   );
 }

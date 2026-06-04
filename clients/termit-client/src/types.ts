@@ -108,7 +108,15 @@ export interface AgentRunRequest {
   use_tool_loop?: boolean;
   workspace_scope?: string;
   policy_preset?: string;
-  execution_mode?: "local" | "online" | "hybrid";
+  execution_mode?: "local" | "online" | "hybrid" | "ssh";
+  auto_confirm_risky_tools?: boolean;
+  verify_after_patch?: boolean;
+  ssh_host?: string;
+  ssh_user?: string;
+  ssh_port?: number;
+  ssh_identity?: string;
+  ssh_remote_path?: string;
+  run_mode?: "agent" | "ask" | "plan";
 }
 
 export interface AgentRunCreateResponse {

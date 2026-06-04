@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopNotificationPayload, LauncherConfig, TermitDesktopApi } from "../shared/ipc";
+import type { DesktopNotificationPayload, DocId, DocOpenResult, LauncherConfig, TermitDesktopApi } from "../shared/ipc";
 
 const api: TermitDesktopApi = {
   pickWorkspace: () => ipcRenderer.invoke("dialog:pickWorkspace") as Promise<string | null>,
@@ -17,6 +17,10 @@ const api: TermitDesktopApi = {
   showNotification: (payload: DesktopNotificationPayload) => {
     ipcRenderer.send("notify:show", payload);
   },
+  getDocFileUrl: (docId: DocId) => ipcRenderer.invoke("docs:fileUrl", docId) as Promise<string>,
+  getDocPath: (docId: DocId) => ipcRenderer.invoke("docs:path", docId) as Promise<string>,
+  openDocExternal: (docId: DocId) =>
+    ipcRenderer.invoke("docs:openExternal", docId) as Promise<DocOpenResult>,
 };
 
 contextBridge.exposeInMainWorld("termitDesktop", api);

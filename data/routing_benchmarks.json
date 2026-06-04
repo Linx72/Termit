@@ -1,13 +1,13 @@
 {
-  "version": 1,
-  "updated_at": "2026-05-30",
+  "version": 2,
+  "updated_at": "2026-06-03",
   "scores": {
-    "ollama:deepseek-coder": {
-      "coding": 0.93,
-      "debug": 0.88,
-      "review": 0.82,
-      "explain": 0.8,
-      "general": 0.84
+    "ollama:termit-core-ft": {
+      "coding": 0.96,
+      "debug": 0.92,
+      "review": 0.9,
+      "explain": 0.88,
+      "general": 0.9
     },
     "ollama:qwen2.5-coder": {
       "coding": 0.9,
@@ -22,6 +22,13 @@
       "review": 0.92,
       "explain": 0.9,
       "general": 0.88
+    },
+    "ollama:deepseek-coder": {
+      "coding": 0.93,
+      "debug": 0.88,
+      "review": 0.82,
+      "explain": 0.8,
+      "general": 0.84
     },
     "openai_compat:deepseek-ai/deepseek-coder-33b-instruct": {
       "coding": 0.94,

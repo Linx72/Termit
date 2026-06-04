@@ -81,7 +81,13 @@ class AgentPolicyPresetService:
             }
         )
         execution_mode = payload.execution_mode or preset.execution_mode
-        updated_payload = payload.model_copy(update={"execution_mode": execution_mode})
+        updated_payload = payload.model_copy(
+            update={
+                "execution_mode": execution_mode,
+                "auto_confirm_risky_tools": preset.auto_confirm_risky_tools,
+                "verify_after_patch": preset.verify_after_patch,
+            }
+        )
         return updated_profile, updated_payload
 
     def preset_to_dict(self, preset: AgentPolicyPreset) -> dict[str, object]:

@@ -290,6 +290,40 @@ class AgentServiceTests(unittest.TestCase):
             restarted = service.queue_metrics()
             self.assertGreaterEqual(restarted["alive_workers"], 1)
 
+    def test_invoke_loop_tool_auto_confirms_apply_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            created = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="Loop",
+                    description="",
+                    system_prompt="test",
+                    task_type=TaskType.coding,
+                    enabled_tools=["apply_patch"],
+                    use_tool_loop=True,
+                )
+            )
+            service = AgentService(
+                chat_service=StubChatService(),
+                registry=registry,
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=StubBrowserWorkflow(),
+                max_concurrency=1,
+                verify_after_patch=False,
+            )
+            target = Path(tmp) / "sample.txt"
+            observation, _side_effects = service._invoke_loop_tool(
+                created.agent_id,
+                created,
+                "apply_patch",
+                {"path": "sample.txt", "content": "hello", "create": True},
+                auto_confirm_risky_tools=True,
+                verify_after_patch=False,
+            )
+            self.assertTrue(target.is_file())
+            self.assertIn('"applied": true', observation.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

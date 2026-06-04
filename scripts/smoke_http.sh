@@ -30,5 +30,10 @@ check /api/eval/dashboard
 check /api/desktop/journeys
 check /api/desktop/kpi-gates
 check /api/desktop/policy-presets
+check /api/ops/automation
+
+code="$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"event_type":"smoke_ping","journey_id":"local_feature"}' "$BASE_URL/api/desktop/workflow-events")"
+echo "POST /api/desktop/workflow-events -> HTTP $code"
+[[ "$code" == "200" ]]
 
 echo "OK"

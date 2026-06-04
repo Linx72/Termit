@@ -103,6 +103,8 @@ class Settings:
     eval_scenarios_path: str
     task_backend: str
     task_sqlite_path: str
+    teacher_model: str = "ollama:deepseek-coder"
+    teacher_fallback_model: str = "openai_compat:deepseek-ai/deepseek-coder-33b-instruct"
     agent_run_backend: str = "sqlite"
     agent_run_sqlite_path: str = "./termit_agent_runs.db"
     agent_registry_file_path: str = "./data/agents.json"
@@ -117,6 +119,7 @@ class Settings:
     agent_memory_max_entries: int = 50
     agent_eval_scenarios_path: str = "./data/agent_eval_scenarios.json"
     agent_verify_after_patch: bool = True
+    agent_auto_confirm_risky: bool = False
     agent_verify_cmd: str = "python3 -m unittest discover -s tests -q"
     dual_pass_enabled: bool = True
     dual_pass_task_types: str = "coding,review,debug"
@@ -210,6 +213,7 @@ class Settings:
     hooks_config_path: str = "./data/hooks/hooks.json"
     hooks_webhook_url: str = ""
     hooks_enabled: bool = True
+    automation_webhook_secret: str = ""
     guardrails_enabled: bool = True
     guardrails_max_patch_chars: int = 50000
     trace_spans_db_path: str = "./termit_trace_spans.db"
@@ -236,6 +240,29 @@ class Settings:
     daily_improvement_run_eval_probe: bool = True
     daily_improvement_auto_create_agent: bool = True
     daily_improvement_state_path: str = "./data/ops/daily_improvement_state.json"
+    skill_auto_select_enabled: bool = True
+    skill_auto_select_max: int = 3
+    skill_auto_select_min_score: float = 3.0
+    media_enabled: bool = False
+    media_storage: str = "./data/media"
+    media_max_cost_usd: float = 25.0
+    media_confirm_cost_usd: float = 1.0
+    media_image_provider: str = "openai"
+    media_image_model: str = "dall-e-3"
+    media_image_cost_usd: float = 0.08
+    media_tts_cost_usd: float = 0.015
+    media_transcribe_cost_usd: float = 0.006
+    media_tts_voice: str = "alloy"
+    ffmpeg_path: str = "ffmpeg"
+    ffprobe_path: str = "ffprobe"
+    fal_api_key: str = ""
+    media_jobs_db_path: str = "./data/media/media_jobs.db"
+    media_i2v_provider: str = "stub"
+    media_i2v_cost_usd: float = 0.50
+    media_brand_kits_dir: str = "./data/media/brand_kits"
+    media_eval_scenarios_path: str = "./data/eval_scenarios_media.json"
+    openai_api_key: str = ""
+    openai_api_base_url: str = "https://api.openai.com/v1"
 
 
 def get_settings() -> Settings:
@@ -243,20 +270,25 @@ def get_settings() -> Settings:
         host=os.getenv("TERMIT_HOST", "0.0.0.0"),
         port=int(os.getenv("TERMIT_PORT", "8765")),
         allowed_origins=_split_csv(os.getenv("TERMIT_ALLOWED_ORIGINS", "*")),
-        default_model=os.getenv("TERMIT_DEFAULT_MODEL", "ollama:deepseek-coder"),
-        code_model=os.getenv("TERMIT_CODE_MODEL", "ollama:deepseek-coder"),
-        analysis_model=os.getenv("TERMIT_ANALYSIS_MODEL", "ollama:qwen2.5-coder"),
+        default_model=os.getenv("TERMIT_DEFAULT_MODEL", "ollama:termit-core-ft"),
+        code_model=os.getenv("TERMIT_CODE_MODEL", "ollama:termit-core-ft"),
+        analysis_model=os.getenv("TERMIT_ANALYSIS_MODEL", "ollama:termit-core-ft"),
         default_fallback_model=os.getenv(
             "TERMIT_DEFAULT_FALLBACK_MODEL",
-            "openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct",
+            "ollama:qwen2.5-coder",
         ),
         code_fallback_model=os.getenv(
             "TERMIT_CODE_FALLBACK_MODEL",
-            "openai_compat:deepseek-ai/deepseek-coder-33b-instruct",
+            "ollama:qwen2.5-coder",
         ),
         analysis_fallback_model=os.getenv(
             "TERMIT_ANALYSIS_FALLBACK_MODEL",
             "openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct",
+        ),
+        teacher_model=os.getenv("TERMIT_TEACHER_MODEL", "ollama:deepseek-coder"),
+        teacher_fallback_model=os.getenv(
+            "TERMIT_TEACHER_FALLBACK_MODEL",
+            "openai_compat:deepseek-ai/deepseek-coder-33b-instruct",
         ),
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         openai_compat_base_url=os.getenv("OPENAI_COMPAT_BASE_URL", "http://localhost:8001"),
@@ -299,6 +331,8 @@ def get_settings() -> Settings:
             "./data/agent_eval_scenarios.json",
         ),
         agent_verify_after_patch=os.getenv("TERMIT_AGENT_VERIFY_AFTER_PATCH", "true").lower()
+        in {"1", "true", "yes"},
+        agent_auto_confirm_risky=os.getenv("TERMIT_AGENT_AUTO_CONFIRM_RISKY", "false").lower()
         in {"1", "true", "yes"},
         agent_verify_cmd=os.getenv(
             "TERMIT_AGENT_VERIFY_CMD",
@@ -516,6 +550,7 @@ def get_settings() -> Settings:
         hooks_config_path=os.getenv("TERMIT_HOOKS_CONFIG_PATH", "./data/hooks/hooks.json"),
         hooks_webhook_url=os.getenv("TERMIT_HOOKS_WEBHOOK_URL", ""),
         hooks_enabled=os.getenv("TERMIT_HOOKS_ENABLED", "true").lower() in {"1", "true", "yes"},
+        automation_webhook_secret=os.getenv("TERMIT_AUTOMATION_WEBHOOK_SECRET", ""),
         guardrails_enabled=os.getenv("TERMIT_GUARDRAILS_ENABLED", "true").lower() in {"1", "true", "yes"},
         guardrails_max_patch_chars=int(os.getenv("TERMIT_GUARDRAILS_MAX_PATCH_CHARS", "50000")),
         trace_spans_db_path=os.getenv("TERMIT_TRACE_SPANS_DB_PATH", "./termit_trace_spans.db"),
@@ -579,4 +614,36 @@ def get_settings() -> Settings:
             "TERMIT_DAILY_IMPROVEMENT_STATE_PATH",
             "./data/ops/daily_improvement_state.json",
         ),
+        skill_auto_select_enabled=os.getenv("TERMIT_SKILL_AUTO_SELECT_ENABLED", "true").lower()
+        in {"1", "true", "yes"},
+        skill_auto_select_max=max(1, int(os.getenv("TERMIT_SKILL_AUTO_SELECT_MAX", "3"))),
+        skill_auto_select_min_score=_parse_clamped_float_env(
+            "TERMIT_SKILL_AUTO_SELECT_MIN_SCORE",
+            3.0,
+            min_value=0.0,
+            max_value=100.0,
+        ),
+        media_enabled=os.getenv("TERMIT_MEDIA_ENABLED", "false").lower() in {"1", "true", "yes"},
+        media_storage=os.getenv("TERMIT_MEDIA_STORAGE", "./data/media"),
+        media_max_cost_usd=max(0.0, float(os.getenv("TERMIT_MEDIA_MAX_COST_USD", "25"))),
+        media_confirm_cost_usd=max(0.0, float(os.getenv("TERMIT_MEDIA_CONFIRM_COST_USD", "1"))),
+        media_image_provider=os.getenv("TERMIT_MEDIA_IMAGE_PROVIDER", "openai"),
+        media_image_model=os.getenv("TERMIT_MEDIA_IMAGE_MODEL", "dall-e-3"),
+        media_image_cost_usd=max(0.0, float(os.getenv("TERMIT_MEDIA_IMAGE_COST_USD", "0.08"))),
+        media_tts_cost_usd=max(0.0, float(os.getenv("TERMIT_MEDIA_TTS_COST_USD", "0.015"))),
+        media_transcribe_cost_usd=max(0.0, float(os.getenv("TERMIT_MEDIA_TRANSCRIBE_COST_USD", "0.006"))),
+        media_tts_voice=os.getenv("TERMIT_MEDIA_TTS_VOICE", "alloy"),
+        ffmpeg_path=os.getenv("TERMIT_FFMPEG_PATH", "ffmpeg"),
+        ffprobe_path=os.getenv("TERMIT_FFPROBE_PATH", "ffprobe"),
+        fal_api_key=os.getenv("FAL_KEY", ""),
+        media_jobs_db_path=os.getenv("TERMIT_MEDIA_JOBS_DB_PATH", "./data/media/media_jobs.db"),
+        media_i2v_provider=os.getenv("TERMIT_MEDIA_I2V_PROVIDER", "stub"),
+        media_i2v_cost_usd=max(0.0, float(os.getenv("TERMIT_MEDIA_I2V_COST_USD", "0.50"))),
+        media_brand_kits_dir=os.getenv("TERMIT_MEDIA_BRAND_KITS_DIR", "./data/media/brand_kits"),
+        media_eval_scenarios_path=os.getenv(
+            "TERMIT_MEDIA_EVAL_SCENARIOS_PATH",
+            "./data/eval_scenarios_media.json",
+        ),
+        openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+        openai_api_base_url=os.getenv("OPENAI_API_BASE_URL", "https://api.openai.com/v1"),
     )

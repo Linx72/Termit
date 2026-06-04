@@ -1,6 +1,8 @@
 export type StoredChatBlock =
   | { id: string; kind: "user"; text: string }
   | { id: string; kind: "assistant"; text: string }
+  | { id: string; kind: "tape"; text: string }
+  | { id: string; kind: "suggestions"; text: string; actions?: string[] }
   | { id: string; kind: "meta" | "error"; text: string };
 
 export interface StoredChatSession {
@@ -8,6 +10,7 @@ export interface StoredChatSession {
   sessionId: string;
   title: string;
   summary: string;
+  agentFolder: string;
   blocks: StoredChatBlock[];
   updatedAt: number;
 }
@@ -25,8 +28,19 @@ export function loadChatSessions(): StoredChatSession[] {
     if (!raw) {
       return [];
     }
-    const parsed = JSON.parse(raw) as StoredChatSession[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as Array<Partial<StoredChatSession>>;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.map((item) => ({
+      localId: String(item.localId ?? newLocalId()),
+      sessionId: String(item.sessionId ?? ""),
+      title: String(item.title ?? "Новый чат"),
+      summary: String(item.summary ?? ""),
+      agentFolder: String(item.agentFolder ?? "General"),
+      blocks: Array.isArray(item.blocks) ? (item.blocks as StoredChatBlock[]) : [],
+      updatedAt: Number(item.updatedAt ?? Date.now()),
+    }));
   } catch {
     return [];
   }
@@ -77,6 +91,7 @@ export function createEmptySession(): StoredChatSession {
     sessionId: "",
     title: "Новый чат",
     summary: "",
+    agentFolder: "General",
     blocks: [],
     updatedAt: Date.now(),
   };

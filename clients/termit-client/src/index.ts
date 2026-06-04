@@ -46,3 +46,5 @@ export type {
   RunAtomicDevWorkflowParams,
 } from "./crossPlatform";
 export * from "./desktopOps";
+export * from "./opsAutomation";
+export * from "./mediaOps";

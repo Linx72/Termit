@@ -30,10 +30,10 @@ class EvalServiceTests(unittest.TestCase):
             retrieval_service=_RetrievalStub(),
         )
 
-    def test_lists_53_scenarios_from_file(self) -> None:
+    def test_lists_54_scenarios_from_file(self) -> None:
         service = self._build_service("./data/eval_scenarios.json", "./data/test_eval_reports.jsonl")
         scenarios = service.list_scenarios()
-        self.assertEqual(len(scenarios), 53)
+        self.assertEqual(len(scenarios), 54)
 
     def test_run_coding_scenario_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -116,7 +116,7 @@ class EvalServiceTests(unittest.TestCase):
             report_path = str(Path(tmp) / "reports.jsonl")
             service = self._build_service("./data/eval_scenarios.json", report_path)
             report = service.run_suite(persist_report=False)
-            self.assertEqual(report["total"], 53)
+            self.assertEqual(report["total"], 54)
             self.assertEqual(report["failed"], 0)
             self.assertEqual(report["pass_rate"], 1.0)
 

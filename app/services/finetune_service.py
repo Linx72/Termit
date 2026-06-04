@@ -817,6 +817,16 @@ class FinetuneService:
     def _append_pipeline_stage(self, run_id: str, stage: dict[str, str]) -> None:
         self._update_pipeline_run(run_id, append_stage=stage)
 
+    @staticmethod
+    def normalize_stage1_request(payload: FinetuneStage1RunRequest) -> FinetuneStage1RunRequest:
+        from app.core.model_roles import resolve_stage1_base_model
+        from app.state import get_settings
+
+        resolved = resolve_stage1_base_model(get_settings(), payload.base_model)
+        if resolved == payload.base_model:
+            return payload
+        return payload.model_copy(update={"base_model": resolved})
+
     def training_recipe(self, base_model: str) -> dict[str, object]:
         return {
             "base_model": base_model,
@@ -828,7 +838,7 @@ class FinetuneService:
             "modelfile_template": (
                 f"FROM {base_model.split(':', 1)[-1] if ':' in base_model else base_model}\n"
                 "PARAMETER temperature 0.2\n"
-                "SYSTEM You are a domain-specific coding assistant for this repository."
+                "SYSTEM You are the local Termit orchestrator runtime for this repository."
             ),
             "dataset_format": {
                 "instruction": "task description",
@@ -844,6 +854,7 @@ class FinetuneService:
         *,
         baseline_report: Optional[dict[str, object]] = None,
     ) -> dict[str, object]:
+        payload = self.normalize_stage1_request(payload)
         stages: list[dict[str, str]] = []
         created_at = datetime.now(timezone.utc).isoformat()
         pipeline_id = f"ftp_{uuid4().hex[:12]}"
@@ -1033,6 +1044,7 @@ class FinetuneService:
         }
 
     def enqueue_stage1_pipeline(self, payload: FinetuneStage1RunRequest) -> dict[str, object]:
+        payload = self.normalize_stage1_request(payload)
         now = datetime.now(timezone.utc).isoformat()
         run = FinetunePipelineRunRecord(
             run_id=f"ftpbg_{uuid4().hex[:12]}",

@@ -41,7 +41,7 @@ class OllamaProvider(BaseProvider):
         return data.get("message", {}).get("content", "").strip()
 
     def list_models(self) -> list[str]:
-        return ["ollama:deepseek-coder", "ollama:qwen2.5-coder", "ollama:codellama"]
+        return ["ollama:termit-core-ft", "ollama:qwen2.5-coder", "ollama:codellama"]
 
     async def check_health(self) -> tuple[bool, str]:
         try:

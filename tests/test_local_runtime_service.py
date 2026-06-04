@@ -86,12 +86,12 @@ class LocalRuntimeServiceTests(unittest.TestCase):
 
     def test_collect_required_ollama_models_deduplicates(self) -> None:
         names = LocalRuntimeService.collect_required_ollama_models(
-            default_model="ollama:deepseek-coder",
-            code_model="ollama:deepseek-coder",
+            default_model="ollama:termit-core-ft",
+            code_model="ollama:termit-core-ft",
             analysis_model="ollama:qwen2.5-coder",
             retrieval_embed_model="nomic-embed-text",
         )
-        self.assertEqual(names, ["deepseek-coder", "qwen2.5-coder", "nomic-embed-text"])
+        self.assertEqual(names, ["termit-core-ft", "qwen2.5-coder", "nomic-embed-text"])
 
     def test_check_required_models_reports_missing(self) -> None:
         responses = {

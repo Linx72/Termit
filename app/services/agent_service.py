@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from queue import Empty, Full
 from threading import Event, Lock, Thread
@@ -48,6 +49,8 @@ from app.services.agent_loop_service import (
 )
 from app.services.agent_memory_store import AgentMemoryStore
 from app.services.agent_run_notifier import AgentRunNotifier
+from app.services.build_workflow_service import BuildWorkflowService
+from app.services.ssh_workspace_service import SshWorkspaceConfig, SshWorkspaceService
 from app.services.browser_workflow_service import BrowserWorkflowService
 from app.services.playwright_browser_service import PlaywrightBrowserService, PlaywrightUnavailableError
 from app.services.chat_service import ChatService
@@ -56,6 +59,7 @@ from app.services.guardrail_service import GuardrailService
 from app.services.mcp_registry_service import McpRegistryService
 from app.services.search_provider import SearchProvider, StubSearchProvider
 from app.services.skill_store import SkillStore
+from app.services.skill_selector_service import SkillSelectorService, SkillSelectionResult
 from app.services.tooling_service import ToolingService
 from app.services.trace_span_store import TraceSpanStore
 from app.services.training_signal_store import TrainingSignalStore
@@ -94,6 +98,22 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_RISKY_LOOP_TOOLS = frozenset({"apply_patch", "execute_command", "browser_click"})
+_ASK_BLOCKED_TOOLS = frozenset(
+    {
+        "apply_patch",
+        "execute_command",
+        "browser_click",
+        "spawn_agent",
+        "web_automation",
+        "mcp_invoke",
+    }
+)
+_active_ssh_config: ContextVar[SshWorkspaceConfig | None] = ContextVar(
+    "active_ssh_config", default=None
+)
+
+
 class AgentService:
     def __init__(
         self,
@@ -116,9 +136,11 @@ class AgentService:
         patch_outcome_store: Optional[PatchOutcomeStore] = None,
         verify_after_patch: bool = False,
         verify_cmd: str = "",
+        auto_confirm_risky_tools: bool = False,
         guardrail_service: Optional[GuardrailService] = None,
         hook_service: Optional[AgentHookService] = None,
         skill_store: Optional[SkillStore] = None,
+        skill_selector: Optional[SkillSelectorService] = None,
         search_provider: Optional[SearchProvider] = None,
         mcp_registry: Optional[McpRegistryService] = None,
         trace_span_store: Optional[TraceSpanStore] = None,
@@ -126,6 +148,7 @@ class AgentService:
         guardrails_enabled: bool = True,
         default_repo_profile_id: Optional[str] = None,
         policy_preset_service: Optional[AgentPolicyPresetService] = None,
+        media_generation_service: Optional[object] = None,
     ) -> None:
         self._chat_service = chat_service
         self._registry = registry
@@ -147,16 +170,20 @@ class AgentService:
         self._patch_outcomes = patch_outcome_store
         self._verify_after_patch = verify_after_patch
         self._verify_cmd = verify_cmd.strip()
+        self._auto_confirm_risky_tools = auto_confirm_risky_tools
         self._guardrails = guardrail_service
         self._guardrails_enabled = guardrails_enabled
         self._hooks = hook_service
         self._skills = skill_store
+        self._skill_selector = skill_selector
         self._search = search_provider or StubSearchProvider()
         self._mcp = mcp_registry
         self._trace_spans = trace_span_store
         self._context_enrichment = context_enrichment
         self._default_repo_profile_id = (default_repo_profile_id or "").strip() or None
         self._policy_presets = policy_preset_service
+        self._media = media_generation_service
+        self._ssh = SshWorkspaceService(tooling)
         self._notifier = AgentRunNotifier.get()
         self._queue_capacity = max(1, max_queue_size)
         self._worker_count = max(1, max_concurrency)
@@ -536,6 +563,76 @@ class AgentService:
             return candidates[0], (candidates[1:] if len(candidates) > 1 else None)
         return router.select_model(profile.task_type, profile.model), None
 
+    def _resolve_ssh_config(self, payload: AgentRunRequest) -> SshWorkspaceConfig | None:
+        mode = (payload.execution_mode or "local").strip().lower()
+        cfg = SshWorkspaceService.from_run_payload(
+            ssh_host=payload.ssh_host,
+            ssh_user=payload.ssh_user,
+            ssh_remote_path=payload.ssh_remote_path,
+            ssh_port=payload.ssh_port,
+            ssh_identity=payload.ssh_identity,
+        )
+        if cfg is None:
+            return None
+        if mode in {"ssh", "hybrid"}:
+            return cfg
+        return None
+
+    def _prepare_run_payload(
+        self,
+        profile: AgentProfileResponse,
+        payload: AgentRunRequest,
+    ) -> tuple[AgentProfileResponse, AgentRunRequest]:
+        updated_profile = profile
+        updated_payload = payload
+        if BuildWorkflowService.is_build_task(payload.input):
+            cfg = SshWorkspaceService.from_run_payload(
+                ssh_host=payload.ssh_host,
+                ssh_user=payload.ssh_user,
+                ssh_remote_path=payload.ssh_remote_path,
+                ssh_port=payload.ssh_port,
+                ssh_identity=payload.ssh_identity,
+            )
+            ssh_label = f"{cfg.user}@{cfg.host}:{cfg.remote_path}" if cfg else ""
+            workspace = (
+                payload.workspace_scope
+                or payload.retrieval_path_prefix
+                or str(self._tooling.root)
+            )
+            enriched = BuildWorkflowService.enrich_agent_input(
+                payload.input,
+                execution_mode=payload.execution_mode or "local",
+                workspace=workspace,
+                ssh_label=ssh_label,
+            )
+            updated_payload = payload.model_copy(update={"input": enriched})
+        mode = (payload.execution_mode or "local").strip().lower()
+        if mode in {"hybrid", "online"} and profile.allow_online is False:
+            if BuildWorkflowService.is_build_task(payload.input) or mode == "online":
+                updated_profile = profile.model_copy(update={"allow_online": True})
+        return updated_profile, updated_payload
+
+    def _apply_run_mode(
+        self,
+        profile: AgentProfileResponse,
+        payload: AgentRunRequest,
+    ) -> tuple[AgentProfileResponse, AgentRunRequest]:
+        mode = (payload.run_mode or "agent").strip().lower()
+        if mode != "ask":
+            return profile, payload
+        allowed = [tool for tool in profile.enabled_tools if tool not in _ASK_BLOCKED_TOOLS]
+        ask_profile = profile.model_copy(
+            update={
+                "enabled_tools": allowed,
+                "system_prompt": (
+                    f"{profile.system_prompt}\n\n"
+                    "[Ask mode] Read-only tools only — no apply_patch, execute_command, "
+                    "spawn_agent, web_automation, or mcp_invoke."
+                ),
+            }
+        )
+        return ask_profile, payload
+
     async def _run_with_profile(
         self,
         profile: AgentProfileResponse,
@@ -547,8 +644,13 @@ class AgentService:
         if payload.online_url:
             return self._run_online_request(profile, payload)
 
+        profile, payload = self._apply_run_mode(profile, payload)
+
         if self._policy_presets is not None:
             profile, payload = self._policy_presets.apply_to_run(profile, payload)
+
+        profile, payload = self._prepare_run_payload(profile, payload)
+        ssh_token = _active_ssh_config.set(self._resolve_ssh_config(payload))
 
         use_loop = (
             profile.use_tool_loop
@@ -556,14 +658,23 @@ class AgentService:
             else payload.use_tool_loop
         )
         if use_loop:
-            return await self._run_with_tool_loop(
-                profile,
-                payload,
-                run_id=run_id,
-                attempt=attempt,
-            )
+            try:
+                return await self._run_with_tool_loop(
+                    profile,
+                    payload,
+                    run_id=run_id,
+                    attempt=attempt,
+                )
+            finally:
+                _active_ssh_config.reset(ssh_token)
 
+        _active_ssh_config.reset(ssh_token)
         resolved_model, _escalation = self._resolve_run_model(profile, payload)
+        skill_selection = self._resolve_mounted_skills(profile, payload)
+        system_prompt = profile.system_prompt
+        if skill_selection is not None and skill_selection.selected_skill_ids:
+            profile_with_skills = self._append_skill_block(profile, skill_selection.selected_skill_ids)
+            system_prompt = profile_with_skills.system_prompt
         chat_request = ChatRequest(
             message=payload.input,
             task_type=profile.task_type,
@@ -579,7 +690,7 @@ class AgentService:
             else profile.retrieval_path_prefix,
             temperature=payload.temperature if payload.temperature is not None else profile.temperature,
             max_tokens=payload.max_tokens if payload.max_tokens is not None else profile.max_tokens,
-            history=[ChatMessage(role="system", content=profile.system_prompt)],
+            history=[ChatMessage(role="system", content=system_prompt)],
         )
         result = await self._chat_service.chat(chat_request)
         return AgentRunResponse(
@@ -592,6 +703,45 @@ class AgentService:
             attempted_models=result.attempted_models,
             response=result.response,
         )
+
+    def _resolve_mounted_skills(
+        self,
+        profile: AgentProfileResponse,
+        payload: AgentRunRequest,
+    ) -> SkillSelectionResult | None:
+        if self._skill_selector is None or self._skills is None:
+            return None
+
+        pinned: list[str] = []
+        pinned.extend(profile.skill_ids)
+        pinned.extend(payload.skill_ids)
+        if self._context_enrichment is not None:
+            pinned.extend(self._context_enrichment.list_project_skill_ids(payload.project_id))
+
+        auto_enabled = (
+            payload.auto_select_skills
+            if payload.auto_select_skills is not None
+            else self._skill_selector.enabled
+        )
+        return self._skill_selector.select_skills(
+            instruction=payload.input,
+            task_type=profile.task_type,
+            pinned_skill_ids=pinned,
+            changed_files=list(payload.changed_files),
+            auto_select_enabled=auto_enabled,
+        )
+
+    def _append_skill_block(
+        self,
+        profile: AgentProfileResponse,
+        skill_ids: list[str],
+    ) -> AgentProfileResponse:
+        if not skill_ids or self._skills is None:
+            return profile
+        skill_block = self._skills.build_prompt_block(skill_ids)
+        if not skill_block:
+            return profile
+        return profile.model_copy(update={"system_prompt": f"{profile.system_prompt}\n\n{skill_block}"})
 
     async def _run_with_tool_loop(
         self,
@@ -611,11 +761,23 @@ class AgentService:
 
         resolved_model, escalation_models = self._resolve_run_model(profile, payload)
         profile_for_loop = profile.model_copy(update={"model": resolved_model})
-        if self._skills is not None and profile.skill_ids:
-            skill_block = self._skills.build_prompt_block(profile.skill_ids)
-            if skill_block:
-                profile_for_loop = profile_for_loop.model_copy(
-                    update={"system_prompt": f"{profile.system_prompt}\n\n{skill_block}"}
+
+        skill_selection = self._resolve_mounted_skills(profile, payload)
+        if skill_selection is not None and skill_selection.selected_skill_ids:
+            profile_for_loop = self._append_skill_block(profile_for_loop, skill_selection.selected_skill_ids)
+            if run_id:
+                self._append_event(
+                    run_id=run_id,
+                    event_type="skills_mounted",
+                    state=AgentRunState.running,
+                    message=json.dumps(
+                        {
+                            "skill_ids": skill_selection.selected_skill_ids,
+                            "selections": skill_selection.to_dict()["selections"],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    attempt=attempt,
                 )
 
         from app.services.cross_platform_dev_service import CrossPlatformDevService
@@ -623,11 +785,6 @@ class AgentService:
         if CrossPlatformDevService.is_cross_platform_task(payload.input):
             cp_service = CrossPlatformDevService()
             cp_block = cp_service.build_agent_context(payload.input)
-            skill_ids = set(profile.skill_ids)
-            if self._skills is not None and "cross-platform-atomic" not in skill_ids:
-                extra_skill = self._skills.build_prompt_block(["cross-platform-atomic"])
-                if extra_skill:
-                    cp_block = f"{extra_skill}\n\n{cp_block}"
             profile_for_loop = profile_for_loop.model_copy(
                 update={"system_prompt": f"{profile_for_loop.system_prompt}\n\n{cp_block}"}
             )
@@ -638,20 +795,42 @@ class AgentService:
                 memory_context = enrichment_lines + memory_context
 
         tools_schema = build_openai_tools(list(profile.enabled_tools))
-        configured_verify = self._verify_cmd if self._verify_after_patch else ""
+        run_verify_after_patch = (
+            payload.verify_after_patch
+            if payload.verify_after_patch is not None
+            else self._verify_after_patch
+        )
+        run_auto_confirm = (
+            payload.auto_confirm_risky_tools
+            if payload.auto_confirm_risky_tools is not None
+            else self._auto_confirm_risky_tools
+        )
+        configured_verify = self._verify_cmd if run_verify_after_patch else ""
         verify_cmd = resolve_verify_command(str(self._tooling.root), configured_verify)
 
         def verify_fn() -> tuple[bool, str]:
             if not verify_cmd:
                 return True, "Verify skipped: no command configured."
-            result = self._tooling.execute_command(
-                ExecuteCommandRequest(
-                    command=verify_cmd,
-                    path=".",
-                    dry_run=False,
-                    confirmed=True,
+            ssh_cfg = _active_ssh_config.get()
+            if ssh_cfg is not None:
+                result = self._ssh.execute_command(
+                    ssh_cfg,
+                    ExecuteCommandRequest(
+                        command=verify_cmd,
+                        path=".",
+                        dry_run=False,
+                        confirmed=True,
+                    ),
                 )
-            )
+            else:
+                result = self._tooling.execute_command(
+                    ExecuteCommandRequest(
+                        command=verify_cmd,
+                        path=".",
+                        dry_run=False,
+                        confirmed=True,
+                    )
+                )
             detail = (result.stdout or result.stderr or "")[:500]
             ok = not result.executed or result.exit_code == 0
             return ok, f"exit_code={result.exit_code}; {detail}"
@@ -668,6 +847,8 @@ class AgentService:
                     tool_name,
                     arguments,
                     run_id=run_id,
+                    auto_confirm_risky_tools=run_auto_confirm,
+                    verify_after_patch=run_verify_after_patch,
                 )
             except Exception as exc:
                 if self._trace_spans is not None and run_id:
@@ -685,6 +866,17 @@ class AgentService:
                     name=f"tool.{tool_name}",
                     status="ok",
                     duration_ms=int((time.perf_counter() - started) * 1000),
+                )
+            if self._hooks is not None and run_id:
+                self._hooks.emit(
+                    HookEvent(
+                        event_type="tool.post_use",
+                        run_id=run_id,
+                        agent_id=profile.agent_id,
+                        state=AgentRunState.running.value,
+                        message=f"tool={tool_name}",
+                        extra={"tool_name": tool_name, "arguments": arguments},
+                    )
                 )
             for event_type, message in side_effects:
                 if run_id:
@@ -838,9 +1030,13 @@ class AgentService:
         arguments: dict[str, object],
         *,
         run_id: str | None = None,
+        auto_confirm_risky_tools: bool = False,
+        verify_after_patch: bool | None = None,
     ) -> tuple[str, list[tuple[str, str]]]:
         side_effects: list[tuple[str, str]] = []
         self._ensure_tool_allowed(agent_id, tool_name)
+        if auto_confirm_risky_tools and tool_name in _RISKY_LOOP_TOOLS:
+            arguments = {**arguments, "confirmed": True}
         if tool_name in {
             "web_automation",
             "web_search",
@@ -931,6 +1127,166 @@ class AgentService:
                     summary=json.dumps(summary, ensure_ascii=True)[:8000],
                 )
             return json.dumps(summary, ensure_ascii=True), side_effects
+        if tool_name in {
+            "generate_image",
+            "list_media_assets",
+            "vision_qa_media",
+            "estimate_media_cost",
+            "tts_generate",
+            "transcribe_media",
+            "compose_media",
+            "render_video",
+            "wait_media_job",
+            "export_gif",
+            "run_storyboard",
+        }:
+            if self._media is None:
+                raise AgentPermissionError("Media Studio is not configured.")
+            from app.services.media_generation_service import (
+                MediaConfirmationRequired,
+                MediaStudioError,
+            )
+
+            media = self._media
+            try:
+                if tool_name == "generate_image":
+                    result = media.generate_image(
+                        prompt=str(arguments.get("prompt", "")),
+                        width=int(arguments.get("width", 1024)),
+                        height=int(arguments.get("height", 1024)),
+                        project_id=str(arguments.get("project_id", "default")),
+                        run_id=run_id,
+                        scene_id=str(arguments.get("scene_id", "")) or None,
+                        provider=str(arguments.get("provider", "")) or None,
+                        confirmed=bool(arguments.get("confirmed", False)),
+                        output_name=str(arguments.get("output_path", "")) or None,
+                    )
+                    payload_out = result.to_observation()
+                    side_effects.append(("generate_image", result.asset.asset_id))
+                    return json.dumps(payload_out, ensure_ascii=True), side_effects
+                if tool_name == "list_media_assets":
+                    items = media.list_assets(
+                        project_id=str(arguments.get("project_id", "")) or None,
+                        run_id=str(arguments.get("run_id", "")) or run_id,
+                        scene_id=str(arguments.get("scene_id", "")) or None,
+                        limit=int(arguments.get("limit", 50)),
+                    )
+                    payload_out = {"assets": [item.to_dict() for item in items]}
+                    return json.dumps(payload_out, ensure_ascii=True), side_effects
+                if tool_name == "vision_qa_media":
+                    qa = media.vision_qa_media(
+                        asset_id=str(arguments.get("asset_id", "")),
+                        criteria=str(arguments.get("criteria", "")),
+                        min_score=float(arguments.get("min_score", 0.75)),
+                    )
+                    return json.dumps(qa.to_observation(), ensure_ascii=True), side_effects
+                if tool_name == "estimate_media_cost":
+                    storyboard_path = str(arguments.get("storyboard_path", "")).strip()
+                    storyboard_raw = arguments.get("storyboard")
+                    if isinstance(storyboard_raw, dict):
+                        estimate = media.estimate_cost(storyboard=storyboard_raw)
+                    elif storyboard_path:
+                        estimate = media.estimate_cost(storyboard_path=storyboard_path)
+                    else:
+                        raise MediaStudioError(
+                            "estimate_media_cost requires storyboard_path or storyboard object."
+                        )
+                    return json.dumps(estimate.to_dict(), ensure_ascii=True), side_effects
+                if tool_name == "tts_generate":
+                    tts = media.tts_generate(
+                        text=str(arguments.get("text", "")),
+                        project_id=str(arguments.get("project_id", "default")),
+                        run_id=run_id,
+                        voice_id=str(arguments.get("voice_id", "")) or None,
+                        language=str(arguments.get("language", "ru")),
+                        confirmed=bool(arguments.get("confirmed", False)),
+                        provider=str(arguments.get("provider", "")) or None,
+                    )
+                    side_effects.append(("tts_generate", tts.asset.asset_id))
+                    return json.dumps(tts.to_observation(), ensure_ascii=True), side_effects
+                if tool_name == "transcribe_media":
+                    tr = media.transcribe_media(
+                        asset_id=str(arguments.get("asset_id", "")),
+                        project_id=str(arguments.get("project_id", "default")),
+                        run_id=run_id,
+                        language=str(arguments.get("language", "")) or None,
+                    )
+                    side_effects.append(("transcribe_media", tr.asset.asset_id))
+                    return json.dumps(tr.to_observation(), ensure_ascii=True), side_effects
+                if tool_name == "compose_media":
+                    timeline_raw = arguments.get("timeline")
+                    timeline = timeline_raw if isinstance(timeline_raw, dict) else None
+                    composed = media.compose_media(
+                        project_id=str(arguments.get("project_id", "default")),
+                        run_id=run_id,
+                        timeline_path=str(arguments.get("timeline_path", "")).strip() or None,
+                        timeline=timeline,
+                        output_name=str(arguments.get("output_name", "")) or None,
+                        preset=str(arguments.get("preset", "youtube_16x9")),
+                    )
+                    side_effects.append(("compose_media", composed.asset.asset_id))
+                    return json.dumps(composed.to_observation(), ensure_ascii=True), side_effects
+                if tool_name == "render_video":
+                    job = media.render_video(
+                        prompt=str(arguments.get("prompt", "")),
+                        project_id=str(arguments.get("project_id", "default")),
+                        run_id=run_id,
+                        scene_id=str(arguments.get("scene_id", "")) or None,
+                        source_asset_id=str(arguments.get("source_asset_id", "")) or None,
+                        mode=str(arguments.get("mode", "image_to_video")),
+                        duration_sec=float(arguments.get("duration_sec", 5)),
+                        provider=str(arguments.get("provider", "")) or None,
+                        confirmed=bool(arguments.get("confirmed", False)),
+                    )
+                    side_effects.append(("render_video", job.job_id))
+                    return json.dumps(job.to_dict(), ensure_ascii=True), side_effects
+                if tool_name == "wait_media_job":
+                    job = media.wait_media_job(
+                        job_id=str(arguments.get("job_id", "")),
+                        timeout_sec=int(arguments.get("timeout_sec", 600)),
+                    )
+                    return json.dumps(job.to_dict(), ensure_ascii=True), side_effects
+                if tool_name == "export_gif":
+                    raw_ids = arguments.get("asset_ids", [])
+                    asset_ids = [str(x) for x in raw_ids] if isinstance(raw_ids, list) else []
+                    gif_asset = media.export_gif(
+                        asset_ids=asset_ids,
+                        project_id=str(arguments.get("project_id", "default")),
+                        run_id=run_id,
+                        fps=int(arguments.get("fps", 8)),
+                        width=int(arguments.get("width", 480)),
+                    )
+                    return json.dumps(gif_asset.to_dict(), ensure_ascii=True), side_effects
+                if tool_name == "run_storyboard":
+                    sb_raw = arguments.get("storyboard")
+                    storyboard = sb_raw if isinstance(sb_raw, dict) else None
+                    master = media.run_storyboard(
+                        storyboard_path=str(arguments.get("storyboard_path", "")).strip() or None,
+                        storyboard=storyboard,
+                        project_id=str(arguments.get("project_id", "default")),
+                        run_id=run_id,
+                        brand_kit_id=str(arguments.get("brand_kit_id", "")) or None,
+                        max_scenes=int(arguments.get("max_scenes", 6)),
+                        confirmed=bool(arguments.get("confirmed", False)),
+                    )
+                    side_effects.append(("run_storyboard", master.asset.asset_id))
+                    return json.dumps(master.to_observation(), ensure_ascii=True), side_effects
+            except MediaConfirmationRequired as exc:
+                return (
+                    json.dumps(
+                        {
+                            "requires_confirmation": True,
+                            "message": str(exc),
+                            "tool": tool_name,
+                            "hint": "Re-call with confirmed=true after user approval.",
+                        },
+                        ensure_ascii=True,
+                    ),
+                    side_effects,
+                )
+            except MediaStudioError as exc:
+                raise AgentPermissionError(str(exc)) from exc
+            raise AgentPermissionError(f"Unsupported media tool: {tool_name}")
         if tool_name == "mcp_invoke":
             if self._mcp is None:
                 raise AgentPermissionError("MCP registry is not configured.")
@@ -943,24 +1299,58 @@ class AgentService:
             side_effects.append(("mcp_invoke", f"server={server_id} tool={mcp_tool}"))
             return result_json, side_effects
         built = build_tool_arguments(tool_name, arguments)
+        ssh_cfg = _active_ssh_config.get()
         if tool_name == "list_files":
-            result = self._tooling.list_files(built)
+            result = (
+                self._ssh.list_files(ssh_cfg, built)
+                if ssh_cfg is not None
+                else self._tooling.list_files(built)
+            )
         elif tool_name == "read_file":
-            result = self._tooling.read_file(built)
+            result = (
+                self._ssh.read_file(ssh_cfg, built)
+                if ssh_cfg is not None
+                else self._tooling.read_file(built)
+            )
         elif tool_name == "execute_command":
-            result = self._tooling.execute_command(built)
+            result = (
+                self._ssh.execute_command(ssh_cfg, built)
+                if ssh_cfg is not None
+                else self._tooling.execute_command(built)
+            )
         elif tool_name == "apply_patch":
-            result = self._tooling.apply_patch(built)
-            verify_cmd = resolve_verify_command(str(self._tooling.root), self._verify_cmd if self._verify_after_patch else "")
+            result = (
+                self._ssh.apply_patch(ssh_cfg, built)
+                if ssh_cfg is not None
+                else self._tooling.apply_patch(built)
+            )
+            effective_verify = (
+                verify_after_patch if verify_after_patch is not None else self._verify_after_patch
+            )
+            verify_cmd = resolve_verify_command(
+                str(self._tooling.root),
+                self._verify_cmd if effective_verify else "",
+            )
             if result.applied and verify_cmd:
-                verify_result = self._tooling.execute_command(
-                    ExecuteCommandRequest(
-                        command=verify_cmd,
-                        path=".",
-                        dry_run=False,
-                        confirmed=True,
+                if ssh_cfg is not None:
+                    verify_result = self._ssh.execute_command(
+                        ssh_cfg,
+                        ExecuteCommandRequest(
+                            command=verify_cmd,
+                            path=".",
+                            dry_run=False,
+                            confirmed=True,
+                        ),
                     )
-                )
+                else:
+                    verify_result = self._tooling.execute_command(
+                        ExecuteCommandRequest(
+                            command=verify_cmd,
+                            path=".",
+                            dry_run=False,
+                            confirmed=True,
+                        )
+                    )
                 verify_msg = (
                     f"Verify after patch: exit_code={verify_result.exit_code}, "
                     f"executed={verify_result.executed}, "

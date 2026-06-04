@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 from app.domain.schemas import ChatMessage
 from app.core.config import Settings
+from app.core.model_roles import filter_runtime_candidates
 from app.domain.schemas import TaskType
 
 if TYPE_CHECKING:
@@ -45,6 +46,8 @@ class ModelRouter:
             return self.settings.analysis_model
         if task_type in {TaskType.online_research, TaskType.online_project}:
             return self.settings.analysis_model
+        if task_type == TaskType.creative_media:
+            return self.settings.analysis_model
         return self.settings.default_model
 
     def candidate_models(
@@ -78,6 +81,8 @@ class ModelRouter:
             models = [self.settings.analysis_model, self.settings.analysis_fallback_model]
         elif task_type in {TaskType.online_research, TaskType.online_project}:
             models = [self.settings.analysis_model, self.settings.default_model]
+        elif task_type == TaskType.creative_media:
+            models = [self.settings.analysis_model, self.settings.default_model]
         else:
             models = [self.settings.default_model, self.settings.default_fallback_model]
             if complexity == "high":
@@ -103,6 +108,7 @@ class ModelRouter:
                 unique = [preferred] + [item for item in unique if item != preferred]
             if routing_policy == "benchmark":
                 unique = self._routing_policy.rank_models_for_task(unique, task_type)
+        unique = filter_runtime_candidates(self.settings, unique)
         max_candidates = max(1, getattr(self.settings, "routing_max_candidates", 4))
         return unique[:max_candidates]
 
@@ -115,6 +121,18 @@ class ModelRouter:
         history_chars = sum(len(item.content) for item in history)
         total_chars = len(message) + history_chars
         high_markers = [
+            "react",
+            "tsx",
+            "jsx",
+            "vite",
+            "tailwind",
+            "frontend",
+            "component",
+            "hydration",
+            "spa",
+            "вёрстк",
+            "фронтенд",
+            "компонент",
             "architecture",
             "design",
             "migration",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -30,16 +31,18 @@ class AgentHookService:
         self.enabled = enabled
 
     def list_configured_events(self) -> list[str]:
-        if not self.config_path.is_file():
-            return []
-        try:
-            payload = json.loads(self.config_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return []
-        hooks = payload.get("hooks", {})
-        if not isinstance(hooks, dict):
-            return []
+        hooks = self._load_hooks_map()
         return sorted(str(key) for key in hooks.keys())
+
+    def count_local_scripts(self) -> int:
+        total = 0
+        for entries in self._load_hooks_map().values():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if isinstance(entry, dict) and str(entry.get("command", "")).strip():
+                    total += 1
+        return total
 
     def emit(self, event: HookEvent) -> None:
         if not self.enabled:
@@ -52,8 +55,47 @@ class AgentHookService:
             "message": event.message,
             "extra": event.extra or {},
         }
+        self._run_local_scripts(event.event_type, body)
         if self.webhook_url:
             self._post_webhook(body)
+
+    def _load_hooks_map(self) -> dict[str, object]:
+        if not self.config_path.is_file():
+            return {}
+        try:
+            payload = json.loads(self.config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+        hooks = payload.get("hooks", {})
+        return hooks if isinstance(hooks, dict) else {}
+
+    def _run_local_scripts(self, event_type: str, payload: dict[str, object]) -> None:
+        hooks = self._load_hooks_map()
+        entries = hooks.get(event_type, [])
+        if not isinstance(entries, list):
+            return
+        input_json = json.dumps(payload, ensure_ascii=True)
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            command = str(entry.get("command", "")).strip()
+            if not command:
+                continue
+            self._exec_hook_command(command, input_json)
+
+    def _exec_hook_command(self, command: str, input_json: str) -> None:
+        try:
+            subprocess.run(
+                command,
+                shell=True,
+                input=input_json,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return
 
     def _post_webhook(self, payload: dict[str, object]) -> None:
         data = json.dumps(payload, ensure_ascii=True).encode("utf-8")

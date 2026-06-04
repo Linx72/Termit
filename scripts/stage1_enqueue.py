@@ -68,7 +68,10 @@ def resolve_settings_from_env() -> dict[str, object]:
         "base_url": os.getenv("TERMIT_BASE_URL", "http://127.0.0.1:8765"),
         "api_key": os.getenv("TERMIT_API_KEY") or None,
         "name": os.getenv("TERMIT_STAGE1_NAME", "weekly-stage1"),
-        "base_model": os.getenv("TERMIT_STAGE1_BASE_MODEL", "ollama:deepseek-coder"),
+        "base_model": os.getenv(
+            "TERMIT_STAGE1_BASE_MODEL",
+            os.getenv("TERMIT_TEACHER_MODEL", "ollama:deepseek-coder"),
+        ),
         "min_samples": int(os.getenv("TERMIT_STAGE1_MIN_SAMPLES", "10")),
         "run_eval_baseline": os.getenv("TERMIT_STAGE1_RUN_EVAL_BASELINE", "true").lower()
         in {"1", "true", "yes"},
@@ -104,7 +107,11 @@ def main() -> int:
     base_url = args.base_url or env_settings.get("base_url") or "http://127.0.0.1:8765"
     api_key = args.api_key if args.api_key is not None else env_settings.get("api_key")
     name = args.name or env_settings.get("name") or "weekly-stage1"
-    base_model = args.base_model or env_settings.get("base_model") or "ollama:deepseek-coder"
+    base_model = (
+        args.base_model
+        or env_settings.get("base_model")
+        or os.getenv("TERMIT_TEACHER_MODEL", "ollama:deepseek-coder")
+    )
     min_samples = args.min_samples if args.min_samples is not None else int(env_settings.get("min_samples", 10))
     eval_limit = args.eval_limit if args.eval_limit is not None else int(env_settings.get("eval_limit", 24))
     timeout = args.timeout if args.timeout is not None else float(env_settings.get("timeout", 30))

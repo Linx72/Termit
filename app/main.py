@@ -18,6 +18,7 @@ from app.api.routes.eval import router as eval_router
 from app.api.routes.feedback import router as feedback_router
 from app.api.routes.local_runtime import router as local_runtime_router
 from app.api.routes.metrics import router as metrics_router
+from app.api.routes.media import router as media_router
 from app.api.routes.ops import router as ops_router
 from app.api.routes.desktop import router as desktop_router
 from app.api.routes.cross_platform import router as cross_platform_router
@@ -132,6 +133,7 @@ app.include_router(retrieval_router)
 app.include_router(ops_router)
 app.include_router(automation_router)
 app.include_router(assignments_router)
+app.include_router(media_router)
 app.include_router(tasks_router)
 app.include_router(tools_router)
 app.include_router(local_runtime_router)

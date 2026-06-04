@@ -1,7 +1,17 @@
 import type { DesktopJourney } from "@termit/client";
 import type { Locale } from "./i18n";
 
-export type WorkflowTab = "chat" | "composer" | "editor" | "plan" | "terminal" | "tasks" | "agents" | "online";
+export type WorkflowTab =
+  | "chat"
+  | "composer"
+  | "editor"
+  | "plan"
+  | "terminal"
+  | "tasks"
+  | "agents"
+  | "online"
+  | "assignments"
+  | "help";
 
 export function journeyTitle(journey: DesktopJourney, locale: Locale): string {
   return locale === "ru" ? journey.title_ru : journey.title_en;
@@ -21,7 +31,9 @@ export function tabForJourney(journey: DesktopJourney): WorkflowTab {
     tab === "terminal" ||
     tab === "tasks" ||
     tab === "agents" ||
-    tab === "online"
+    tab === "online" ||
+    tab === "assignments" ||
+    tab === "help"
   ) {
     return tab;
   }

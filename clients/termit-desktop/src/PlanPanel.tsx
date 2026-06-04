@@ -86,7 +86,7 @@ export function PlanPanel({
         }
       }
       if (!response.trim()) {
-        setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text: "Empty plan response." }]);
+        setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text: t(locale, "planEmptyResponse") }]);
       }
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
@@ -102,7 +102,7 @@ export function PlanPanel({
       <p className="hint">{t(locale, "planHint")}</p>
       <div className="chat-log plan-log">
         {blocks.length === 0 ? (
-          <div className="message-block meta">Describe what you want to build — get a plan first.</div>
+          <div className="message-block meta">{t(locale, "planEmptyHint")}</div>
         ) : (
           blocks.map((block) => (
             <div key={block.id} className={`message-block ${block.kind}`}>
@@ -113,7 +113,7 @@ export function PlanPanel({
       </div>
       <textarea
         value={draft}
-        placeholder="Add auth middleware, migrate sessions to Redis…"
+        placeholder={t(locale, "planInputPlaceholder")}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -124,7 +124,7 @@ export function PlanPanel({
       />
       <div className="row">
         <button type="button" className="primary" disabled={!connected || busy || !draft.trim()} onClick={() => void sendPlan()}>
-          Plan
+          {t(locale, "planButton")}
         </button>
         <button
           type="button"

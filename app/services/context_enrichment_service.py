@@ -3,8 +3,10 @@ from __future__ import annotations
 from app.domain.schemas import AgentProfileResponse, AgentRunRequest, ChatMessage, ChatRequest
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.context_packing_service import ContextPackingService
+from app.services.cursor_rules_importer import CursorRulesImporter
 from app.services.project_rules_store import ProjectRulesStore
 from app.services.repo_map_service import RepoMapService
+from app.services.skill_store import SkillStore
 from app.services.symbol_index_service import SymbolIndexService
 
 
@@ -17,6 +19,8 @@ class ContextEnrichmentService:
         symbol_index: SymbolIndexService | None = None,
         retrieval: CodeRetrievalService | None = None,
         rules_store: ProjectRulesStore | None = None,
+        skill_store: SkillStore | None = None,
+        cursor_rules: CursorRulesImporter | None = None,
         repo_map_enabled: bool = True,
         context_packing_enabled: bool = True,
     ) -> None:
@@ -25,17 +29,37 @@ class ContextEnrichmentService:
         self._symbol_index = symbol_index
         self._retrieval = retrieval
         self._rules_store = rules_store
+        self._skill_store = skill_store
+        self._cursor_rules = cursor_rules or CursorRulesImporter()
         self._repo_map_enabled = repo_map_enabled
         self._context_packing_enabled = context_packing_enabled
 
-    def build_system_messages(self, payload: ChatRequest) -> list[ChatMessage]:
+    def build_system_messages(
+        self,
+        payload: ChatRequest,
+        *,
+        include_skills: bool = True,
+    ) -> list[ChatMessage]:
         messages: list[ChatMessage] = []
         prefix = payload.retrieval_path_prefix or ""
 
         if payload.project_id and self._rules_store is not None:
-            rules_text = self._rules_store.format_for_prompt(payload.project_id)
+            rules_text = self._rules_store.format_for_prompt(
+                payload.project_id,
+                skill_store=self._skill_store,
+                include_skills=include_skills,
+            )
             if rules_text:
                 messages.append(ChatMessage(role="system", content=rules_text))
+
+        workspace_root = payload.retrieval_path_prefix or ""
+        if workspace_root:
+            cursor_block = self._cursor_rules.build_prompt_block(
+                workspace_root,
+                active_path=prefix,
+            )
+            if cursor_block:
+                messages.append(ChatMessage(role="system", content=cursor_block))
 
         use_enrichment = payload.use_retrieval or payload.use_repo_map or payload.use_context_packing
         if not use_enrichment:
@@ -105,4 +129,13 @@ class ContextEnrichmentService:
             project_id=payload.project_id,
             symbol_query=payload.input if "@" in payload.input else None,
         )
-        return [message.content for message in self.build_system_messages(chat_payload)]
+        return [message.content for message in self.build_system_messages(chat_payload, include_skills=False)]
+
+    def list_project_skill_ids(self, project_id: str | None) -> list[str]:
+        if not project_id or self._rules_store is None:
+            return []
+        payload = self._rules_store.get_rules(project_id)
+        skills = payload.get("skills", [])
+        if not isinstance(skills, list):
+            return []
+        return [str(item).strip() for item in skills if str(item).strip()]

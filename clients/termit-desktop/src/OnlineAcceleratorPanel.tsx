@@ -62,7 +62,7 @@ export function OnlineAcceleratorPanel({
 
   const shareCurrentRun = async () => {
     if (!watchedRunId) {
-      setStatus(locale === "ru" ? "Выберите run в Agents." : "Select a run in Agents tab.");
+      setStatus(t(locale, "selectAgentRun"));
       return;
     }
     setBusy(true);
@@ -74,7 +74,7 @@ export function OnlineAcceleratorPanel({
         shared_by: "desktop",
       });
       setShareNote("");
-      setStatus(locale === "ru" ? "Run опубликован." : "Run shared.");
+      setStatus(t(locale, "runShared"));
       await refresh();
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);

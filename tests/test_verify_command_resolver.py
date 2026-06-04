@@ -18,9 +18,13 @@ class VerifyCommandResolverTests(unittest.TestCase):
 
     def test_node_repo_heuristic(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "package.json").write_text("{}", encoding="utf-8")
+            (Path(tmp) / "package.json").write_text(
+                '{"scripts":{"test":"echo ok","build":"echo build"}}',
+                encoding="utf-8",
+            )
             cmd = resolve_verify_command(tmp, "")
             self.assertIn("npm test", cmd)
+            self.assertIn("npm run build", cmd)
 
     def test_unknown_repo_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

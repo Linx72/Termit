@@ -46,7 +46,11 @@ export class TermitClient {
     this.baseUrl = (options.baseUrl ?? "http://127.0.0.1:8765").replace(/\/$/, "");
     this.apiKey = options.apiKey;
     this.workspace = options.workspace?.trim() || undefined;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    const nativeFetch = typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : null;
+    const providedFetch = options.fetchImpl
+      ? ((input: RequestInfo | URL, init?: RequestInit) => options.fetchImpl!(input, init))
+      : null;
+    this.fetchImpl = providedFetch ?? nativeFetch ?? fetch;
   }
 
   private withWorkspace<T extends object>(payload: T): T {
@@ -213,6 +217,52 @@ export class TermitClient {
     return this.request<{ status: string }>("/health");
   }
 
+  workspaceScripts(workspace?: string): Promise<{
+    root: string;
+    has_package_json: boolean;
+    scripts: Record<string, string>;
+    verify_command: string;
+    dev_command: string;
+  }> {
+    const query =
+      workspace && workspace.trim()
+        ? `?workspace=${encodeURIComponent(workspace.trim())}`
+        : "";
+    return this.request(`/api/tools/workspace-scripts${query}`);
+  }
+
+  listAssignments(limit = 50): Promise<
+    Array<{
+      assignment_id: string;
+      root_path: string;
+      brief_path: string;
+      deliverables_path: string;
+      journal_path: string;
+      created_at: string;
+    }>
+  > {
+    return this.request(`/api/assignments?limit=${limit}`);
+  }
+
+  createAssignment(payload: {
+    title: string;
+    brief: string;
+    success_criteria?: string[];
+    target_urls?: string[];
+  }): Promise<{
+    assignment_id: string;
+    root_path: string;
+    brief_path: string;
+    deliverables_path: string;
+    journal_path: string;
+    created_at: string;
+  }> {
+    return this.request("/api/assignments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
   healthz(): Promise<{ status: string; version: string }> {
     return this.request<{ status: string; version: string }>("/healthz");
   }
@@ -282,6 +332,19 @@ export class TermitClient {
     });
   }
 
+  testSshConnection(payload: {
+    host: string;
+    user: string;
+    remote_path: string;
+    port?: number;
+    identity_file?: string;
+  }): Promise<{ ok: boolean; detail: string }> {
+    return this.request("/api/tools/ssh/test", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
   getProjectRules(projectId: string): Promise<{
     project_id: string;
     project_rules: string;
@@ -297,6 +360,41 @@ export class TermitClient {
   ): Promise<{ project_id: string; project_rules: string; user_rules: string; skills: string[] }> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/rules`, {
       method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  importCursorProjectRules(
+    projectId: string,
+    payload: { workspace_root?: string; active_path?: string }
+  ): Promise<{ project_id: string; project_rules: string; user_rules: string; skills: string[] }> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/rules/import-cursor`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  listMcpServerTools(serverId: string): Promise<{
+    server_id: string;
+    tools: Array<{ name: string; description?: string; input_schema?: Record<string, unknown> }>;
+  }> {
+    return this.request(`/api/platform/mcp/servers/${encodeURIComponent(serverId)}/tools`);
+  }
+
+  triggerAutomationWebhook(
+    payload: {
+      input: string;
+      agent_id?: string;
+      template_id?: string;
+      project_id?: string;
+      run_mode?: "agent" | "ask" | "plan";
+      priority?: number;
+    },
+    webhookSecret: string
+  ): Promise<{ run_id: string; state: string; agent_id: string; queued_position?: number }> {
+    return this.request("/api/automation/webhook/agent-run", {
+      method: "POST",
+      headers: { "X-Termit-Webhook-Secret": webhookSecret },
       body: JSON.stringify(payload),
     });
   }
@@ -320,6 +418,16 @@ export class TermitClient {
 
   listPlatformMcpServers(): Promise<import("./platform").PlatformMcpServerListResponse> {
     return this.request("/api/platform/mcp/servers");
+  }
+
+  importPlatformCursorMcp(payload: {
+    workspace_root?: string;
+    path?: string;
+  } = {}): Promise<{ imported: number; servers: import("./platform").PlatformMcpServer[] }> {
+    return this.request("/api/platform/mcp/import-cursor", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   }
 
   upsertPlatformMcpServer(payload: {
@@ -482,6 +590,16 @@ export class TermitClient {
 
   /** Internal helper for desktop parity APIs (`/api/desktop/*`). */
   requestDesktop<T>(path: string, init?: RequestInit): Promise<T> {
+    return this.request<T>(path, init);
+  }
+
+  /** Ops/automation APIs (`/api/ops/*`) for desktop settings. */
+  requestOps<T>(path: string, init?: RequestInit): Promise<T> {
+    return this.request<T>(path, init);
+  }
+
+  /** Media Studio APIs (`/api/media/*`). */
+  requestMedia<T>(path: string, init?: RequestInit): Promise<T> {
     return this.request<T>(path, init);
   }
 }

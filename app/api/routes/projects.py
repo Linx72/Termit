@@ -3,11 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.domain.schemas import (
     AgentProfileResponse,
     AgentTemplateListResponse,
+    ProjectRulesImportRequest,
     ProjectRulesResponse,
     ProjectRulesUpdateRequest,
 )
 from app.services.agent_registry_store import AgentRegistryStore
 from app.services.agent_templates_store import AgentTemplatesStore
+from app.services.cursor_rules_importer import CursorRulesImporter
 from app.services.project_rules_store import ProjectRulesStore
 from app.state import get_agent_registry_store, get_agent_templates_store, get_project_rules_store
 
@@ -70,5 +72,27 @@ async def update_project_rules(
         project_rules=body.project_rules,
         user_rules=body.user_rules,
         skills=body.skills,
+    )
+    return ProjectRulesResponse.model_validate(payload)
+
+
+@router.post("/{project_id}/rules/import-cursor", response_model=ProjectRulesResponse)
+async def import_cursor_project_rules(
+    project_id: str,
+    body: ProjectRulesImportRequest,
+    store: ProjectRulesStore = Depends(get_project_rules_store),
+) -> ProjectRulesResponse:
+    current = store.get_rules(project_id)
+    importer = CursorRulesImporter()
+    merged_rules = importer.merge_into_project_rules(
+        str(current.get("project_rules", "")),
+        body.workspace_root,
+        active_path=body.active_path,
+    )
+    payload = store.save_rules(
+        project_id,
+        project_rules=merged_rules,
+        user_rules=str(current.get("user_rules", "")),
+        skills=[str(item) for item in current.get("skills", []) if str(item).strip()],
     )
     return ProjectRulesResponse.model_validate(payload)

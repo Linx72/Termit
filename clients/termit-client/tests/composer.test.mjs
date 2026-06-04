@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildComposerMessage,
+  buildComponentComposerMessage,
   buildInlineEditMessage,
+  filterComposerPatchesToPaths,
   parseComposerPatches,
   pickInlinePatch,
   stripComposerJsonBlock,
@@ -39,6 +41,25 @@ test("buildInlineEditMessage includes selection context", () => {
   assert.match(message, /Add logging/);
   assert.match(message, /src\/a\.ts/);
   assert.match(message, /const x = 1;/);
+});
+
+test("buildComponentComposerMessage scopes single file", () => {
+  const message = buildComponentComposerMessage("Add props", {
+    path: "src/Button.tsx",
+    content: "export function Button() { return null; }",
+  });
+  assert.match(message, /Scoped component: src\/Button\.tsx/);
+  assert.match(message, /ONE component/);
+});
+
+test("filterComposerPatchesToPaths keeps allowed only", () => {
+  const patches = [
+    { path: "src/Button.tsx", hunks: [{ old_text: "a", new_text: "b" }] },
+    { path: "src/App.tsx", hunks: [{ old_text: "c", new_text: "d" }] },
+  ];
+  const filtered = filterComposerPatchesToPaths(patches, ["src/Button.tsx"]);
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].path, "src/Button.tsx");
 });
 
 test("pickInlinePatch prefers exact hunk match", () => {

@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from app.core.config import get_settings
@@ -12,6 +13,7 @@ from app.services.guardrail_service import GuardrailService
 from app.services.mcp_registry_service import McpRegistryService
 from app.services.search_provider import build_search_provider
 from app.services.skill_store import SkillStore
+from app.services.skill_selector_service import SkillSelectorService
 from app.services.trace_span_store import TraceSpanStore
 from app.services.agent_memory_store import AgentMemoryStore
 from app.services.agent_eval_service import AgentEvalService
@@ -184,9 +186,11 @@ def _build_agent_service() -> AgentService:
         patch_outcome_store=_build_patch_outcome_store(),
         verify_after_patch=settings.agent_verify_after_patch,
         verify_cmd=settings.agent_verify_cmd,
+        auto_confirm_risky_tools=settings.agent_auto_confirm_risky,
         guardrail_service=_build_guardrail_service(),
         hook_service=_build_agent_hook_service(),
         skill_store=_build_skill_store(),
+        skill_selector=_build_skill_selector_service(),
         search_provider=_build_search_provider(),
         mcp_registry=_build_mcp_registry_service(),
         trace_span_store=_build_trace_span_store(),
@@ -194,6 +198,7 @@ def _build_agent_service() -> AgentService:
         guardrails_enabled=settings.guardrails_enabled,
         default_repo_profile_id=settings.finetune_repo_profile_id,
         policy_preset_service=_build_agent_policy_preset_service(),
+        media_generation_service=_build_media_generation_service(),
     )
 
 
@@ -408,6 +413,7 @@ def _build_eval_service() -> EvalService:
         telemetry=_build_telemetry_store(),
         report_store=EvalReportStore(file_path=settings.eval_report_file_path),
         retrieval_service=_build_code_retrieval_service(),
+        extra_scenarios_path=settings.media_eval_scenarios_path,
     )
 
 
@@ -448,11 +454,17 @@ def _build_local_runtime_service() -> LocalRuntimeService:
         analysis_model=settings.analysis_model,
         retrieval_embed_model=settings.retrieval_embed_model,
     )
+    from app.core.model_roles import teacher_ollama_model_names
+
     return LocalRuntimeService(
         ollama_base_url=settings.ollama_base_url,
         openai_compat_base_url=settings.openai_compat_base_url,
         required_ollama_models=required,
         retrieval_mode=settings.retrieval_mode,
+        runtime_primary_model=settings.code_model,
+        teacher_model=settings.teacher_model,
+        teacher_fallback_model=settings.teacher_fallback_model,
+        teacher_ollama_models=teacher_ollama_model_names(settings),
     )
 
 
@@ -536,6 +548,7 @@ def _build_context_enrichment_service() -> ContextEnrichmentService:
         symbol_index=_build_symbol_index_service(),
         retrieval=_build_code_retrieval_service(),
         rules_store=_build_project_rules_store(),
+        skill_store=_build_skill_store(),
         repo_map_enabled=True,
         context_packing_enabled=True,
     )
@@ -742,6 +755,21 @@ def get_skill_store() -> SkillStore:
 
 
 @lru_cache
+def _build_skill_selector_service() -> SkillSelectorService:
+    settings = get_settings()
+    return SkillSelectorService(
+        _build_skill_store(),
+        max_skills=settings.skill_auto_select_max,
+        min_score=settings.skill_auto_select_min_score,
+        enabled=settings.skill_auto_select_enabled,
+    )
+
+
+def get_skill_selector_service() -> SkillSelectorService:
+    return _build_skill_selector_service()
+
+
+@lru_cache
 def _build_guardrail_service() -> GuardrailService:
     settings = get_settings()
     return GuardrailService(max_patch_chars=settings.guardrails_max_patch_chars)
@@ -822,6 +850,23 @@ def get_agent_schedule_service() -> AgentScheduleService:
 
 
 @lru_cache
+def _build_automation_control_service():
+    from app.services.automation_control_service import AutomationControlService
+
+    return AutomationControlService(
+        stage1_scheduler=get_stage1_scheduler_service(),
+        daily_scheduler=get_daily_improvement_scheduler_service(),
+        maintenance_scheduler=get_agent_maintenance_scheduler_service(),
+        agent_schedule_service=get_agent_schedule_service(),
+        project_root=str(Path(__file__).resolve().parents[2]),
+    )
+
+
+def get_automation_control_service():
+    return _build_automation_control_service()
+
+
+@lru_cache
 def _build_agent_policy_preset_service():
     from app.services.agent_policy_preset_service import AgentPolicyPresetService
 
@@ -864,12 +909,25 @@ def get_desktop_accelerator_service():
 
 
 @lru_cache
+def _build_desktop_workflow_telemetry_service():
+    from app.services.desktop_workflow_telemetry_service import DesktopWorkflowTelemetryService
+
+    settings = get_settings()
+    return DesktopWorkflowTelemetryService(settings.desktop_state_dir)
+
+
+def get_desktop_workflow_telemetry_service():
+    return _build_desktop_workflow_telemetry_service()
+
+
+@lru_cache
 def _build_desktop_kpi_gate_service():
     from app.services.desktop_kpi_gate_service import DesktopKpiGateService
 
     settings = get_settings()
     eval_service = _build_eval_service()
     agent_service = _build_agent_service()
+    telemetry = _build_desktop_workflow_telemetry_service()
 
     def eval_dashboard_provider() -> dict[str, object]:
         return eval_service.build_dashboard(report_limit=5)
@@ -877,12 +935,56 @@ def _build_desktop_kpi_gate_service():
     def agent_metrics_provider() -> dict[str, object]:
         return agent_service.queue_metrics()
 
+    def telemetry_summary_provider() -> dict[str, object]:
+        return telemetry.summarize(settings.finetune_patch_outcomes_path)
+
     return DesktopKpiGateService(
         settings.desktop_north_star_path,
         eval_dashboard_provider=eval_dashboard_provider,
         agent_metrics_provider=agent_metrics_provider,
+        telemetry_summary_provider=telemetry_summary_provider,
     )
 
 
 def get_desktop_kpi_gate_service():
     return _build_desktop_kpi_gate_service()
+
+
+@lru_cache
+def _build_media_asset_store():
+    from app.services.media_asset_store import MediaAssetStore
+
+    settings = get_settings()
+    return MediaAssetStore(settings.media_storage)
+
+
+@lru_cache
+def _build_media_generation_service():
+    from app.services.media_generation_service import MediaGenerationService
+
+    settings = get_settings()
+    return MediaGenerationService(
+        asset_store=_build_media_asset_store(),
+        enabled=settings.media_enabled,
+        max_cost_usd=settings.media_max_cost_usd,
+        confirm_cost_usd=settings.media_confirm_cost_usd,
+        image_provider_name=settings.media_image_provider,
+        openai_api_key=settings.openai_api_key,
+        openai_base_url=settings.openai_api_base_url,
+        openai_image_model=settings.media_image_model,
+        image_cost_usd=settings.media_image_cost_usd,
+        tts_cost_usd=settings.media_tts_cost_usd,
+        transcribe_cost_usd=settings.media_transcribe_cost_usd,
+        tts_voice=settings.media_tts_voice,
+        ffmpeg_path=settings.ffmpeg_path,
+        ffprobe_path=settings.ffprobe_path,
+        jobs_db_path=settings.media_jobs_db_path,
+        i2v_provider=settings.media_i2v_provider,
+        fal_api_key=settings.fal_api_key,
+        i2v_cost_usd=settings.media_i2v_cost_usd,
+        brand_kits_dir=settings.media_brand_kits_dir,
+    )
+
+
+def get_media_generation_service():
+    return _build_media_generation_service()

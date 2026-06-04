@@ -45,7 +45,8 @@ class Stage1SchedulerServiceTests(unittest.TestCase):
         )
         settings = replace(
             get_settings(),
-            code_model="ollama:deepseek-coder",
+            teacher_model="ollama:deepseek-coder",
+            stage1_schedule_base_model="",
             stage1_schedule_enabled=True,
             stage1_schedule_weekday=0,
             stage1_schedule_hour=3,
@@ -106,6 +107,7 @@ class Stage1SchedulerServiceTests(unittest.TestCase):
                 time.sleep(0.05)
             assert run is not None
             self.assertIn(run["status"], terminal)
+            self.assertEqual(run["request"]["base_model"], "ollama:deepseek-coder")
 
 
 if __name__ == "__main__":

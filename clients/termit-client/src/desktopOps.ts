@@ -126,3 +126,21 @@ export async function enqueueHeavyJob(
 export async function getHeavyJob(client: TermitClient, jobId: string): Promise<DesktopHeavyJob> {
   return client.requestDesktop<DesktopHeavyJob>(`/api/desktop/heavy-jobs/${encodeURIComponent(jobId)}`);
 }
+
+export async function recordDesktopWorkflowEvent(
+  client: TermitClient,
+  payload: {
+    event_type: string;
+    journey_id?: string;
+    execution_mode?: string;
+    duration_ms?: number;
+    ok?: boolean;
+    detail?: string;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<{ event_id: string; event_type: string; timestamp: string }> {
+  return client.requestDesktop("/api/desktop/workflow-events", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}

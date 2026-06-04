@@ -20,6 +20,10 @@ def required_role(method: str, path: str) -> str:
         return "admin"
     if path.startswith("/api/ops/quota-summary") and method == "GET":
         return "admin"
+    if path.startswith("/api/ops/automation") and method == "GET":
+        return "viewer"
+    if path.startswith("/api/ops/automation") and method in {"PATCH", "PUT", "POST"}:
+        return "operator"
     if path.startswith("/api/ops/agent-runs/metrics") and method == "GET":
         return "viewer"
     if path.startswith("/api/ops/agent-runs"):
@@ -61,6 +65,10 @@ def required_role(method: str, path: str) -> str:
     if path.startswith("/api/finetune") and method == "POST":
         return "operator"
     if path.startswith("/api/finetune"):
+        return "viewer"
+    if path.startswith("/api/media") and method == "POST":
+        return "operator"
+    if path.startswith("/api/media"):
         return "viewer"
     if path.startswith("/api/sessions") and method == "DELETE":
         return "admin"

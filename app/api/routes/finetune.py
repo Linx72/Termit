@@ -206,10 +206,14 @@ async def list_adapters(
 
 @router.get("/recipe", response_model=FinetuneRecipeResponse)
 async def training_recipe(
-    base_model: str = Query(default="ollama:deepseek-coder"),
+    base_model: str = Query(default=""),
     service: FinetuneService = Depends(get_finetune_service),
 ) -> FinetuneRecipeResponse:
-    recipe = service.training_recipe(base_model)
+    from app.core.model_roles import resolve_stage1_base_model
+    from app.state import get_settings
+
+    resolved = resolve_stage1_base_model(get_settings(), base_model)
+    recipe = service.training_recipe(resolved)
     return FinetuneRecipeResponse(**recipe)
 
 

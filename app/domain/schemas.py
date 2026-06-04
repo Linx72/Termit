@@ -12,6 +12,7 @@ class TaskType(str, Enum):
     general = "general"
     online_research = "online_research"
     online_project = "online_project"
+    creative_media = "creative_media"
 
 
 class TaskState(str, Enum):
@@ -184,6 +185,7 @@ class AgentTemplateResponse(BaseModel):
     enabled_tools: list[str] = Field(default_factory=list)
     use_tool_loop: bool = False
     use_retrieval: bool = False
+    allow_online: bool = False
     skill_ids: list[str] = Field(default_factory=list)
 
 
@@ -231,6 +233,10 @@ class LocalRuntimeStatusResponse(BaseModel):
     required_ollama_models: list[str] = Field(default_factory=list)
     missing_ollama_models: list[str] = Field(default_factory=list)
     retrieval_mode: str = "keyword"
+    runtime_primary_model: str = ""
+    teacher_model: str = ""
+    teacher_fallback_model: str = ""
+    teacher_ollama_models: list[str] = Field(default_factory=list)
 
 
 class SessionHistoryResponse(BaseModel):
@@ -706,6 +712,14 @@ class ReadFileResponse(BaseModel):
     truncated: bool = False
 
 
+class WorkspaceScriptsResponse(BaseModel):
+    root: str
+    has_package_json: bool = False
+    scripts: dict[str, str] = Field(default_factory=dict)
+    verify_command: str = ""
+    dev_command: str = ""
+
+
 class ToolRiskLevel(str, Enum):
     safe = "safe"
     confirm = "confirm"
@@ -940,6 +954,29 @@ class AgentRunRequest(BaseModel):
     changed_files: list[str] = Field(default_factory=list)
     policy_preset: Optional[str] = Field(default=None, max_length=32)
     execution_mode: Optional[str] = Field(default=None, max_length=16)
+    skill_ids: list[str] = Field(default_factory=list)
+    auto_select_skills: Optional[bool] = None
+    auto_confirm_risky_tools: Optional[bool] = None
+    verify_after_patch: Optional[bool] = None
+    ssh_host: Optional[str] = Field(default=None, max_length=253)
+    ssh_user: Optional[str] = Field(default=None, max_length=64)
+    ssh_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    ssh_identity: Optional[str] = Field(default=None, max_length=2000)
+    ssh_remote_path: Optional[str] = Field(default=None, max_length=2000)
+    run_mode: Optional[str] = Field(default="agent", pattern="^(agent|ask|plan)$")
+
+
+class SshConnectionTestRequest(BaseModel):
+    host: str = Field(min_length=1, max_length=253)
+    user: str = Field(min_length=1, max_length=64)
+    remote_path: str = Field(min_length=1, max_length=2000)
+    port: int = Field(default=22, ge=1, le=65535)
+    identity_file: str = Field(default="", max_length=2000)
+
+
+class SshConnectionTestResponse(BaseModel):
+    ok: bool
+    detail: str = ""
 
 
 class AgentEvalRunRequest(BaseModel):
@@ -1178,7 +1215,11 @@ class FinetuneRecipeResponse(BaseModel):
 
 class FinetuneStage1RunRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    base_model: str = Field(default="ollama:deepseek-coder", min_length=1, max_length=200)
+    base_model: str = Field(
+        default="",
+        max_length=200,
+        description="Empty = TERMIT_TEACHER_MODEL / TERMIT_STAGE1_SCHEDULE_BASE_MODEL.",
+    )
     include_feedback: bool = True
     include_tasks: bool = True
     include_agent_runs: bool = True
@@ -1322,6 +1363,31 @@ class DailyImprovementRunResponse(BaseModel):
     results: list[dict[str, object]] = Field(default_factory=list)
 
 
+class AutomationToggleItem(BaseModel):
+    toggle_id: str
+    env_key: Optional[str] = None
+    label_ru: str
+    label_en: str
+    description_ru: str
+    description_en: str
+    enabled: bool
+    requires_restart: bool = False
+
+
+class AutomationPrefsResponse(BaseModel):
+    env_path: str
+    automatic_mode_enabled: bool
+    toggles: list[AutomationToggleItem] = Field(default_factory=list)
+    schedulers: dict[str, object] = Field(default_factory=dict)
+    applied: list[str] = Field(default_factory=list)
+    restart_recommended: bool = False
+
+
+class AutomationPrefsUpdateRequest(BaseModel):
+    toggles: dict[str, bool] = Field(default_factory=dict)
+    automatic_mode_enabled: Optional[bool] = None
+
+
 class SkillSummaryResponse(BaseModel):
     skill_id: str
     name: str
@@ -1330,6 +1396,29 @@ class SkillSummaryResponse(BaseModel):
 
 class SkillListResponse(BaseModel):
     skills: list[SkillSummaryResponse] = Field(default_factory=list)
+
+
+class SkillSelectRequest(BaseModel):
+    instruction: str = Field(min_length=1, max_length=20000)
+    task_type: TaskType = TaskType.general
+    pinned_skill_ids: list[str] = Field(default_factory=list)
+    changed_files: list[str] = Field(default_factory=list)
+    max_skills: Optional[int] = Field(default=None, ge=1, le=10)
+    auto_select_enabled: Optional[bool] = None
+
+
+class SkillSelectionItemResponse(BaseModel):
+    skill_id: str
+    name: str
+    score: float
+    matched_terms: list[str] = Field(default_factory=list)
+    source: str
+
+
+class SkillSelectResponse(BaseModel):
+    selected_skill_ids: list[str] = Field(default_factory=list)
+    selections: list[SkillSelectionItemResponse] = Field(default_factory=list)
+    auto_select_enabled: bool = True
 
 
 class SkillDetailResponse(BaseModel):
@@ -1343,6 +1432,17 @@ class HookStatusResponse(BaseModel):
     enabled: bool
     webhook_configured: bool
     configured_events: list[str] = Field(default_factory=list)
+    local_script_hooks: int = 0
+
+
+class McpCursorImportRequest(BaseModel):
+    workspace_root: str = Field(default=".", max_length=4096)
+    path: Optional[str] = Field(default=None, max_length=4096)
+
+
+class McpCursorImportResponse(BaseModel):
+    imported: int
+    servers: list["McpServerResponse"] = Field(default_factory=list)
 
 
 class GuardrailCheckRequest(BaseModel):
@@ -1400,6 +1500,38 @@ class McpInvokeRequest(BaseModel):
 
 class McpInvokeResponse(BaseModel):
     result_json: str
+
+
+class McpToolResponse(BaseModel):
+    name: str
+    description: str = ""
+    input_schema: dict[str, object] = Field(default_factory=dict)
+
+
+class McpToolListResponse(BaseModel):
+    server_id: str
+    tools: list[McpToolResponse] = Field(default_factory=list)
+
+
+class ProjectRulesImportRequest(BaseModel):
+    workspace_root: str = Field(default=".", max_length=4096)
+    active_path: str = Field(default="", max_length=4096)
+
+
+class AutomationAgentRunWebhookRequest(BaseModel):
+    input: str = Field(min_length=1, max_length=20000)
+    agent_id: Optional[str] = Field(default=None, max_length=64)
+    template_id: Optional[str] = Field(default=None, max_length=64)
+    project_id: Optional[str] = Field(default=None, max_length=256)
+    run_mode: Optional[str] = Field(default="agent", pattern="^(agent|ask|plan)$")
+    priority: int = Field(default=0, ge=0, le=100)
+
+
+class AutomationAgentRunWebhookResponse(BaseModel):
+    run_id: str
+    state: str
+    agent_id: str
+    queued_position: int = 0
 
 
 class AgentScheduleCreateRequest(BaseModel):
@@ -1529,3 +1661,170 @@ class DesktopHeavyJobResponse(BaseModel):
 class DesktopHeavyJobListResponse(BaseModel):
     jobs: list[DesktopHeavyJobResponse] = Field(default_factory=list)
     total: int = 0
+
+
+class DesktopWorkflowEventRequest(BaseModel):
+    event_type: str = Field(min_length=1, max_length=64)
+    journey_id: str = Field(default="", max_length=64)
+    execution_mode: str = Field(default="", max_length=16)
+    duration_ms: Optional[int] = Field(default=None, ge=0, le=3_600_000)
+    ok: Optional[bool] = None
+    detail: str = Field(default="", max_length=500)
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+
+class DesktopWorkflowEventResponse(BaseModel):
+    event_id: str
+    event_type: str
+    timestamp: str
+
+
+class MediaGenerateImageRequest(BaseModel):
+    prompt: str = Field(min_length=3, max_length=4000)
+    width: int = Field(default=1024, ge=64, le=4096)
+    height: int = Field(default=1024, ge=64, le=4096)
+    project_id: str = Field(default="default", max_length=120)
+    run_id: Optional[str] = None
+    scene_id: Optional[str] = None
+    provider: Optional[str] = None
+    confirmed: bool = False
+
+
+class MediaAssetResponse(BaseModel):
+    asset_id: str
+    project_id: str
+    rel_path: str
+    mime: str
+    width: int
+    height: int
+    provider: str
+    cost_usd: float
+    prompt: str
+    created_at: str
+    run_id: Optional[str] = None
+    scene_id: Optional[str] = None
+
+
+class MediaGenerateImageResponse(BaseModel):
+    asset: MediaAssetResponse
+    revised_prompt: Optional[str] = None
+
+
+class MediaEstimateCostRequest(BaseModel):
+    storyboard_path: Optional[str] = None
+
+
+class MediaCostLineResponse(BaseModel):
+    scene_id: str
+    item: str
+    usd: float
+
+
+class MediaEstimateCostResponse(BaseModel):
+    total_usd: float
+    scene_count: int
+    lines: list[MediaCostLineResponse] = Field(default_factory=list)
+
+
+class MediaVisionQaRequest(BaseModel):
+    asset_id: str
+    criteria: str = ""
+    min_score: float = Field(default=0.75, ge=0.0, le=1.0)
+
+
+class MediaVisionQaResponse(BaseModel):
+    score: float
+    passed: bool
+    notes: str
+
+
+class MediaTtsRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+    project_id: str = Field(default="default", max_length=120)
+    run_id: Optional[str] = None
+    voice_id: Optional[str] = None
+    language: str = "ru"
+    confirmed: bool = False
+
+
+class MediaTtsResponse(BaseModel):
+    asset: MediaAssetResponse
+
+
+class MediaTranscribeRequest(BaseModel):
+    asset_id: str
+    project_id: str = Field(default="default", max_length=120)
+    run_id: Optional[str] = None
+    language: Optional[str] = None
+
+
+class MediaTranscribeResponse(BaseModel):
+    asset: MediaAssetResponse
+    language: str
+
+
+class MediaComposeRequest(BaseModel):
+    project_id: str = Field(default="default", max_length=120)
+    run_id: Optional[str] = None
+    timeline_path: Optional[str] = None
+    timeline: Optional[dict[str, object]] = None
+    output_name: Optional[str] = None
+    preset: str = "youtube_16x9"
+
+
+class MediaComposeResponse(BaseModel):
+    asset: MediaAssetResponse
+    duration_sec: float
+
+
+class MediaJobResponse(BaseModel):
+    job_id: str
+    job_type: str
+    status: str
+    provider: str
+    payload: dict[str, object] = Field(default_factory=dict)
+    result_asset_id: Optional[str] = None
+    error: Optional[str] = None
+    cost_usd: float = 0.0
+    project_id: str = "default"
+    run_id: Optional[str] = None
+
+
+class MediaRenderVideoRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=4000)
+    source_asset_id: str
+    project_id: str = "default"
+    run_id: Optional[str] = None
+    scene_id: Optional[str] = None
+    duration_sec: float = Field(default=5.0, ge=1.0, le=30.0)
+    provider: Optional[str] = None
+    confirmed: bool = False
+
+
+class MediaExportGifRequest(BaseModel):
+    asset_ids: list[str] = Field(min_length=1)
+    project_id: str = "default"
+    run_id: Optional[str] = None
+    fps: int = Field(default=8, ge=1, le=30)
+    width: int = Field(default=480, ge=64, le=1920)
+
+
+class MediaStoryboardRunRequest(BaseModel):
+    storyboard_path: Optional[str] = None
+    storyboard: Optional[dict[str, object]] = None
+    project_id: str = "default"
+    run_id: Optional[str] = None
+    brand_kit_id: Optional[str] = None
+    max_scenes: int = Field(default=6, ge=1, le=20)
+    confirmed: bool = False
+
+
+class BrandKitResponse(BaseModel):
+    brand_kit_id: str
+    name: str
+    colors: list[str] = Field(default_factory=list)
+    fonts: list[str] = Field(default_factory=list)
+    logo_paths: list[str] = Field(default_factory=list)
+    voice_id: str = ""
+    music_mood: str = ""
+    style_prompt_suffix: str = ""

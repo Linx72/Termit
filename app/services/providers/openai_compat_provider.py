@@ -120,7 +120,6 @@ class OpenAICompatProvider(BaseProvider):
 
     def list_models(self) -> list[str]:
         return [
-            "openai_compat:deepseek-ai/deepseek-coder-33b-instruct",
             "openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct",
         ]
 

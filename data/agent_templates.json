@@ -149,24 +149,53 @@
     ]
   },
   {
+    "template_id": "web-app-vite",
+    "name": "Web App (Vite/React)",
+    "description": "Build and verify SPA with dev server, test, lint, and build",
+    "task_type": "coding",
+    "system_prompt": "You are Termit Web App Builder. Follow skill web-app and data/prompts/web-app-builder.md. Vite+React+TS default; verify via npm scripts after patches.",
+    "enabled_tools": [
+      "read_file",
+      "list_files",
+      "search_repo",
+      "apply_patch",
+      "execute_command",
+      "web_search",
+      "web_automation",
+      "browser_navigate",
+      "browser_snapshot",
+      "mcp_invoke"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "allow_online": true,
+    "skill_ids": [
+      "web-app"
+    ]
+  },
+  {
     "template_id": "research-fast",
     "name": "Research Fast",
     "description": "Quick web research with citations",
     "task_type": "online_research",
-    "system_prompt": "You research topics on the web. Use web_search first, then web_automation on top URLs. Always cite sources and report blockers (login, captcha).",
+    "system_prompt": "You are Termit Research (fast). Use skill online-research: web_search then web_automation. Cite sources; report blockers. Full prompt: data/prompts/research-fast.md",
     "enabled_tools": [
       "web_search",
       "web_automation"
     ],
     "use_tool_loop": true,
-    "use_retrieval": false
+    "use_retrieval": false,
+    "allow_online": true,
+    "skill_ids": [
+      "online-research"
+    ]
   },
   {
     "template_id": "research-deep",
     "name": "Research Deep",
     "description": "Deep research with browser and notes",
     "task_type": "online_research",
-    "system_prompt": "You perform deep research: web_search for breadth, browser_navigate/snapshot for JS pages, synthesize findings with citations. Prefer structured markdown output.",
+    "system_prompt": "You are Termit Research (deep). Use skill online-research deep path: web_search + browser_navigate/snapshot. Structured markdown with Sources section. Full prompt: data/prompts/research-fast.md",
     "enabled_tools": [
       "web_search",
       "web_automation",
@@ -174,14 +203,18 @@
       "browser_snapshot"
     ],
     "use_tool_loop": true,
-    "use_retrieval": false
+    "use_retrieval": false,
+    "allow_online": true,
+    "skill_ids": [
+      "online-research"
+    ]
   },
   {
     "template_id": "online-project-manager",
     "name": "Online Project Manager",
     "description": "End-to-end online assignment: research, build, deliver",
     "task_type": "online_project",
-    "system_prompt": "You execute user assignments across the internet and local workspace. Plan: research (web_search) → gather evidence (web_automation/browser) → implement artifacts (read_file, apply_patch, execute_command). Write deliverables under data/assignments/<id>/deliverables and log progress in journal/log.md. Ask for confirmation before destructive or publish actions.",
+    "system_prompt": "You are Termit Online Project Manager. Follow skill online-project and data/prompts/online-project-manager.md. allow_online required. Plan → research → deliverables → journal → report.",
     "enabled_tools": [
       "web_search",
       "web_automation",
@@ -191,10 +224,15 @@
       "read_file",
       "list_files",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "mcp_invoke"
     ],
     "use_tool_loop": true,
-    "use_retrieval": true
+    "use_retrieval": true,
+    "allow_online": true,
+    "skill_ids": [
+      "online-project"
+    ]
   },
   {
     "template_id": "game-godot",
@@ -213,5 +251,96 @@
     "skill_ids": [
       "cross-platform-atomic"
     ]
+  },
+  {
+    "template_id": "termit-desktop-guided",
+    "name": "Termit Desktop (Guided)",
+    "description": "Coding agent with human confirm on risky tools — for Termit Desktop Guided mode",
+    "task_type": "coding",
+    "system_prompt": "You are Termit Desktop Guided agent. Follow skills agent-guided and termit-desktop; full prompt data/prompts/desktop-guided-agent.md. Use policy_preset solo/team/strict — never autopilot.",
+    "enabled_tools": [
+      "list_files",
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "allow_online": false,
+    "skill_ids": [
+      "agent-guided",
+      "termit-desktop"
+    ]
+  },
+  {
+    "template_id": "termit-desktop-autopilot",
+    "name": "Termit Desktop (Autopilot)",
+    "description": "End-to-end coding agent without human confirm — policy preset autopilot",
+    "task_type": "coding",
+    "system_prompt": "You are Termit Desktop Autopilot agent. Follow skills agent-autopilot and termit-desktop; full prompt data/prompts/desktop-autopilot-agent.md. policy_preset autopilot; verify after every patch.",
+    "enabled_tools": [
+      "list_files",
+      "read_file",
+      "search_repo",
+      "apply_patch",
+      "execute_command",
+      "web_search",
+      "web_automation"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": true,
+    "allow_online": true,
+    "skill_ids": [
+      "agent-autopilot",
+      "termit-desktop"
+    ]
+  },
+  {
+    "template_id": "creative-artist",
+    "name": "Creative Artist",
+    "description": "Generate images and run media QA for promo and social assets",
+    "task_type": "creative_media",
+    "system_prompt": "You are Termit Creative Artist. Follow skill media-studio: brief, cost estimate, generate_image, vision_qa_media, deliverables. Use confirmed=true for cloud image generation after estimate.",
+    "enabled_tools": [
+      "estimate_media_cost",
+      "generate_image",
+      "vision_qa_media",
+      "list_media_assets",
+      "tts_generate",
+      "transcribe_media",
+      "compose_media",
+      "read_file"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": false,
+    "allow_online": false,
+    "skill_ids": [
+      "media-studio"
+    ]
+  },
+  {
+    "template_id": "studio-director",
+    "name": "Studio Director",
+    "description": "Full promo pipeline: storyboard → scenes → master MP4",
+    "task_type": "creative_media",
+    "system_prompt": "You are Termit Studio Director. Follow media-studio skill. Steps: estimate_media_cost → run_storyboard (or scene-by-scene generate_image/render_video) → vision_qa_media → deliverables. Use confirmed=true for cloud. max_scenes=6 for dry runs.",
+    "enabled_tools": [
+      "estimate_media_cost",
+      "run_storyboard",
+      "generate_image",
+      "render_video",
+      "wait_media_job",
+      "compose_media",
+      "tts_generate",
+      "transcribe_media",
+      "export_gif",
+      "vision_qa_media",
+      "list_media_assets"
+    ],
+    "use_tool_loop": true,
+    "use_retrieval": false,
+    "allow_online": false,
+    "skill_ids": ["media-studio"]
   }
 ]

@@ -12,14 +12,18 @@ from app.domain.schemas import (
     DesktopShareRunRequest,
     DesktopShareRunResponse,
     DesktopSharedRunListResponse,
+    DesktopWorkflowEventRequest,
+    DesktopWorkflowEventResponse,
 )
 from app.services.agent_policy_preset_service import AgentPolicyPresetService
 from app.services.desktop_accelerator_service import DesktopAcceleratorService
 from app.services.desktop_kpi_gate_service import DesktopKpiGateService
+from app.services.desktop_workflow_telemetry_service import DesktopWorkflowTelemetryService
 from app.state import (
     get_agent_policy_preset_service,
     get_desktop_accelerator_service,
     get_desktop_kpi_gate_service,
+    get_desktop_workflow_telemetry_service,
 )
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
@@ -39,6 +43,27 @@ async def list_journeys(
     return DesktopNorthStarResponse(
         journeys=journeys,
         kpi_targets={str(key): float(value) for key, value in targets.items()},
+    )
+
+
+@router.post("/workflow-events", response_model=DesktopWorkflowEventResponse)
+async def record_workflow_event(
+    payload: DesktopWorkflowEventRequest,
+    service: DesktopWorkflowTelemetryService = Depends(get_desktop_workflow_telemetry_service),
+) -> DesktopWorkflowEventResponse:
+    row = service.record(
+        event_type=payload.event_type,
+        journey_id=payload.journey_id,
+        execution_mode=payload.execution_mode,
+        duration_ms=payload.duration_ms,
+        ok=payload.ok,
+        detail=payload.detail,
+        metadata=payload.metadata,
+    )
+    return DesktopWorkflowEventResponse(
+        event_id=str(row["event_id"]),
+        event_type=str(row["event_type"]),
+        timestamp=str(row["timestamp"]),
     )
 
 

@@ -17,7 +17,15 @@ export interface StoredSettings {
   policyPreset: string;
   teamName: string;
   activeJourneyId: string;
-  executionMode: "local" | "online" | "hybrid";
+  executionMode: "local" | "online" | "hybrid" | "ssh";
+  agentRunMode: "guided" | "autopilot";
+  chatInteractionMode: "ask" | "agent";
+  autoExecuteWithAgent: boolean;
+  sshHost: string;
+  sshUser: string;
+  sshPort: number;
+  sshIdentity: string;
+  sshRemotePath: string;
 }
 
 export const STORAGE_KEY = "termit-app-settings";
@@ -30,7 +38,7 @@ export function loadSettings(): StoredSettings {
     sessionId: "",
     workspace: "",
     repoRoot: "",
-    autoStartServer: false,
+    autoStartServer: true,
     autoConnect: true,
     taskType: "coding",
     useRetrieval: true,
@@ -42,6 +50,14 @@ export function loadSettings(): StoredSettings {
     teamName: "default",
     activeJourneyId: "local_feature",
     executionMode: "hybrid",
+    agentRunMode: "guided",
+    chatInteractionMode: "agent",
+    autoExecuteWithAgent: true,
+    sshHost: "",
+    sshUser: "",
+    sshPort: 22,
+    sshIdentity: "",
+    sshRemotePath: "",
   };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

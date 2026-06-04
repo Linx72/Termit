@@ -75,6 +75,13 @@ class EvalScenario:
     cp_stack_id: str = ""
     cp_min_tasks: int = 5
     cp_expect_steps: tuple[str, ...] = ()
+    schema_path: str = ""
+    fixture_path: str = ""
+    stub_check: str = ""
+    expect_asset_mime: str = ""
+    expect_min_dimension: int = 0
+    max_cost_usd: float = 0.0
+    enabled_tools: tuple[str, ...] = ()
 
 
 class EvalService:
@@ -88,8 +95,13 @@ class EvalService:
         report_store: Optional[EvalReportStore] = None,
         web_fetcher: Optional[Callable[[str, int], tuple[int, str, str]]] = None,
         retrieval_service: Optional[CodeRetrievalService] = None,
+        extra_scenarios_path: Optional[str] = None,
     ) -> None:
         self._scenarios = self._load_scenarios(scenarios_path)
+        if extra_scenarios_path:
+            extra = Path(extra_scenarios_path)
+            if extra.is_file():
+                self._scenarios = self._scenarios + self._load_scenarios(extra_scenarios_path)
         self._task_service = task_service
         self._tooling = tooling_service
         self._browser = browser_service
@@ -144,6 +156,13 @@ class EvalService:
                     cp_stack_id=str(item.get("cp_stack_id", "")),
                     cp_min_tasks=int(item.get("cp_min_tasks", 5)),
                     cp_expect_steps=tuple(str(s) for s in (item.get("cp_expect_steps") or [])),
+                    schema_path=str(item.get("schema_path", "")),
+                    fixture_path=str(item.get("fixture_path", "")),
+                    stub_check=str(item.get("stub_check", "")),
+                    expect_asset_mime=str(item.get("expect_asset_mime", "")),
+                    expect_min_dimension=int(item.get("expect_min_dimension", 0)),
+                    max_cost_usd=float(item.get("max_cost_usd", 0)),
+                    enabled_tools=tuple(str(t) for t in (item.get("enabled_tools") or [])),
                 )
             )
         return scenarios
@@ -311,6 +330,12 @@ class EvalService:
             return self._run_platform_spawn_tool(scenario)
         if runner == "cross_platform_decompose":
             return self._run_cross_platform_decompose(scenario)
+        if runner == "media_schema":
+            return self._run_media_schema(scenario)
+        if runner == "media_stub":
+            return self._run_media_stub(scenario)
+        if runner == "media_agent":
+            return self._run_media_agent(scenario)
         raise ValueError(f"Unsupported runner: {runner}")
 
     def _run_cross_platform_decompose(
@@ -626,3 +651,101 @@ class EvalService:
         if scenario_id not in EVAL_STUB_PAGES:
             return (200, "<html><title>Fallback</title></html>", url)
         return EVAL_STUB_PAGES[scenario_id]
+
+    def _run_media_schema(
+        self, scenario: EvalScenario
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        from tests.test_media_studio_phase0 import _load_json, _validate_against_schema
+
+        if not scenario.schema_path or not scenario.fixture_path:
+            raise ValueError("media_schema requires schema_path and fixture_path.")
+        schema = _load_json(Path(scenario.schema_path))
+        fixture = _load_json(Path(scenario.fixture_path))
+        if not isinstance(schema, dict):
+            raise ValueError("Invalid schema JSON")
+        errors = _validate_against_schema(fixture, schema)
+        passed = len(errors) == 0
+        ref = scenario.fixture_path
+        return ref, passed, None if passed else "verification_error", 1, "automated"
+
+    def _run_media_stub(
+        self, scenario: EvalScenario
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        passed = False
+        ref = scenario.stub_check or "media_stub"
+        if scenario.stub_check == "tools_v1_has_generate_image":
+            raw = json.loads(Path("data/media/tools_v1.json").read_text(encoding="utf-8"))
+            tools = raw.get("tools", [])
+            names = {t.get("name") for t in tools if isinstance(t, dict)}
+            passed = "generate_image" in names and "render_video" in names
+        return ref, passed, None if passed else "verification_error", 1, "automated"
+
+    def _run_media_agent(
+        self, scenario: EvalScenario
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        import tempfile
+
+        from app.services.media_asset_store import MediaAssetStore
+        from app.services.media_generation_service import MediaGenerationService
+
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            service = MediaGenerationService(
+                asset_store=MediaAssetStore(tmp.name),
+                enabled=True,
+                image_provider_name="stub",
+                ffmpeg_path="ffmpeg",
+                ffprobe_path="ffprobe",
+                jobs_db_path=str(Path(tmp.name) / "jobs.db"),
+            )
+            passed = True
+            ref = scenario.id
+            if "estimate_media_cost" in scenario.enabled_tools:
+                est = service.estimate_cost(
+                    storyboard_path="data/media/examples/storyboard.example.json"
+                )
+                passed = est.total_usd <= (scenario.max_cost_usd or 25.0)
+                ref = f"cost={est.total_usd}"
+            if "generate_image" in scenario.enabled_tools:
+                img = service.generate_image(
+                    prompt=scenario.prompt,
+                    width=max(scenario.expect_min_dimension, 512),
+                    height=max(scenario.expect_min_dimension, 512),
+                    provider="stub",
+                )
+                passed = passed and img.asset.mime == (scenario.expect_asset_mime or "image/png")
+                if scenario.expect_min_dimension:
+                    passed = passed and img.asset.width >= scenario.expect_min_dimension
+                ref = img.asset.asset_id
+                if "vision_qa_media" in scenario.enabled_tools:
+                    qa = service.vision_qa_media(asset_id=img.asset.asset_id, criteria=scenario.prompt)
+                    passed = passed and qa.passed
+            if "compose_media" in scenario.enabled_tools and "generate_image" not in scenario.enabled_tools:
+                imgs = [
+                    service.generate_image(prompt=f"slide {i}", width=320, height=240, provider="stub")
+                    for i in range(3)
+                ]
+                composed = service.compose_media(
+                    timeline={
+                        "clips": [
+                            {"asset_id": img.asset.asset_id, "duration_sec": 1.5} for img in imgs
+                        ],
+                        "preset": "youtube_16x9",
+                    }
+                )
+                passed = composed.asset.mime == (scenario.expect_asset_mime or "video/mp4")
+                ref = composed.asset.asset_id
+            if "render_video" in scenario.enabled_tools:
+                img = service.generate_image(prompt="hero", width=640, height=360, provider="stub")
+                job = service.render_video(
+                    prompt="motion",
+                    source_asset_id=img.asset.asset_id,
+                    duration_sec=3,
+                    confirmed=True,
+                )
+                waited = service.wait_media_job(job_id=job.job_id)
+                passed = passed and waited.status == "completed" and bool(waited.result_asset_id)
+                ref = waited.result_asset_id or job.job_id
+            return ref or scenario.id, passed, None if passed else "verification_error", 1, "semi-auto"
+        finally:
+            tmp.cleanup()

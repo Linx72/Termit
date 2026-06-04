@@ -28,7 +28,8 @@
         "execute_command",
         "apply_patch",
         "web_automation",
-        "web_search"
+        "web_search",
+        "mcp_invoke"
       ],
       "execution_mode": "hybrid"
     },
@@ -43,6 +44,26 @@
       "verify_after_patch": true,
       "enabled_tools": ["list_files", "read_file", "apply_patch"],
       "execution_mode": "local"
+    },
+    {
+      "preset_id": "autopilot",
+      "name": "Autopilot",
+      "description_ru": "Без human confirm на risky tools; verify после patch; расширенный step budget.",
+      "description_en": "No human confirm for risky tools; verify after patch; extended step budget.",
+      "max_tool_steps": 14,
+      "allow_online": true,
+      "auto_confirm_risky_tools": true,
+      "verify_after_patch": true,
+      "enabled_tools": [
+        "list_files",
+        "read_file",
+        "execute_command",
+        "apply_patch",
+        "web_automation",
+        "web_search",
+        "mcp_invoke"
+      ],
+      "execution_mode": "hybrid"
     }
   ]
 }

@@ -14,10 +14,12 @@ class DesktopKpiGateService:
         *,
         eval_dashboard_provider: Callable[[], dict[str, object]],
         agent_metrics_provider: Callable[[], dict[str, object]],
+        telemetry_summary_provider: Callable[[], dict[str, object]] | None = None,
     ) -> None:
         self._path = Path(north_star_path)
         self._eval_dashboard_provider = eval_dashboard_provider
         self._agent_metrics_provider = agent_metrics_provider
+        self._telemetry_summary_provider = telemetry_summary_provider
 
     def _load_targets(self) -> dict[str, float]:
         if not self._path.is_file():
@@ -85,6 +87,54 @@ class DesktopKpiGateService:
             targets.get("tool_loop_completion_rate_min", 0.8),
         )
 
+        telemetry: dict[str, object] = {}
+        if self._telemetry_summary_provider is not None:
+            telemetry = self._telemetry_summary_provider()
+            ttfuc = telemetry.get("ttfuc_median_seconds")
+            if isinstance(ttfuc, (int, float)):
+                add_gate(
+                    "ttfuc_seconds",
+                    "TTFUC median (s)",
+                    float(ttfuc),
+                    targets.get("ttfuc_seconds", 90.0),
+                    higher_is_better=False,
+                )
+            patch_rate = telemetry.get("patch_acceptance_rate")
+            if isinstance(patch_rate, (int, float)) and float(patch_rate) > 0:
+                add_gate(
+                    "patch_acceptance_rate",
+                    "Patch acceptance rate",
+                    float(patch_rate),
+                    targets.get("patch_acceptance_rate", 0.7),
+                )
+            verify_rate = telemetry.get("verify_pass_rate")
+            if isinstance(verify_rate, (int, float)) and int(telemetry.get("verify_ok", 0) or 0) + int(
+                telemetry.get("verify_fail", 0) or 0
+            ) > 0:
+                add_gate(
+                    "verify_pass_rate",
+                    "Verify pass rate",
+                    float(verify_rate),
+                    targets.get("verify_pass_rate", 0.85),
+                )
+            resume_med = telemetry.get("agent_resume_median_seconds")
+            if isinstance(resume_med, (int, float)):
+                add_gate(
+                    "agent_resume_median_seconds",
+                    "Agent resume median (s)",
+                    float(resume_med),
+                    targets.get("agent_resume_median_seconds", 30.0),
+                    higher_is_better=False,
+                )
+            local_share = telemetry.get("local_only_task_share")
+            if isinstance(local_share, (int, float)) and int(telemetry.get("agent_runs_total", 0) or 0) > 0:
+                add_gate(
+                    "local_only_task_share",
+                    "Local-only task share",
+                    float(local_share),
+                    targets.get("local_only_task_share", 0.6),
+                )
+
         passed_count = sum(1 for gate in gates if gate["passed"])
         overall_passed = passed_count == len(gates) if gates else False
 
@@ -101,6 +151,7 @@ class DesktopKpiGateService:
                 "tool_loop_tool_success_rate": tool_loop_success,
                 "health_status": agent_metrics.get("health_status"),
             },
+            "telemetry": telemetry,
         }
 
     def journeys_payload(self) -> dict[str, object]:

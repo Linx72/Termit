@@ -22,11 +22,20 @@ class LocalRuntimeService:
         openai_compat_base_url: str,
         required_ollama_models: list[str] | None = None,
         retrieval_mode: str = "keyword",
+        *,
+        runtime_primary_model: str = "",
+        teacher_model: str = "",
+        teacher_fallback_model: str = "",
+        teacher_ollama_models: list[str] | None = None,
     ) -> None:
         self._ollama_base_url = ollama_base_url.rstrip("/")
         self._openai_compat_base_url = openai_compat_base_url.rstrip("/")
         self._required_ollama_models = list(required_ollama_models or [])
         self._retrieval_mode = retrieval_mode.strip().lower() or "keyword"
+        self._runtime_primary_model = runtime_primary_model.strip()
+        self._teacher_model = teacher_model.strip()
+        self._teacher_fallback_model = teacher_fallback_model.strip()
+        self._teacher_ollama_models = list(teacher_ollama_models or [])
 
     @staticmethod
     def collect_required_ollama_models(
@@ -94,6 +103,10 @@ class LocalRuntimeService:
             required_ollama_models=required,
             missing_ollama_models=missing,
             retrieval_mode=self._retrieval_mode,
+            runtime_primary_model=self._runtime_primary_model,
+            teacher_model=self._teacher_model,
+            teacher_fallback_model=self._teacher_fallback_model,
+            teacher_ollama_models=list(self._teacher_ollama_models),
         )
 
     async def list_local_models(self) -> LocalModelsResponse:

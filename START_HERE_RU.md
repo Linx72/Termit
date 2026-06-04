@@ -43,8 +43,12 @@ TERMIT_INSTALL_LAUNCH_AGENT=1 ./scripts/do_all_setup.sh
 
 ```bash
 ./scripts/start_ollama_local.sh   # или системный ollama serve
+ollama pull termit-core-ft
+# Teacher (stage-1 finetune only):
 ollama pull deepseek-coder
 ollama pull nomic-embed-text      # для semantic retrieval
+# профиль app/ → ollama:termit-core-ft (alias над deepseek-coder до Stage1 finetune):
+./scripts/check_ollama_models.sh --create-missing
 ```
 
 ## 4. Приложение Termit (desktop)
@@ -126,10 +130,43 @@ TERMIT_AGENT_VERIFY_AFTER_PATCH=true
 | `run_termit_stack.sh` | Ollama + API + desktop dev |
 | `package_desktop.sh` | Собрать Termit.app |
 | `install_launch_agent.sh` | **По умолчанию:** API при входе в macOS (LaunchAgent) |
-| `check_ollama_models.sh` | Проверка моделей из `.env` / embed |
+| `check_ollama_models.sh` | Модели из `.env`, routing profiles; `--create-missing` для `termit-core-ft` |
+| `do_all_automatic.sh` | Полный авто-режим: .env, LaunchAgent, crontab, schedulers |
 | `smoke_http.sh` | Curl smoke `:8765` (health, readiness, agent metrics) |
 | `smoke_all.sh` | Тесты + platform e2e + smoke HTTP (единый контур Фазы 0) |
 | `training_loop_week2.sh` | Export signals → job → KPI dashboard (Фаза 4) |
 | `release_smoke.sh` | То же, что `smoke_all.sh` (alias) |
 
+## 9. Автоматизация (do_all_automatic + отключение в Desktop)
+
+```bash
+TERMIT_SKIP_OLLAMA_CHECK=1 ./scripts/do_all_automatic.sh
+```
+
+В **Termit Desktop** → sidebar → **«Автоматизация сервера»** — включить/выключить Stage1, daily improvement, crontab и др. без правки `.env` вручную.
+
+Промпт для агентов: [AUTOMATION_TASK_PROMPT_RU.md](AUTOMATION_TASK_PROMPT_RU.md). Skill: `.cursor/skills/termit-automation/SKILL.md`.
+
 Подробнее: [DESKTOP_QUICKSTART.md](DESKTOP_QUICKSTART.md), [GITHUB_SETUP_RU.md](GITHUB_SETUP_RU.md), [SYNC_WORKFLOW.md](SYNC_WORKFLOW.md).
+
+## 10. Media Studio (картинки, анимация, видео)
+
+**Фазы 0–6 Media Studio реализованы** — включение: `TERMIT_MEDIA_ENABLED=true`, `ffmpeg` в PATH.
+
+| Документ | Назначение |
+|----------|------------|
+| [docs/MEDIA_STUDIO_ADR_RU.md](docs/MEDIA_STUDIO_ADR_RU.md) | Архитектура: hybrid studio, провайдеры, tools |
+| [docs/MEDIA_STUDIO_PHASE0_RU.md](docs/MEDIA_STUDIO_PHASE0_RU.md) | Use cases, решения, чеклист аккаунтов |
+| [docs/MEDIA_STUDIO_ROADMAP_RU.md](docs/MEDIA_STUDIO_ROADMAP_RU.md) | Фазы 1–6 |
+
+Проверка Фазы 0:
+
+```bash
+python3 -m unittest tests.test_media_studio_phase0 -q
+```
+
+Ключи API — секция **Media Studio** в `.env.example`. Skill: `data/skills/media-studio/SKILL.md`. Agent templates: `creative-artist`, `studio-director`. Desktop: панель **Media Studio** в настройках чата.
+
+## 11. AutoCheckPoint (длинные чаты Cursor)
+
+Память сессии: `.cursor/memory/ACTIVE.md`, снимки в `.cursor/memory/checkpoints/`. Порог **100 000 токенов** перед compaction — `TERMIT_CHECKPOINT_TOKEN_THRESHOLD`. Подробнее: [docs/AUTOCHECKPOINT_RU.md](docs/AUTOCHECKPOINT_RU.md). Hooks: `.cursor/hooks.json`.

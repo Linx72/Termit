@@ -9,6 +9,9 @@ from app.domain.schemas import (
     DailyImprovementPlanResponse,
     DailyImprovementRunResponse,
     DailyImprovementStatusResponse,
+    AutomationPrefsResponse,
+    AutomationPrefsUpdateRequest,
+    AutomationToggleItem,
     OpsIncidentDrillResponse,
     OpsReadinessResponse,
     QuotaResetRequest,
@@ -22,9 +25,11 @@ from app.services.agent_service import AgentService
 from app.services.agent_maintenance_scheduler_service import AgentMaintenanceSchedulerService
 from app.services.daily_improvement_scheduler_service import DailyImprovementSchedulerService
 from app.services.quota_store import QuotaStore
+from app.services.automation_control_service import AutomationControlService
 from app.state import (
     get_agent_maintenance_scheduler_service,
     get_agent_service,
+    get_automation_control_service,
     get_chat_service,
     get_daily_improvement_scheduler_service,
     get_ops_service,
@@ -206,6 +211,61 @@ async def dispatch_ops_alerts(
         payload={"dead_letter_rate": metrics.dead_letter_rate},
     )
     return {"health_status": metrics.health_status, **result}
+
+
+def _require_operator(request: Request, settings: Settings) -> None:
+    if not settings.auth_enabled:
+        return
+    caller_role = getattr(request.state, "api_role", "viewer")
+    if caller_role not in {"admin", "operator"}:
+        raise HTTPException(status_code=403, detail="Operator role required.")
+
+
+@router.get("/automation", response_model=AutomationPrefsResponse)
+async def automation_prefs(
+    service: AutomationControlService = Depends(get_automation_control_service),
+) -> AutomationPrefsResponse:
+    payload = service.snapshot()
+    toggles = [
+        AutomationToggleItem(**item)
+        for item in payload.get("toggles", [])
+        if isinstance(item, dict)
+    ]
+    return AutomationPrefsResponse(
+        env_path=str(payload.get("env_path", "")),
+        automatic_mode_enabled=bool(payload.get("automatic_mode_enabled")),
+        toggles=toggles,
+        schedulers=dict(payload.get("schedulers", {})),
+    )
+
+
+@router.patch("/automation", response_model=AutomationPrefsResponse)
+async def automation_prefs_update(
+    body: AutomationPrefsUpdateRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    service: AutomationControlService = Depends(get_automation_control_service),
+) -> AutomationPrefsResponse:
+    _require_operator(request, settings)
+    if body.automatic_mode_enabled is not None:
+        payload = service.set_automatic_mode(bool(body.automatic_mode_enabled))
+    elif body.toggles:
+        payload = service.apply(body.toggles)
+    else:
+        payload = service.snapshot()
+    toggles = [
+        AutomationToggleItem(**item)
+        for item in payload.get("toggles", [])
+        if isinstance(item, dict)
+    ]
+    return AutomationPrefsResponse(
+        env_path=str(payload.get("env_path", "")),
+        automatic_mode_enabled=bool(payload.get("automatic_mode_enabled")),
+        toggles=toggles,
+        schedulers=dict(payload.get("schedulers", {})),
+        applied=[str(item) for item in payload.get("applied", [])],
+        restart_recommended=bool(payload.get("restart_recommended")),
+    )
 
 
 @router.get("/daily-improvement/status", response_model=DailyImprovementStatusResponse)

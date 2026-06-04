@@ -22,6 +22,9 @@ clients/termit-desktop/out/
 .cursor/hooks/state/*
 !.cursor/hooks/state/.gitkeep
 .cursor/hooks/token_watch.env
+.cursor/hooks/session_checkpoint.env
+.cursor/memory/checkpoints/*.md
+!.cursor/memory/checkpoints/.gitkeep
 
 # Runtime artifacts under data/ (keep seed JSON tracked)
 data/*

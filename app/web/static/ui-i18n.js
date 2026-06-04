@@ -11,6 +11,7 @@ window.TERMIT_I18N = {
     apiKeyPlaceholder: "Used when TERMIT_AUTH_ENABLED=true",
     sectionDashboard: "Operator dashboard",
     sectionChat: "Chat",
+    sectionWebApps: "Web apps & assignments",
     sectionTask: "Task console",
     sectionOrchestration: "Multi-agent orchestration",
     sectionAgents: "Agent profiles",
@@ -124,12 +125,36 @@ window.TERMIT_I18N = {
     dashRefreshFailed: "Dashboard refresh failed.",
     navSidebarDashboard: "Dashboard",
     navSidebarChat: "Chat",
+    navSidebarWebApps: "Web & assignments",
     navSidebarTasks: "Tasks",
     navSidebarAgents: "Agents",
     navSidebarFinetune: "Finetune",
     navSidebarStage1: "Stage1",
     navSidebarEval: "Eval",
     navSidebarOps: "Ops",
+    webAppsHub: {
+      intro: "Create assignment workspaces, inspect npm scripts, seed web/online agents.",
+      assignmentTitle: "Assignment title",
+      assignmentBrief: "Brief (min 10 chars)",
+      successCriteria: "Success criteria (one per line)",
+      targetUrls: "Target URLs (one per line)",
+      createAssignment: "Create assignment",
+      refreshAssignments: "Refresh list",
+      workspace: "Workspace path (optional)",
+      loadScripts: "Load workspace scripts",
+      seedTitle: "Quick agent seed",
+      seedWebApp: "Web App (Vite)",
+      seedOnlineProject: "Online Project Manager",
+      seedResearchFast: "Research Fast",
+      noAssignments: "No assignments yet.",
+      devPreviewCmd: "Dev preview cmd",
+      devPreviewHint: "Run in project root (Vite :5173)",
+      assignmentsLoaded: "Assignments loaded",
+      assignmentCreated: "Assignment created",
+      assignmentValidation: "Title and brief (≥10 chars) required",
+      scriptsLoaded: "Workspace scripts loaded",
+      agentSeeded: "Agent ready",
+    },
     agentHub: {
       title: "Agent Hub",
       subtitle: "Profile cards, live queue metrics, and run timeline — everything for working with autonomous agents.",
@@ -253,6 +278,7 @@ curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics</span>`,
     nav: {
       dashboard: "Dashboard",
       chat: "Chat",
+      webapps: "Web & assignments",
       task: "Tasks",
       agents: "Agents",
       finetune: "Finetune",
@@ -273,6 +299,7 @@ curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics</span>`,
     apiKeyPlaceholder: "Нужен при TERMIT_AUTH_ENABLED=true",
     sectionDashboard: "Панель оператора",
     sectionChat: "Чат",
+    sectionWebApps: "Веб-приложения и задания",
     sectionTask: "Консоль задач",
     sectionOrchestration: "Мульти-агентная оркестрация",
     sectionAgents: "Профили агентов",
@@ -386,12 +413,36 @@ curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics</span>`,
     dashRefreshFailed: "Ошибка обновления панели.",
     navSidebarDashboard: "Панель",
     navSidebarChat: "Чат",
+    navSidebarWebApps: "Веб и задания",
     navSidebarTasks: "Задачи",
     navSidebarAgents: "Агенты",
     navSidebarFinetune: "Finetune",
     navSidebarStage1: "Stage1",
     navSidebarEval: "Eval",
     navSidebarOps: "Ops",
+    webAppsHub: {
+      intro: "Создайте assignment workspace, проверьте npm-скрипты, засейте web/online агентов.",
+      assignmentTitle: "Название задания",
+      assignmentBrief: "Brief (≥10 символов)",
+      successCriteria: "Критерии успеха (по строке)",
+      targetUrls: "Целевые URL (по строке)",
+      createAssignment: "Создать задание",
+      refreshAssignments: "Обновить список",
+      workspace: "Путь workspace (необязательно)",
+      loadScripts: "Скрипты workspace",
+      seedTitle: "Быстрый seed агентов",
+      seedWebApp: "Web App (Vite)",
+      seedOnlineProject: "Online Project Manager",
+      seedResearchFast: "Research Fast",
+      noAssignments: "Заданий пока нет.",
+      devPreviewCmd: "Команда dev preview",
+      devPreviewHint: "Запустить в корне проекта (Vite :5173)",
+      assignmentsLoaded: "Список заданий обновлён",
+      assignmentCreated: "Задание создано",
+      assignmentValidation: "Нужны название и brief ≥10 символов",
+      scriptsLoaded: "Скрипты workspace загружены",
+      agentSeeded: "Агент готов",
+    },
     agentHub: {
       title: "Центр агентов",
       subtitle: "Карточки профилей, live-метрики очереди и timeline run — всё для работы с автономными агентами.",
@@ -573,6 +624,7 @@ curl -s http://127.0.0.1:8765/healthz</span>`,
     nav: {
       dashboard: "Панель",
       chat: "Чат",
+      webapps: "Веб и задания",
       task: "Задачи",
       agents: "Агенты",
       finetune: "Finetune",
@@ -592,7 +644,9 @@ window.TERMIT_I18N_KEYS = {
   "label.apiKey": "apiKeyLabel",
   "section.dashboard": "sectionDashboard",
   "section.chat": "sectionChat",
+  "section.webApps": "sectionWebApps",
   "section.task": "sectionTask",
+  "nav.sidebarWebApps": "navSidebarWebApps",
   "section.orchestration": "sectionOrchestration",
   "section.agents": "sectionAgents",
   "section.team": "sectionTeam",
@@ -718,6 +772,12 @@ window.tTermit = function tTermit(key, lang) {
     const enHub = window.TERMIT_I18N.en.agentHub || {};
     if (enHub[hubKey]) return enHub[hubKey];
   }
+  if (key.startsWith("webAppsHub.")) {
+    const hubKey = key.slice("webAppsHub.".length);
+    if (pack.webAppsHub && pack.webAppsHub[hubKey]) return pack.webAppsHub[hubKey];
+    const enHub = window.TERMIT_I18N.en.webAppsHub || {};
+    if (enHub[hubKey]) return enHub[hubKey];
+  }
   if (key.startsWith("terminalDock.")) {
     const parts = key.slice("terminalDock.".length).split(".");
     let cur = pack.terminalDock;
@@ -753,6 +813,13 @@ window.applyTermitLanguage = function applyTermitLanguage(lang) {
     }
     if (key.startsWith("agentHub.") && pack.agentHub) {
       const hubVal = pack.agentHub[key.slice("agentHub.".length)];
+      if (hubVal) {
+        el.textContent = hubVal;
+        return;
+      }
+    }
+    if (key.startsWith("webAppsHub.") && pack.webAppsHub) {
+      const hubVal = pack.webAppsHub[key.slice("webAppsHub.".length)];
       if (hubVal) {
         el.textContent = hubVal;
         return;
@@ -798,6 +865,7 @@ window.applyTermitLanguage = function applyTermitLanguage(lang) {
   Object.entries({
     "nav-dashboard": nav.dashboard,
     "nav-chat": nav.chat,
+    "nav-webapps": nav.webapps,
     "nav-task": nav.task,
     "nav-agents": nav.agents,
     "nav-finetune": nav.finetune,

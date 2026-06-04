@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -8,6 +9,13 @@ from pathlib import Path
 from threading import Lock
 from typing import Optional
 from uuid import uuid4
+
+from app.services.mcp_stdio_client import McpStdioSession, McpToolDescriptor
+
+
+def _slug_server_id(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", value.strip().lower()).strip("-")
+    return slug or f"mcp_{uuid4().hex[:8]}"
 
 
 @dataclass
@@ -27,6 +35,7 @@ class McpRegistryService:
         self._lock = Lock()
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)
+        self._sessions: dict[str, McpStdioSession] = {}
         if not self.file_path.is_file():
             self._save([])
 
@@ -70,6 +79,40 @@ class McpRegistryService:
         self._save(records)
         return record
 
+    def import_from_mcp_file(self, source_path: Path, *, merge: bool = True) -> list[McpServerRecord]:
+        """Import servers from Termit registry JSON or Cursor ``.cursor/mcp.json``."""
+        path = source_path.expanduser().resolve()
+        if not path.is_file():
+            raise ValueError(f"MCP config not found: {path}")
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        incoming = self._parse_raw_items(raw)
+        if not incoming:
+            return []
+        if not merge:
+            records = incoming
+            self._save(records)
+            return records
+        records = self._load()
+        by_id = {item.server_id: item for item in records}
+        for item in incoming:
+            by_id[item.server_id] = item
+        merged = list(by_id.values())
+        self._save(merged)
+        return incoming
+
+    def sync_cursor_mcp(self, workspace_root: str) -> list[McpServerRecord]:
+        root = Path(workspace_root).expanduser().resolve()
+        return self.import_from_mcp_file(root / ".cursor" / "mcp.json", merge=True)
+
+    def close_sessions(self) -> None:
+        with self._lock:
+            for session in self._sessions.values():
+                try:
+                    session.close()
+                except OSError:
+                    pass
+            self._sessions.clear()
+
     def invoke_tool(
         self,
         server_id: str,
@@ -92,13 +135,74 @@ class McpRegistryService:
             result = json.dumps(payload, ensure_ascii=True)
             self._audit(server_id, tool_name, arguments, result, transport="stub")
             return result
-        return self._invoke_stdio_json(server, tool_name, arguments)
+        if self._prefers_one_shot_transport(server):
+            return self._invoke_stdio_json(server, tool_name, arguments)
+        try:
+            return self._invoke_stdio_session(server, tool_name, arguments)
+        except (RuntimeError, TimeoutError, OSError, ValueError) as exc:
+            self._drop_session(server.server_id)
+            return self._invoke_stdio_json(server, tool_name, arguments, fallback_error=str(exc))
+
+    @staticmethod
+    def _prefers_one_shot_transport(server: McpServerRecord) -> bool:
+        joined = " ".join([server.command, *server.args]).lower()
+        return "-c" in joined or server.command.strip().lower() == "echo"
+
+    def _drop_session(self, server_id: str) -> None:
+        with self._lock:
+            session = self._sessions.pop(server_id, None)
+        if session is not None:
+            try:
+                session.close()
+            except OSError:
+                pass
+
+    def list_tools(self, server_id: str) -> list[McpToolDescriptor]:
+        server = self.get_server(server_id)
+        if server is None or not server.enabled:
+            raise ValueError(f"MCP server not found or disabled: {server_id}")
+        if server.command.strip().lower() in {"", "stub"}:
+            return [McpToolDescriptor(name="stub_ping", description="Stub MCP tool")]
+        session = self._get_session(server)
+        return session.list_tools()
+
+    def _get_session(self, server: McpServerRecord) -> McpStdioSession:
+        with self._lock:
+            session = self._sessions.get(server.server_id)
+            if session is None:
+                session = McpStdioSession(command=server.command, args=server.args)
+                self._sessions[server.server_id] = session
+            else:
+                session.start()
+            return session
+
+    def _invoke_stdio_session(
+        self,
+        server: McpServerRecord,
+        tool_name: str,
+        arguments: dict[str, object],
+    ) -> str:
+        session = self._get_session(server)
+        result = session.call_tool(tool_name, arguments)
+        payload = {
+            "server_id": server.server_id,
+            "tool": tool_name,
+            "arguments": arguments,
+            "status": "ok",
+            "transport": "stdio_session",
+            "result": result,
+        }
+        encoded = json.dumps(payload, ensure_ascii=True)
+        self._audit(server.server_id, tool_name, arguments, encoded, transport="stdio_session")
+        return encoded
 
     def _invoke_stdio_json(
         self,
         server: McpServerRecord,
         tool_name: str,
         arguments: dict[str, object],
+        *,
+        fallback_error: str | None = None,
     ) -> str:
         request_payload = json.dumps(
             {
@@ -125,6 +229,8 @@ class McpRegistryService:
                 "status": "transport_error",
                 "error": str(exc),
             }
+            if fallback_error:
+                payload["session_fallback"] = fallback_error
             result = json.dumps(payload, ensure_ascii=True)
             self._audit(server.server_id, tool_name, arguments, result, transport="stdio_json")
             return result
@@ -189,21 +295,64 @@ class McpRegistryService:
         if not self.file_path.is_file():
             return []
         raw = json.loads(self.file_path.read_text(encoding="utf-8"))
+        return self._parse_raw_items(raw)
+
+    @staticmethod
+    def _parse_raw_items(raw: object) -> list[McpServerRecord]:
+        items: list[dict[str, object]] = []
+        if isinstance(raw, list):
+            items = [item for item in raw if isinstance(item, dict)]
+        elif isinstance(raw, dict):
+            servers = raw.get("servers")
+            if isinstance(servers, list):
+                items = [item for item in servers if isinstance(item, dict)]
+            else:
+                cursor_servers = raw.get("mcpServers")
+                if isinstance(cursor_servers, dict):
+                    for key, cfg in cursor_servers.items():
+                        if not isinstance(cfg, dict):
+                            continue
+                        items.append(
+                            {
+                                "server_id": _slug_server_id(str(key)),
+                                "name": str(key),
+                                "command": cfg.get("command", ""),
+                                "args": cfg.get("args", []),
+                                "enabled": not bool(cfg.get("disabled", False)),
+                            }
+                        )
         records: list[McpServerRecord] = []
-        for item in raw if isinstance(raw, list) else []:
-            if not isinstance(item, dict):
-                continue
-            records.append(
-                McpServerRecord(
-                    server_id=str(item.get("server_id", "")),
-                    name=str(item.get("name", "")),
-                    command=str(item.get("command", "")),
-                    args=[str(arg) for arg in item.get("args", [])],
-                    enabled=bool(item.get("enabled", True)),
-                    allowed_tools=item.get("allowed_tools"),
-                )
-            )
+        for item in items:
+            record = McpRegistryService._record_from_dict(item)
+            if record is not None:
+                records.append(record)
         return records
+
+    @staticmethod
+    def _record_from_dict(item: dict[str, object]) -> Optional[McpServerRecord]:
+        name = str(item.get("name") or "").strip()
+        server_id = str(item.get("server_id") or item.get("id") or "").strip()
+        if not server_id and name:
+            server_id = _slug_server_id(name)
+        if not server_id:
+            return None
+        command = str(item.get("command") or "")
+        args_raw = item.get("args", [])
+        args = [str(arg) for arg in args_raw] if isinstance(args_raw, list) else []
+        allowed_raw = item.get("allowed_tools")
+        allowed_tools = (
+            [str(tool) for tool in allowed_raw]
+            if isinstance(allowed_raw, list)
+            else None
+        )
+        return McpServerRecord(
+            server_id=server_id,
+            name=name or server_id,
+            command=command,
+            args=args,
+            enabled=bool(item.get("enabled", True)),
+            allowed_tools=allowed_tools,
+        )
 
     def _save(self, records: list[McpServerRecord]) -> None:
         payload = [

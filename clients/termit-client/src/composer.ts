@@ -17,6 +17,12 @@ Rules:
 - Paths are relative to the workspace root.
 - If no file edits are needed, omit the JSON block.`;
 
+export const COMPONENT_COMPOSER_INSTRUCTION = `You are editing ONE component/file only.
+- Propose patches ONLY for the scoped path(s) listed below.
+- Do not modify other files unless explicitly listed.
+- Prefer small hunks inside the component.
+${COMPOSER_JSON_INSTRUCTION}`;
+
 export function buildComposerMessage(
   instruction: string,
   files: ComposerFileContext[]
@@ -65,6 +71,37 @@ function normalizePatch(raw: Record<string, unknown>): ApplyPatchRequest | null 
     return { path, hunks, create };
   }
   return null;
+}
+
+export function buildComponentComposerMessage(
+  instruction: string,
+  file: ComposerFileContext
+): string {
+  return [
+    instruction.trim(),
+    "",
+    "---",
+    `Scoped component: ${file.path}`,
+    "",
+    `### ${file.path}`,
+    "```",
+    file.content,
+    "```",
+    "",
+    "---",
+    COMPONENT_COMPOSER_INSTRUCTION,
+  ].join("\n");
+}
+
+export function filterComposerPatchesToPaths(
+  patches: ApplyPatchRequest[],
+  allowedPaths: string[]
+): ApplyPatchRequest[] {
+  const allowed = new Set(allowedPaths.map((item) => item.trim()).filter(Boolean));
+  if (allowed.size === 0) {
+    return patches;
+  }
+  return patches.filter((patch) => allowed.has(patch.path));
 }
 
 export function parseComposerPatches(text: string): ApplyPatchRequest[] {

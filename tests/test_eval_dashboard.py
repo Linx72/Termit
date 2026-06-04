@@ -13,7 +13,7 @@ class EvalDashboardTests(unittest.TestCase):
         self.assertIn("latency_p95_ms", dashboard)
         self.assertIn("estimated_cost_usd", dashboard)
         self.assertIn("scenario_count", dashboard)
-        self.assertGreaterEqual(int(dashboard["scenario_count"]), 53)
+        self.assertGreaterEqual(int(dashboard["scenario_count"]), 54)
 
     def test_eval_dashboard_api(self) -> None:
         from fastapi import FastAPI
@@ -31,7 +31,7 @@ class EvalDashboardTests(unittest.TestCase):
         response = client.get("/api/eval/dashboard?limit=3")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertGreaterEqual(payload["scenario_count"], 53)
+        self.assertGreaterEqual(payload["scenario_count"], 54)
 
 
 if __name__ == "__main__":

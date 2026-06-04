@@ -225,7 +225,9 @@ New machine: `./scripts/setup_new_machine.sh`
   - `TERMIT_DEFAULT_FALLBACK_MODEL`
 
 Use model naming format `provider:model_name`, e.g.:
-- `ollama:deepseek-coder`
+- `ollama:termit-core-ft` (runtime / agents — finetuned Termit weights)
+- `ollama:qwen2.5-coder` (runtime fallback)
+- `TERMIT_TEACHER_MODEL=ollama:deepseek-coder` (stage-1 finetune only; excluded from chat routing)
 - `openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct`
 
 ## Session memory

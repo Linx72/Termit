@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": ".cursor/hooks/session_checkpoint.py"
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": ".cursor/hooks/session_checkpoint.py"
+      },
+      {
+        "command": ".cursor/hooks/token_watch.py"
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": ".cursor/hooks/session_checkpoint.py"
+      },
+      {
+        "command": ".cursor/hooks/token_watch.py"
+      }
+    ],
+    "preCompact": [
+      {
+        "command": ".cursor/hooks/session_checkpoint.py"
+      },
+      {
+        "command": ".cursor/hooks/token_watch.py"
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": ".cursor/hooks/token_watch.py"
+      },
+      {
+        "command": ".cursor/hooks/session_checkpoint.py"
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/hooks/session_checkpoint.py"
+      },
+      {
+        "command": ".cursor/hooks/token_watch.py"
+      }
+    ]
+  }
+}

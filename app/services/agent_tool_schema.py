@@ -186,6 +186,194 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
             },
         },
     },
+    "generate_image": {
+        "type": "function",
+        "function": {
+            "name": "generate_image",
+            "description": "Generate PNG image from prompt; saves to Media Studio asset store.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "width": {"type": "integer"},
+                    "height": {"type": "integer"},
+                    "project_id": {"type": "string"},
+                    "scene_id": {"type": "string"},
+                    "provider": {"type": "string", "description": "openai or stub"},
+                    "confirmed": {"type": "boolean"},
+                },
+                "required": ["prompt"],
+            },
+        },
+    },
+    "list_media_assets": {
+        "type": "function",
+        "function": {
+            "name": "list_media_assets",
+            "description": "List media assets for project or run.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string"},
+                    "run_id": {"type": "string"},
+                    "scene_id": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+            },
+        },
+    },
+    "vision_qa_media": {
+        "type": "function",
+        "function": {
+            "name": "vision_qa_media",
+            "description": "Score image asset against criteria (heuristic or vision).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "asset_id": {"type": "string"},
+                    "criteria": {"type": "string"},
+                    "min_score": {"type": "number"},
+                },
+                "required": ["asset_id"],
+            },
+        },
+    },
+    "estimate_media_cost": {
+        "type": "function",
+        "function": {
+            "name": "estimate_media_cost",
+            "description": "Estimate USD cost from storyboard JSON or path.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "storyboard_path": {"type": "string"},
+                    "storyboard": {"type": "object"},
+                },
+            },
+        },
+    },
+    "tts_generate": {
+        "type": "function",
+        "function": {
+            "name": "tts_generate",
+            "description": "Generate voiceover WAV from text (OpenAI TTS or stub).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "voice_id": {"type": "string"},
+                    "language": {"type": "string"},
+                    "project_id": {"type": "string"},
+                    "confirmed": {"type": "boolean"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    "transcribe_media": {
+        "type": "function",
+        "function": {
+            "name": "transcribe_media",
+            "description": "Transcribe audio/video asset to SRT via Whisper.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "asset_id": {"type": "string"},
+                    "language": {"type": "string"},
+                    "project_id": {"type": "string"},
+                },
+                "required": ["asset_id"],
+            },
+        },
+    },
+    "compose_media": {
+        "type": "function",
+        "function": {
+            "name": "compose_media",
+            "description": "Build MP4 slideshow from timeline (image clips, optional audio/subs).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timeline_path": {"type": "string"},
+                    "timeline": {"type": "object"},
+                    "project_id": {"type": "string"},
+                    "output_name": {"type": "string"},
+                    "preset": {"type": "string", "description": "youtube_16x9|reels_9x16|telegram_1x1"},
+                },
+            },
+        },
+    },
+    "render_video": {
+        "type": "function",
+        "function": {
+            "name": "render_video",
+            "description": "Start I2V render job from source image asset; returns job_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "source_asset_id": {"type": "string"},
+                    "scene_id": {"type": "string"},
+                    "duration_sec": {"type": "number"},
+                    "mode": {"type": "string"},
+                    "provider": {"type": "string"},
+                    "project_id": {"type": "string"},
+                    "confirmed": {"type": "boolean"},
+                },
+                "required": ["prompt", "source_asset_id"],
+            },
+        },
+    },
+    "wait_media_job": {
+        "type": "function",
+        "function": {
+            "name": "wait_media_job",
+            "description": "Poll media job until terminal state.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "job_id": {"type": "string"},
+                    "timeout_sec": {"type": "integer"},
+                },
+                "required": ["job_id"],
+            },
+        },
+    },
+    "export_gif": {
+        "type": "function",
+        "function": {
+            "name": "export_gif",
+            "description": "Export animated GIF from PNG asset_ids.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "asset_ids": {"type": "array", "items": {"type": "string"}},
+                    "project_id": {"type": "string"},
+                    "fps": {"type": "integer"},
+                    "width": {"type": "integer"},
+                },
+                "required": ["asset_ids"],
+            },
+        },
+    },
+    "run_storyboard": {
+        "type": "function",
+        "function": {
+            "name": "run_storyboard",
+            "description": "Studio pipeline: storyboard scenes → images/I2V → master MP4.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "storyboard_path": {"type": "string"},
+                    "storyboard": {"type": "object"},
+                    "brand_kit_id": {"type": "string"},
+                    "project_id": {"type": "string"},
+                    "max_scenes": {"type": "integer"},
+                    "confirmed": {"type": "boolean"},
+                },
+            },
+        },
+    },
 }
 
 

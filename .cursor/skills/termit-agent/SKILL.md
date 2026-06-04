@@ -24,7 +24,9 @@ description: >-
 - Context: retrieval, repo map, symbol index, context packing
 - Finetune / eval / CI gate / training signals
 - Clients: `termit-client`, `termit-desktop`, `vscode-extension`
-- «Do all», «Track B», «platform parity», «что дальше», «на каком этапе»
+- Prompts/skills: `data/prompts/`, `data/skills/`, `.cursor/skills/termit-prompts`
+- «Do all», «do all automatic», «Track B», «platform parity», «что дальше», «на каком этапе»
+- Автоматизация сервера, отключить scheduler/cron → skill **termit-automation**
 
 ## Master plan
 
@@ -33,6 +35,8 @@ description: >-
 | [`PROJECT_TASK_PROMPT_RU.md`](../../../PROJECT_TASK_PROMPT_RU.md) | Фазы 0–5, Top 5, exit criteria |
 | [`PLATFORM_PARITY_PLAN_RU.md`](../../../PLATFORM_PARITY_PLAN_RU.md) | Sprint A–D: Cursor/OpenAI/Antigravity parity |
 | [`START_HERE_RU.md`](../../../START_HERE_RU.md) | Onboarding, LaunchAgent, Ollama, desktop |
+| [`AUTOMATION_TASK_PROMPT_RU.md`](../../../AUTOMATION_TASK_PROMPT_RU.md) | do_all_automatic, toggles, `/api/ops/automation` |
+| [`termit-automation`](../termit-automation/SKILL.md) | Skill: server automation + Desktop panel |
 
 **Текущий вектор:** фазы 0–2 в основном закрыты → **фаза 3** (desktop UX: wizard, terminal, plan mode) + **фаза 4** (eval 2.0, training loop). Finetune — усилитель, не замена платформе.
 

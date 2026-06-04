@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from threading import Lock
 
+from app.services.skill_store import SkillStore
+
 
 class ProjectRulesStore:
     def __init__(self, base_dir: str = "./data/projects") -> None:
@@ -56,7 +58,13 @@ class ProjectRulesStore:
             path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return payload
 
-    def format_for_prompt(self, project_id: str) -> str:
+    def format_for_prompt(
+        self,
+        project_id: str,
+        skill_store: SkillStore | None = None,
+        *,
+        include_skills: bool = True,
+    ) -> str:
         payload = self.get_rules(project_id)
         sections: list[str] = []
         project_rules = str(payload.get("project_rules", "")).strip()
@@ -66,8 +74,13 @@ class ProjectRulesStore:
             sections.append("[Project rules]\n" + project_rules)
         if user_rules:
             sections.append("[User rules]\n" + user_rules)
-        if isinstance(skills, list) and skills:
-            skill_lines = "\n".join(f"- {str(item)}" for item in skills if str(item).strip())
-            if skill_lines:
+        if include_skills and isinstance(skills, list) and skills:
+            skill_ids = [str(item).strip() for item in skills if str(item).strip()]
+            if skill_store is not None and skill_ids:
+                block = skill_store.build_prompt_block(skill_ids)
+                if block:
+                    sections.append(block)
+            elif skill_ids:
+                skill_lines = "\n".join(f"- {item}" for item in skill_ids)
                 sections.append("[Agent skills]\n" + skill_lines)
         return "\n\n".join(sections).strip()
