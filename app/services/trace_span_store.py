@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -21,7 +22,7 @@ class TraceSpanStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS trace_spans (
@@ -51,7 +52,7 @@ class TraceSpanStore:
     ) -> str:
         span_id = f"span_{uuid4().hex[:12]}"
         created_at = datetime.now(timezone.utc).isoformat()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO trace_spans(span_id, run_id, name, status, detail, duration_ms, created_at)
@@ -63,7 +64,7 @@ class TraceSpanStore:
         return span_id
 
     def list_for_run(self, run_id: str, limit: int = 100) -> list[dict[str, object]]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT span_id, run_id, name, status, detail, duration_ms, created_at

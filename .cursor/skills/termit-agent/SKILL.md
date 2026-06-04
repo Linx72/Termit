@@ -38,7 +38,15 @@ description: >-
 | [`AUTOMATION_TASK_PROMPT_RU.md`](../../../AUTOMATION_TASK_PROMPT_RU.md) | do_all_automatic, toggles, `/api/ops/automation` |
 | [`termit-automation`](../termit-automation/SKILL.md) | Skill: server automation + Desktop panel |
 
-**Текущий вектор:** фазы 0–2 в основном закрыты → **фаза 3** (desktop UX: wizard, terminal, plan mode) + **фаза 4** (eval 2.0, training loop). Finetune — усилитель, не замена платформе.
+**Текущий вектор:** parity `0.3.4` закрыт; текущий operational фокус — post-parity этап (4–8 недель): stability hardening, autonomy vNext, desktop product UX, eval/quality 2.0, release discipline. Finetune — усилитель, не замена платформе.
+
+### Post-parity focus (обязательно учитывать)
+
+1. Stability hardening: убрать unclosed sqlite warnings, флейки background-run, nightly для unstable integration.
+2. Agent autonomy vNext: stop-conditions/recovery/fallback и outcome classes.
+3. Desktop UX: next best action после run, быстрый onboarding, runtime status прозрачность.
+4. Eval/quality 2.0: 40+ parity сценариев, fast/deep/release gates, auto degradation report.
+5. Release discipline: `rc -> stable -> hotfix`, автоматизация migration+rollback пакета, SLO/SLA dashboards.
 
 Подробная карта: [reference.md](reference.md). Архив старых milestones: [archive/](archive/).
 
@@ -98,6 +106,7 @@ description: >-
 - Signals: `data/finetune/training_signals.jsonl`
 - CI gate: `scripts/eval_ci_gate.py`, `app/services/eval_ci_gate.py`
 - Regression gate перед promote adapter
+- Release gate: parity category `cursor_parity` минимум 20 сценариев (дальше расширять до 40+)
 
 ## Smoke
 

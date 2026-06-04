@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from app.domain.schemas import (
@@ -30,7 +31,7 @@ class FinetuneServiceTests(unittest.TestCase):
             encoding="utf-8",
         )
         task_db = root / "tasks.db"
-        with sqlite3.connect(task_db) as conn:
+        with closing(sqlite3.connect(task_db)) as conn:
             conn.execute(
                 """
                 CREATE TABLE tasks (
@@ -95,7 +96,7 @@ class FinetuneServiceTests(unittest.TestCase):
             )
             conn.commit()
         agent_db = root / "agent_runs.db"
-        with sqlite3.connect(agent_db) as conn:
+        with closing(sqlite3.connect(agent_db)) as conn:
             conn.execute(
                 """
                 CREATE TABLE agent_runs (
@@ -186,7 +187,7 @@ class FinetuneServiceTests(unittest.TestCase):
         signals_path = root / "training_signals.jsonl"
         signals_path.write_text("", encoding="utf-8")
         memory_db = root / "memory.db"
-        with sqlite3.connect(memory_db) as conn:
+        with closing(sqlite3.connect(memory_db)) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -249,7 +250,7 @@ class FinetuneServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             service = self._build_service(root)
-            with sqlite3.connect(root / "agent_runs.db") as conn:
+            with closing(sqlite3.connect(root / "agent_runs.db")) as conn:
                 conn.execute(
                     """
                     INSERT INTO agent_run_events(run_id, event_type, state, message, timestamp, attempt)

@@ -38,6 +38,21 @@ API fields: `policy_preset`, `auto_confirm_risky_tools`, `verify_after_patch` on
 - Settings: `clients/termit-desktop/src/settings.ts` (`locale: "ru"` default)
 - i18n: `clients/termit-desktop/src/i18n.ts`
 - Presets: `data/desktop_policy_presets.json`
+- Unified file picker: `clients/termit-desktop/src/WorkspaceFilePickerModal.tsx`
+- Unified text modal: `clients/termit-desktop/src/PromptInputModal.tsx`
+
+## UX parity guardrails
+
+- Keep desktop/web UX identical for core flows (attach/open/select/input).
+- Avoid `window.prompt` and platform-only picker branches in tab workflows.
+- Use `runtimeMode` for backend-control semantics only (server control), not for divergent UI interaction models.
+
+## Verify
+
+```bash
+cd clients/termit-desktop && npm run build
+cd ../.. && python3 -m unittest tests.test_desktop_runtime_mode_smoke -q
+```
 
 ## Connect checklist
 

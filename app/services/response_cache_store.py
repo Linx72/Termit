@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from contextlib import closing
 from pathlib import Path
 from threading import Lock
 
@@ -18,7 +19,7 @@ class ResponseCacheStore:
     def get(self, key: str) -> str | None:
         now = time.time()
         if self.backend == "sqlite":
-            with self._lock, self._connect() as conn:
+            with self._lock, closing(self._connect()) as conn:
                 row = conn.execute(
                     "SELECT value, expires_at FROM response_cache WHERE cache_key = ?",
                     (key,),
@@ -46,7 +47,7 @@ class ResponseCacheStore:
             return
         expires_at = time.time() + ttl_seconds
         if self.backend == "sqlite":
-            with self._lock, self._connect() as conn:
+            with self._lock, closing(self._connect()) as conn:
                 conn.execute(
                     """
                     INSERT INTO response_cache(cache_key, value, expires_at)
@@ -69,7 +70,7 @@ class ResponseCacheStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS response_cache (

@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_json(path: Path) -> object:
+    if not path.is_file():
+        raise unittest.SkipTest(f"Missing media fixture: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 

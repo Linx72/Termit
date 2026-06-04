@@ -26,9 +26,18 @@ clients/termit-desktop/src/
   SectionGuide.tsx  # sg* keys per tab
   App.tsx           # tabs, sidebar, agent runs
   settings.ts       # locale default "ru", agentRunMode
+  WorkspaceFilePickerModal.tsx  # unified file/folder picker
+  PromptInputModal.tsx          # unified text input modal
 ```
 
 Policy presets → API: `data/desktop_policy_presets.json`
+
+## UI parity baseline (current)
+
+- Файловые потоки (`Open file`, `@file`, `@folder`, `Composer @file`) идут через единый встроенный picker, без platform-specific диалогов.
+- Текстовые вводы (`@symbol`, `@web`, path inputs) идут через `PromptInputModal`, без `window.prompt`.
+- `runtimeMode` (`auto|desktop|web`) остаётся в настройках для server-control поведения, но UI-потоки едины в desktop и web.
+- Renderer desktop API минимизирован: удалены legacy picker/restart/log IPC методы, оставлены только реально используемые операции.
 
 ## Add / change section guide
 
@@ -46,6 +55,7 @@ Policy presets → API: `data/desktop_policy_presets.json`
 ```bash
 cd clients/termit-desktop && npm run build
 ./scripts/package_desktop.sh
+cd ../.. && python3 -m unittest tests.test_desktop_runtime_mode_smoke -q
 ```
 
 ## Related prompts

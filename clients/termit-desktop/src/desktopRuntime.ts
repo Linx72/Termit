@@ -94,9 +94,6 @@ async function openWebDoc(docId: DocId): Promise<DocOpenResult> {
 }
 
 const webFallback: TermitDesktopApi = {
-  pickWorkspace: async () => null,
-  pickWorkspaceFile: async (_workspace: string) => null,
-  pickRepoRoot: async () => null,
   getLauncherConfig: async () => readLauncherConfig(),
   setLauncherConfig: async (config: LauncherConfig) => {
     writeLauncherConfig(config);

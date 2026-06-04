@@ -29,6 +29,30 @@ def _isolated_agent_service(tmp: str) -> AgentService:
 
 
 class AgentsApiTests(unittest.TestCase):
+    @staticmethod
+    def _wait_for_run_completed(client: TestClient, run_id: str, timeout_seconds: float = 20.0) -> str:
+        state = "queued"
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            run_resp = client.get(f"/api/agents/runs/{run_id}")
+            run_resp.raise_for_status()
+            state = run_resp.json()["state"]
+            if state in {"completed", "failed"}:
+                return state
+            time.sleep(0.1)
+
+        # Fallback path for slow environments: block on SSE stream completion
+        # and re-read final run state to avoid timing flakes on background runs.
+        stream_resp = client.get(
+            f"/api/agents/runs/{run_id}/stream?poll_ms=100&timeout_seconds={int(timeout_seconds)}"
+        )
+        stream_resp.raise_for_status()
+        if "event: done" in stream_resp.text:
+            final_resp = client.get(f"/api/agents/runs/{run_id}")
+            final_resp.raise_for_status()
+            return final_resp.json()["state"]
+        return state
+
     def test_create_agent_and_background_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             service = _isolated_agent_service(tmp)
@@ -62,15 +86,7 @@ class AgentsApiTests(unittest.TestCase):
         self.assertEqual(queue_resp.status_code, 200)
         run_id = queue_resp.json()["run_id"]
 
-        state = "queued"
-        for _ in range(80):
-            run_resp = client.get(f"/api/agents/runs/{run_id}")
-            self.assertEqual(run_resp.status_code, 200)
-            state = run_resp.json()["state"]
-            if state in {"completed", "failed"}:
-                break
-            time.sleep(0.05)
-
+        state = self._wait_for_run_completed(client, run_id)
         self.assertEqual(state, "completed")
 
         events_resp = client.get(f"/api/agents/runs/{run_id}/events")

@@ -62,14 +62,20 @@ See [`../../DESKTOP_QUICKSTART.md`](../../DESKTOP_QUICKSTART.md).
 
 ## Usage
 
-1. **Choose repo** — path to Termit clone (for optional auto-start of `uvicorn`)
+1. **Choose repo** — path to Termit clone via built-in modal (for optional auto-start of `uvicorn`)
 2. **Connect** — loads providers, routing profiles, finetune adapters into model list
 3. **Chat** — streaming (Cmd/Ctrl+Enter), @ file attachments
 3. **Composer** — multi-file context → patches → dry-run preview → apply all
 4. **Editor** — Monaco workspace files, Cmd+K inline edit with diff preview, Save via `apply_patch`
 5. **Tasks** — list and inspect background coding tasks
 6. **Agents** — pick a profile, enqueue a run, poll run timeline
-7. Optional **workspace folder** — required for Editor and improves retrieval / @ file paths
+7. Optional **workspace folder** (via built-in modal) — required for Editor and improves retrieval / @ file paths
+
+### UX parity baseline
+
+- File/folder flows (`Open file`, `@file`, `@folder`, `Composer @file`) use one built-in selection modal.
+- Short text input (`@symbol`, `@web`, path inputs) uses one built-in input modal.
+- Key user flows do not use `window.prompt` or platform-specific picker branches.
 
 ## Auth
 

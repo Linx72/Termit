@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,7 +62,7 @@ class MediaJobStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS media_jobs (
@@ -108,7 +109,7 @@ class MediaJobStore:
             created_at=now,
             updated_at=now,
         )
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO media_jobs (
@@ -134,7 +135,7 @@ class MediaJobStore:
         return record
 
     def get(self, job_id: str) -> Optional[MediaJobRecord]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT * FROM media_jobs WHERE job_id = ?",
                 (job_id,),
@@ -164,7 +165,7 @@ class MediaJobStore:
         if cost_usd is not None:
             record.cost_usd = cost_usd
         record.updated_at = _utc_now()
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """
                 UPDATE media_jobs SET

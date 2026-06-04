@@ -142,6 +142,11 @@ See [`DESKTOP_QUICKSTART.md`](DESKTOP_QUICKSTART.md) and [`clients/termit-deskto
 
 Electron app **Termit** — chat, composer, editor, tasks, agents via Termit API + local Ollama. No Cursor API key.
 
+Desktop/web UX parity baseline:
+- file/folder flows use one built-in selection modal (`Open file`, `@file`, `@folder`, `Composer @file`);
+- short text input uses one built-in input modal (`@symbol`, `@web`, path inputs);
+- no `window.prompt` and no platform-specific picker branches in key user flows.
+
 ```bash
 ./scripts/run_termit_stack.sh          # Ollama + server + desktop dev
 ./scripts/package_desktop.sh           # build Termit.app in release/

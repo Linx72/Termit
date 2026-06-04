@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from threading import Lock
 
@@ -18,7 +19,7 @@ class SQLiteMemoryStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS session_messages (
@@ -37,7 +38,7 @@ class SQLiteMemoryStore:
             conn.commit()
 
     def append(self, session_id: str, message: ChatMessage) -> None:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 "INSERT INTO session_messages(session_id, role, content) VALUES (?, ?, ?)",
                 (session_id, message.role, message.content),
@@ -58,7 +59,7 @@ class SQLiteMemoryStore:
             conn.commit()
 
     def get(self, session_id: str) -> list[ChatMessage]:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 """
                 SELECT role, content
@@ -71,7 +72,7 @@ class SQLiteMemoryStore:
         return [ChatMessage(role=row["role"], content=row["content"]) for row in rows]
 
     def clear(self, session_id: str) -> bool:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             cursor = conn.execute(
                 "DELETE FROM session_messages WHERE session_id = ?",
                 (session_id,),

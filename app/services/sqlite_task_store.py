@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from threading import Lock
 from typing import Optional
@@ -18,7 +19,7 @@ class SQLiteTaskStore:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -56,7 +57,7 @@ class SQLiteTaskStore:
             conn.commit()
 
     def put_task(self, task: TaskStatusResponse) -> None:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO tasks(
@@ -112,7 +113,7 @@ class SQLiteTaskStore:
             conn.commit()
 
     def get_task(self, task_id: str) -> Optional[TaskStatusResponse]:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
             if row is None:
                 return None
@@ -128,7 +129,7 @@ class SQLiteTaskStore:
         return self._row_to_task(row, events)
 
     def list_tasks(self, limit: int = 50) -> list[TaskStatusResponse]:
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT * FROM tasks ORDER BY updated_at DESC LIMIT ?",
                 (limit,),

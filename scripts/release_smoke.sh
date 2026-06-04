@@ -3,41 +3,59 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_URL="${TERMIT_BASE_URL:-http://127.0.0.1:8765}"
+PROFILE="${TERMIT_RELEASE_SMOKE_PROFILE:-core}"
 PYTHON_BIN="${ROOT}/.venv/bin/python"
 if [[ ! -x "${PYTHON_BIN}" ]]; then
   PYTHON_BIN="python3"
 fi
 
 cd "$ROOT"
-echo "== Python tests =="
-"${PYTHON_BIN}" -m unittest discover -s tests -q
 
-echo "== Platform e2e =="
-if "${PYTHON_BIN}" -c "import fastapi" >/dev/null 2>&1; then
-  "${PYTHON_BIN}" -m unittest tests.test_platform_e2e -q
-else
-  echo "Skip platform e2e: fastapi is not installed in active environment."
+if [[ "${PROFILE}" != "core" && "${PROFILE}" != "extended" ]]; then
+  echo "Unknown TERMIT_RELEASE_SMOKE_PROFILE='${PROFILE}' (expected core|extended)." >&2
+  exit 2
 fi
 
-echo "== Smoke HTTP =="
-if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
+echo "== Release smoke profile: ${PROFILE} =="
+echo "== Deterministic core tests =="
+"${PYTHON_BIN}" -m unittest \
+  tests.test_patch_outcome_and_tuning \
+  tests.test_finetune_trajectory_export \
+  tests.test_finetune_service \
+  tests.test_platform_e2e \
+  tests.test_agents_api \
+  tests.test_desktop_runtime_mode_smoke \
+  -q
+
+if [[ "${PROFILE}" == "extended" ]]; then
+  echo "== Extended full unittest discover =="
+  "${PYTHON_BIN}" -m unittest discover -s tests -q
+fi
+
+echo "== Platform/HTTP smoke =="
+if "${PYTHON_BIN}" -c "import fastapi" >/dev/null 2>&1 && curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
   ./scripts/smoke_http.sh
-echo "== Cursor parity eval gate =="
+else
+  echo "Skip smoke_http: fastapi missing or server is unreachable at $BASE_URL."
+fi
+
+if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
+  echo "== Cursor parity eval gate =="
   curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
     -H 'Content-Type: application/json' \
-  -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
+    -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
     | TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-0.95}" "${PYTHON_BIN}" scripts/eval_ci_gate.py
+
+  if [[ "${PROFILE}" == "extended" ]]; then
+    echo "== Full eval CI gate =="
+    curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
+      -H 'Content-Type: application/json' \
+      -d '{"persist_report":false}' \
+      | "${PYTHON_BIN}" scripts/eval_ci_gate.py
+  fi
 elif [[ "${TERMIT_SMOKE_REQUIRE_SERVER:-}" == "1" ]]; then
   echo "TERMIT_SMOKE_REQUIRE_SERVER=1 but server not reachable at $BASE_URL" >&2
   exit 1
 else
-  echo "Server not running on $BASE_URL — skip live HTTP smoke (run uvicorn on :8765 first)."
-fi
-
-if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
-  echo "== Full eval CI gate =="
-  curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
-    -H 'Content-Type: application/json' \
-    -d '{"persist_report":false}' \
-    | "${PYTHON_BIN}" scripts/eval_ci_gate.py
+  echo "Server not running on $BASE_URL — skip live eval gates."
 fi

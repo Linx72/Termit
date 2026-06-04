@@ -1,6 +1,8 @@
 import json
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from app.services.patch_outcome_store import PatchOutcomeStore
@@ -39,9 +41,7 @@ class ToolLoopTuningReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             db = root / "runs.db"
-            import sqlite3
-
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn:
                 conn.execute(
                     """
                     CREATE TABLE agent_run_events (

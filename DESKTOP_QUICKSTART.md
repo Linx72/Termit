@@ -58,11 +58,18 @@ cd /path/to/Termit
 
 ## Первый запуск в приложении
 
-1. **Choose repo** — папка клона Termit (где `app/` и `.venv`).
+1. **Choose repo** — путь к папке клона Termit (где `app/` и `.venv`), через встроенную модалку.
 2. Включите **Start Termit server on app launch** (опционально).
-3. **Choose folder** — workspace с вашим кодом.
+3. **Choose folder** — путь к workspace с вашим кодом, через ту же модалку.
 4. **Connect** (или включите **Connect on launch**).
 5. Вкладки: Chat, Composer, Editor, Tasks, Agents.
+
+### Единый UI-поток (desktop + web)
+
+- Для выбора файлов/папок (`Open file`, `@file`, `@folder`, `Composer @file`) используется встроенная модалка выбора.
+- Для коротких вводов (`@symbol`, `@web`, path inputs) используется встроенная модалка ввода.
+- `window.prompt` и platform-specific picker ветки в ключевых пользовательских потоках не используются.
+- `runtimeMode` (`auto|desktop|web`) влияет на server-control сценарии, а не на различия UX.
 
 ## Собрать .app / .dmg (macOS)
 

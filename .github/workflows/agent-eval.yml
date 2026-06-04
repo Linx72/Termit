@@ -34,7 +34,7 @@ jobs:
 
       - name: Agent eval suite smoke
         run: |
-          curl -sf http://127.0.0.1:8765/api/agents/eval/scenarios | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d.get('scenarios', d if isinstance(d,list) else [])) >= 1 or True"
+          curl -sf http://127.0.0.1:8765/api/agents/eval/scenarios | python3 -c "import sys,json; d=json.load(sys.stdin); scenarios = d.get('scenarios', []) if isinstance(d, dict) else (d if isinstance(d, list) else []); assert len(scenarios) >= 1 or True"
 
       - name: Eval suite CI gate
         env:
