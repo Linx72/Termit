@@ -24,7 +24,7 @@ class TasksApiE2ETests(unittest.TestCase):
         for text in task_inputs:
             create_resp = client.post(
                 "/api/tasks",
-                json={"input": text, "task_type": "general", "mode": "auto"},
+                json={"input": text, "task_type": "general", "mode": "auto", "project_id": "e2e-project"},
             )
             self.assertEqual(create_resp.status_code, 200)
             task_id = create_resp.json()["task_id"]
@@ -33,6 +33,7 @@ class TasksApiE2ETests(unittest.TestCase):
             self.assertEqual(status_resp.status_code, 200)
             body = status_resp.json()
             self.assertEqual(body["state"], "completed")
+            self.assertEqual(body["project_id"], "e2e-project")
             self.assertIn("Task execution completed", body["report"])
 
             events_resp = client.get(f"/api/tasks/{task_id}/events")

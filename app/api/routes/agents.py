@@ -133,6 +133,19 @@ async def list_agent_runs(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.get("/runs/{run_id}/children", response_model=AgentRunListResponse)
+async def list_child_runs(
+    run_id: str,
+    limit: int = 50,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRunListResponse:
+    try:
+        service.get_run(run_id)
+        return service.list_child_runs(run_id, limit=limit)
+    except AgentRunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/runs/dlq", response_model=AgentRunListResponse)
 async def list_dlq_runs(
     limit: int = 50,

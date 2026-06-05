@@ -20,12 +20,14 @@ class SQLiteTaskStoreTests(unittest.TestCase):
                 TaskCreateRequest(
                     input="Prepare execution report [retry-demo]",
                     task_type=TaskType.coding,
+                    project_id="sqlite-project",
                 )
             )
 
             second = TaskService(tooling, store, max_attempts=2)
             task = second.get_task(created.task_id)
             self.assertEqual(task.state, TaskState.completed)
+            self.assertEqual(task.project_id, "sqlite-project")
             listed = second.list_tasks(limit=10)
             self.assertEqual(len(listed), 1)
             self.assertEqual(listed[0].task_id, created.task_id)

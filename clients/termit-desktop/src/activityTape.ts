@@ -85,6 +85,12 @@ function formatTapeLine(locale: "ru" | "en", ev: AgentRunEvent, index: number): 
     if (eventType === "run_retry_scheduled") {
       return `${index + 1}. 🔁 Запланирован повтор: ${message}`;
     }
+    if (eventType === "spawn_agent") {
+      return `${index + 1}. 🧠 Запущен дочерний агент: ${message}`;
+    }
+    if (eventType === "spawn_agent_child_event") {
+      return `${index + 1}. ↳ Child run: ${message}`;
+    }
     if (eventType === "run_completed") {
       return `${index + 1}. ✅ Run завершён успешно`;
     }
@@ -97,6 +103,12 @@ function formatTapeLine(locale: "ru" | "en", ev: AgentRunEvent, index: number): 
     if (eventType === "skills_mounted") {
       return `${index + 1}. 🧩 Подключены skills: ${message}`;
     }
+    if (eventType === "spawn_agent") {
+      return `${index + 1}. 🧵 Запущен дочерний агент: ${message}`;
+    }
+    if (eventType === "child_run_timeline") {
+      return `${index + 1}. ↳ child: ${message}`;
+    }
   } else {
     if (eventType === "run_queued") {
       return `${index + 1}. ⏳ Run queued`;
@@ -107,6 +119,12 @@ function formatTapeLine(locale: "ru" | "en", ev: AgentRunEvent, index: number): 
     if (eventType === "run_retry_scheduled") {
       return `${index + 1}. 🔁 Retry scheduled: ${message}`;
     }
+  if (eventType === "spawn_agent") {
+    return `${index + 1}. 🧠 Child agent started: ${message}`;
+  }
+  if (eventType === "spawn_agent_child_event") {
+    return `${index + 1}. ↳ Child run: ${message}`;
+  }
     if (eventType === "run_completed") {
       return `${index + 1}. ✅ Run completed`;
     }
@@ -118,6 +136,12 @@ function formatTapeLine(locale: "ru" | "en", ev: AgentRunEvent, index: number): 
     }
     if (eventType === "skills_mounted") {
       return `${index + 1}. 🧩 Skills mounted: ${message}`;
+    }
+    if (eventType === "spawn_agent") {
+      return `${index + 1}. 🧵 Child agent started: ${message}`;
+    }
+    if (eventType === "child_run_timeline") {
+      return `${index + 1}. ↳ child: ${message}`;
     }
   }
 

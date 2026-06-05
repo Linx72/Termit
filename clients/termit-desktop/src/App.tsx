@@ -73,6 +73,8 @@ import {
 } from "./desktopRuntime";
 import { WorkspaceFilePickerModal } from "./WorkspaceFilePickerModal";
 import { PromptInputModal } from "./PromptInputModal";
+import { PlanPanel } from "./PlanPanel";
+import { TerminalPanel } from "./TerminalPanel";
 
 
 type AgentFolder = {
@@ -172,6 +174,55 @@ function workspacePrefix(workspace: string): string {
   }
   const parts = workspace.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] ?? "";
+}
+
+type ChatInteractionMode = StoredSettings["chatInteractionMode"];
+
+function resolveRunMode(mode: ChatInteractionMode): "ask" | "plan" | "agent" {
+  if (mode === "ask") {
+    return "ask";
+  }
+  if (mode === "plan") {
+    return "plan";
+  }
+  return "agent";
+}
+
+function runModeDescription(locale: "ru" | "en", mode: "ask" | "plan" | "agent"): string {
+  if (locale === "ru") {
+    if (mode === "ask") {
+      return "Read-only: агент не сможет писать файлы или запускать команды.";
+    }
+    if (mode === "plan") {
+      return "Планирование: только план и анализ, без apply_patch и execute_command.";
+    }
+    return "Исполнение: агент может планировать, править файлы и запускать verify.";
+  }
+  if (mode === "ask") {
+    return "Read-only: no file writes or command execution.";
+  }
+  if (mode === "plan") {
+    return "Planning only: analysis and plan without apply_patch/execute_command.";
+  }
+  return "Execution: agent can plan, patch files, and run verify commands.";
+}
+
+function parseAutoAssignedAgentName(events: AgentRunEvent[]): string {
+  for (const event of events) {
+    if (event.event_type !== "skills_mounted") {
+      continue;
+    }
+    try {
+      const data = JSON.parse(event.message) as { selections?: Array<{ source?: string; name?: string }> };
+      const auto = data.selections?.find((item) => item?.source === "auto");
+      if (auto?.name?.trim()) {
+        return auto.name.trim();
+      }
+    } catch {
+      // noop
+    }
+  }
+  return "";
 }
 
 function formatAgentProfileDetail(agent: AgentProfile): string {
@@ -295,6 +346,12 @@ export function App() {
     const agent = agents.find((item) => item.agent_id === selectedAgentId);
     return agent?.name || "General";
   }, [agents, selectedAgentId]);
+  const activeRunMode = useMemo(() => resolveRunMode(settings.chatInteractionMode), [settings.chatInteractionMode]);
+  const activeRunModeLabel = useMemo(() => activeRunMode.toUpperCase(), [activeRunMode]);
+  const activeRunModeHint = useMemo(
+    () => runModeDescription(locale, activeRunMode),
+    [locale, activeRunMode]
+  );
   const chatFolders = useMemo<AgentFolder[]>(() => {
     const map = new Map<string, StoredChatSession[]>();
     for (const session of chatSessions) {
@@ -623,7 +680,7 @@ export function App() {
     }
   };
 
-  const buildRunPayload = (input: string, runMode: "ask" | "agent" = "agent") => {
+  const buildRunPayload = (input: string, runMode: "ask" | "agent" | "plan" = "agent") => {
     const useSsh =
       settings.executionMode === "ssh" ||
       (settings.executionMode === "hybrid" && settings.sshHost.trim());
@@ -666,53 +723,6 @@ export function App() {
     return `${transcript}\n\n[user follow-up]\n${message}`;
   };
 
-  const sendAskChat = async (fullMessage: string) => {
-    const assistantId = blockId();
-    setBlocks((prev) => [
-      ...prev,
-      {
-        id: assistantId,
-        kind: "assistant",
-        text: locale === "ru" ? "Думаю…" : "Thinking…",
-      },
-    ]);
-    let responseText = "";
-    try {
-      for await (const event of client.chatStream({
-        message: fullMessage,
-        task_type: settings.taskType,
-        session_id: settings.sessionId || undefined,
-        model: settings.selectedModel || undefined,
-        repo_profile: settings.repoProfile || undefined,
-        use_retrieval: settings.useRetrieval,
-        use_repo_map: Boolean(projectId),
-        use_context_packing: true,
-        changed_files: attachmentPaths(attachments),
-        project_id: projectId || undefined,
-        retrieval_path_prefix: workspacePrefix(settings.workspace),
-      })) {
-        if (event.event === "meta") {
-          const nextSession = String(event.data.session_id ?? "");
-          if (nextSession) {
-            updateSettings({ sessionId: nextSession });
-          }
-        } else if (event.event === "token") {
-          responseText += String(event.data.text ?? "");
-          setBlocks((prev) =>
-            prev.map((block) =>
-              block.id === assistantId ? { ...block, text: responseText || "…" } : block
-            )
-          );
-        }
-      }
-    } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
-      setBlocks((prev) =>
-        prev.map((block) => (block.id === assistantId ? { ...block, kind: "error", text } : block))
-      );
-    }
-  };
-
   const importCursorRules = async () => {
     if (!connected || !projectId || rulesSaving) {
       return;
@@ -738,7 +748,32 @@ export function App() {
 
   const refreshAgentRuns = async (agentId: string) => {
     const response = await client.listAgentRuns(agentId, 15);
-    setAgentRuns(response.runs);
+    const nestedRuns: AgentRunRecord[] = [];
+    for (const run of response.runs) {
+      nestedRuns.push(run);
+      try {
+        const children = await client.listChildRuns(run.run_id, 20);
+        for (const child of children.runs) {
+          nestedRuns.push(child);
+        }
+      } catch {
+        // Keep parent runs visible even if child query fails.
+      }
+    }
+    nestedRuns.sort((a, b) => {
+      const left = Date.parse(a.updated_at || a.created_at || "") || 0;
+      const right = Date.parse(b.updated_at || b.created_at || "") || 0;
+      return right - left;
+    });
+    const seen = new Set<string>();
+    const deduped = nestedRuns.filter((run) => {
+      if (seen.has(run.run_id)) {
+        return false;
+      }
+      seen.add(run.run_id);
+      return true;
+    });
+    setAgentRuns(deduped.slice(0, 30));
   };
 
   const refreshPlatformData = async (agentId?: string | null) => {
@@ -1674,11 +1709,7 @@ export function App() {
     try {
       const input = buildMessageWithAttachments(fullMessage, currentAttachments);
       setAgentInput(input);
-      if (settings.chatInteractionMode === "ask") {
-        await sendAskChat(input);
-      } else {
-        await runAgent(input, undefined, "agent");
-      }
+      await runAgent(input, undefined, activeRunMode);
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
@@ -1715,6 +1746,81 @@ export function App() {
     }
   };
 
+  const runPlanToComposer = (planText: string) => {
+    const trimmed = planText.trim();
+    if (!trimmed) {
+      return;
+    }
+    setComposerInput(trimmed);
+    setSettings((prev) => ({ ...prev, chatInteractionMode: "agent" }));
+    setAttachments([]);
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: blockId(),
+        kind: "meta",
+        text:
+          locale === "ru"
+            ? "План перенесён в Composer. Теперь можно запускать реализацию."
+            : "Plan moved to Composer. You can now run implementation.",
+      },
+    ]);
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: blockId(),
+        kind: "meta",
+        text:
+          locale === "ru"
+            ? "Cursor flow: режим переключен на Agent, откройте Composer и запустите реализацию плана."
+            : "Cursor flow: switched to Agent mode, open Composer and run implementation from the plan.",
+      },
+    ]);
+  };
+
+  const runPlanToComposerWithVerify = (planText: string) => {
+    const trimmed = planText.trim();
+    if (!trimmed) {
+      return;
+    }
+    setPendingVerifyCommands((prev) => {
+      const items = [...prev, "python3 -m unittest discover -s tests -q"];
+      return items.filter((item, index, all) => all.indexOf(item) === index);
+    });
+    runPlanToComposer(trimmed);
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: blockId(),
+        kind: "meta",
+        text:
+          locale === "ru"
+            ? "Добавлена verify-команда для Терминала."
+            : "Verify command added for Terminal.",
+      },
+    ]);
+  };
+
+  const runPlanMode = async (message: string): Promise<{ response: string; sessionId?: string }> => {
+    const input = message.trim();
+    if (!input) {
+      return { response: "" };
+    }
+    const agentId = await resolveAgentIdForRun(undefined, input);
+    if (!agentId) {
+      throw new Error(locale === "ru" ? "Не удалось определить агента для Plan mode." : "Could not resolve agent for Plan mode.");
+    }
+    const created = await client.createAgentRun(agentId, buildRunPayload(input, "plan"));
+    await watchAgentRun(client, created.run_id, () => {
+      // Plan panel does not need streaming timeline; final response is fetched after completion.
+    }, { pollMs: 500, timeoutSeconds: 900 });
+    const final = await client.getAgentRun(created.run_id);
+    if (selectedAgentId) {
+      void refreshAgentRuns(selectedAgentId);
+    }
+    return { response: final.response || "", sessionId: final.session_id || undefined };
+  };
+
   const queueTask = async () => {
     const input = draft.trim();
     if (!input) {
@@ -1736,7 +1842,7 @@ export function App() {
   const runAgent = async (
     inputOverride?: string,
     agentIdOverride?: string,
-    runMode: "ask" | "agent" = "agent"
+    runMode: "ask" | "agent" | "plan" = "agent"
   ) => {
     const input = (inputOverride ?? agentInput).trim();
     if (!input) {
@@ -1780,8 +1886,8 @@ export function App() {
         kind: "meta",
         text:
           locale === "ru"
-            ? `Запускаю агента «${agents.find((a) => a.agent_id === agentId)?.name ?? agentId}» · режим ${settings.executionMode}${isBuildTask(input) ? " · plan→research→scaffold→build" : ""}…`
-            : `Starting agent «${agents.find((a) => a.agent_id === agentId)?.name ?? agentId}» · mode ${settings.executionMode}${isBuildTask(input) ? " · plan→research→scaffold→build" : ""}…`,
+            ? `Запускаю агента «${agents.find((a) => a.agent_id === agentId)?.name ?? agentId}» · режим ${settings.executionMode} · ${runMode.toUpperCase()}${isBuildTask(input) ? " · plan→research→scaffold→build" : ""}…`
+            : `Starting agent «${agents.find((a) => a.agent_id === agentId)?.name ?? agentId}» · mode ${settings.executionMode} · ${runMode.toUpperCase()}${isBuildTask(input) ? " · plan→research→scaffold→build" : ""}…`,
       },
       {
         id: runTapeId,
@@ -1898,12 +2004,18 @@ export function App() {
           ? `Run завершён: ${finalRun.state}`
           : `Run finished: ${finalRun.state}`);
       const completion = buildCompletionSuggestions(locale, finalRun, lastEvents, latestChanges);
+      const autoAssigned = parseAutoAssignedAgentName(lastEvents);
 
       setBlocks((prev) => {
         const hasSuggestions = prev.some((block) => block.id === runSuggestionsId);
         const next = prev.map((block) => {
           if (block.id === runMetaId) {
-            return { ...block, text: `Agent run: ${run.run_id} · ${finalRun.state}` };
+            return {
+              ...block,
+              text: autoAssigned
+                ? `Agent run: ${run.run_id} · ${finalRun.state} · auto: ${autoAssigned}`
+                : `Agent run: ${run.run_id} · ${finalRun.state}`,
+            };
           }
           if (block.id === runTapeId) {
             return { ...block, text: finalTape };
@@ -2706,6 +2818,7 @@ export function App() {
         <header className="cursor-titlebar">
           <h1>{activeChatTitle}</h1>
           <span className="cursor-mode-badge">{settings.executionMode}</span>
+          <span className="cursor-mode-badge">{activeRunModeLabel}</span>
           <span className={`cursor-runtime-badge ${runtimeMeta.mode === "desktop" ? "ok" : "warn"}`}>
             {runtimeMeta.mode === "desktop"
               ? t(locale, "runtimeBadgeDesktop")
@@ -2718,6 +2831,30 @@ export function App() {
           ) : null}
         </header>
 
+        {settings.chatInteractionMode === "plan" ? (
+          <PlanPanel
+            locale={locale}
+            connected={connected}
+            onRunPlan={runPlanMode}
+            onBuild={runPlanToComposer}
+            onBuildAndVerify={runPlanToComposerWithVerify}
+            externalBusy={busy}
+            modeLabel={activeRunModeLabel}
+          />
+        ) : settings.chatInteractionMode === "terminal" ? (
+          <TerminalPanel
+            client={client}
+            connected={connected}
+            locale={locale}
+            workspace={settings.workspace}
+            suggestedCommands={pendingVerifyCommands}
+            modeLabel={activeRunModeLabel}
+            externalBusy={busy}
+            onCommandFinished={(cmd) =>
+              setPendingVerifyCommands((prev) => prev.filter((item) => item !== cmd))
+            }
+          />
+        ) : (
         <div className="cursor-chat-scroll" ref={chatLogRef}>
               {blocks.length === 0 ? (
                 <div className="cursor-empty-state">
@@ -2786,6 +2923,7 @@ export function App() {
                 ))
               )}
         </div>
+        )}
 
         <footer className="cursor-footer">
           {busy ? (
@@ -2815,7 +2953,7 @@ export function App() {
             </div>
           ) : null}
 
-          {attachments.length > 0 ? (
+          {settings.chatInteractionMode !== "plan" && settings.chatInteractionMode !== "terminal" && attachments.length > 0 ? (
             <div className="chips">
               {attachments.map((item) => (
                 <span key={`${item.kind}-${item.path}-${item.label ?? ""}`} className="chip">
@@ -2837,8 +2975,13 @@ export function App() {
           <div className="cursor-composer">
             <textarea
               value={draft}
+              disabled={settings.chatInteractionMode === "plan"}
               placeholder={
-                blocks.length > 0
+                settings.chatInteractionMode === "plan"
+                  ? locale === "ru"
+                    ? "Режим Plan открыт выше — сформулируйте задачу в панели плана."
+                    : "Plan mode is open above — describe the task in the plan panel."
+                  : blocks.length > 0
                   ? locale === "ru"
                     ? "Send follow-up…"
                     : "Send follow-up…"
@@ -2848,7 +2991,7 @@ export function App() {
               }
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (event.key === "Enter" && !event.shiftKey && settings.chatInteractionMode !== "plan") {
                   event.preventDefault();
                   if (draft.trim() && !busy) {
                     void sendChat();
@@ -2860,7 +3003,7 @@ export function App() {
               <button
                 type="button"
                 className="secondary compact"
-                disabled={!connected}
+                disabled={!connected || settings.chatInteractionMode === "plan"}
                 title={locale === "ru" ? "Прикрепить файл" : "Attach file"}
                 onClick={() => void attachFile()}
               >
@@ -2877,6 +3020,8 @@ export function App() {
               >
                 <option value="agent">{t(locale, "chatModeAgent")}</option>
                 <option value="ask">{t(locale, "chatModeAsk")}</option>
+                <option value="plan">{t(locale, "chatModePlan")}</option>
+                <option value="terminal">{t(locale, "chatModeTerminal")}</option>
               </select>
               <select
                 value={selectedAgentId ?? ""}
@@ -2905,7 +3050,7 @@ export function App() {
               <button
                 type="button"
                 className="secondary compact"
-                disabled={!connected || busy || !draft.trim()}
+                disabled={!connected || busy || settings.chatInteractionMode === "terminal" || !draft.trim()}
                 onClick={() => void runChatAsAgent()}
                 title={t(locale, "runAsAgentHint")}
               >
@@ -2914,13 +3059,39 @@ export function App() {
               <button
                 type="button"
                 className="cursor-send-btn"
-                disabled={!connected || busy || !draft.trim()}
-                onClick={() => void sendChat()}
+                disabled={!connected || busy || (settings.chatInteractionMode !== "terminal" && !draft.trim())}
+                onClick={() => {
+                  if (settings.chatInteractionMode === "terminal") {
+                    const trimmed = draft.trim();
+                    if (!trimmed) {
+                      return;
+                    }
+                    setPendingVerifyCommands((prev) => {
+                      const merged = [...prev, trimmed];
+                      return merged.filter((item, index, all) => all.indexOf(item) === index);
+                    });
+                    setDraft("");
+                    setBlocks((prev) => [
+                      ...prev,
+                      {
+                        id: blockId(),
+                        kind: "meta",
+                        text: locale === "ru" ? `Добавлено в Terminal: ${trimmed}` : `Added to Terminal: ${trimmed}`,
+                      },
+                    ]);
+                    return;
+                  }
+                  void sendChat();
+                }}
               >
                 {busy
                   ? "…"
                   : settings.chatInteractionMode === "ask"
                     ? t(locale, "sendAsk")
+                    : settings.chatInteractionMode === "plan"
+                      ? t(locale, "sendPlan")
+                      : settings.chatInteractionMode === "terminal"
+                        ? t(locale, "sendTerminal")
                     : locale === "ru"
                       ? "Отправить"
                       : "Send"}

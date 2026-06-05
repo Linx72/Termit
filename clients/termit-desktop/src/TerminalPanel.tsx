@@ -8,6 +8,9 @@ interface TerminalPanelProps {
   locale: Locale;
   workspace?: string;
   suggestedCommands?: string[];
+  modeLabel?: string;
+  externalBusy?: boolean;
+  onCommandFinished?: (command: string) => void;
 }
 
 interface TerminalEntry {
@@ -29,6 +32,9 @@ export function TerminalPanel({
   locale,
   workspace = "",
   suggestedCommands = [],
+  modeLabel,
+  externalBusy = false,
+  onCommandFinished,
 }: TerminalPanelProps) {
   const [command, setCommand] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,7 +66,7 @@ export function TerminalPanel({
 
   const runCommand = async (cmd: string) => {
     const trimmed = cmd.trim();
-    if (!trimmed || !connected || busy) {
+    if (!trimmed || !connected || busy || externalBusy) {
       return;
     }
     setBusy(true);
@@ -85,6 +91,7 @@ export function TerminalPanel({
         ...prev,
       ].slice(0, 30));
       setCommand("");
+      onCommandFinished?.(trimmed);
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       setHistory((prev) => [
@@ -106,6 +113,11 @@ export function TerminalPanel({
 
   return (
     <div className="panel-body terminal-panel">
+      {modeLabel ? (
+        <div className="row">
+          <span className="cursor-mode-badge">{modeLabel}</span>
+        </div>
+      ) : null}
       <p className="hint">{t(locale, "terminalHintExtended")}</p>
       <div className="row terminal-quick">
         {quickCommands.map((cmd) => (
@@ -113,7 +125,7 @@ export function TerminalPanel({
             key={cmd}
             type="button"
             className="secondary compact"
-            disabled={!connected || busy}
+            disabled={!connected || busy || externalBusy}
             onClick={() => void runCommand(cmd)}
           >
             {cmd}
@@ -145,7 +157,7 @@ export function TerminalPanel({
             }
           }}
         />
-        <button type="button" className="primary" disabled={!connected || busy || !command.trim()} onClick={() => void runCommand(command)}>
+        <button type="button" className="primary" disabled={!connected || busy || externalBusy || !command.trim()} onClick={() => void runCommand(command)}>
           {t(locale, "runCommand")}
         </button>
       </div>

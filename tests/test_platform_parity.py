@@ -77,6 +77,23 @@ class PlatformParityTests(unittest.TestCase):
             )
             payload = registry.invoke_tool(server.server_id, "ping", {"x": 1})
             self.assertIn("stub_ok", payload)
+            with self.assertRaises(ValueError):
+                registry.invoke_tool(server.server_id, "blocked", {})
+
+    def test_mcp_registry_server_allowed_tools_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = McpRegistryService(str(Path(tmp) / "mcp.json"))
+            created = registry.upsert_server(
+                name="with-tools",
+                command="stub",
+                args=[],
+                allowed_tools=["ping", "search"],
+            )
+            self.assertEqual(created.allowed_tools, ["ping", "search"])
+            loaded = registry.get_server(created.server_id)
+            self.assertIsNotNone(loaded)
+            assert loaded is not None
+            self.assertEqual(loaded.allowed_tools, ["ping", "search"])
 
     def test_mcp_registry_invoke_stdio_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -149,6 +166,29 @@ class PlatformParityTests(unittest.TestCase):
             self.assertEqual(len(imported), 1)
             self.assertEqual(imported[0].command, "npx")
             self.assertEqual(len(registry.list_servers()), 1)
+
+    def test_mcp_registry_import_preserves_allowed_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "registry.json"
+            source.write_text(
+                json.dumps(
+                    {
+                        "servers": [
+                            {
+                                "server_id": "srv_1",
+                                "name": "srv",
+                                "command": "stub",
+                                "args": [],
+                                "allowed_tools": ["a", "b"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry = McpRegistryService(str(Path(tmp) / "target.json"))
+            imported = registry.import_from_mcp_file(source, merge=True)
+            self.assertEqual(imported[0].allowed_tools, ["a", "b"])
 
     def test_hook_service_runs_local_script(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -57,6 +57,8 @@ class AgentTemplatesStore:
             system_prompt=template.system_prompt,
             task_type=template.task_type,
             enabled_tools=list(template.enabled_tools),
+            allowed_mcp_servers=["*"],
+            allowed_mcp_tools=["*"],
             use_tool_loop=template.use_tool_loop,
             use_retrieval=template.use_retrieval,
             allow_online=template.allow_online,

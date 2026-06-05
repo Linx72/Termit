@@ -19,7 +19,7 @@ export interface StoredSettings {
   activeJourneyId: string;
   executionMode: "local" | "online" | "hybrid" | "ssh";
   agentRunMode: "guided" | "autopilot";
-  chatInteractionMode: "ask" | "agent";
+  chatInteractionMode: "ask" | "agent" | "plan" | "terminal";
   autoExecuteWithAgent: boolean;
   sshHost: string;
   sshUser: string;

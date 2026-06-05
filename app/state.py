@@ -50,6 +50,7 @@ from app.services.patch_outcome_store import PatchOutcomeStore
 from app.services.feedback_store import FeedbackStore
 from app.services.sqlite_task_store import SQLiteTaskStore
 from app.services.task_service import PlanningError, TaskService
+from app.services.task_agent_assignment import resolve_primary_template_id, resolve_project_template_ids
 from app.services.task_store import InMemoryTaskStore
 from app.services.provider_circuit_breaker import ProviderCircuitBreaker
 from app.services.quota_store import QuotaStore
@@ -316,29 +317,143 @@ def _build_task_service() -> TaskService:
         use_agent_for_auto=settings.task_use_agent,
         task_agent_id=settings.task_agent_id,
         assignment_workspace=_build_assignment_workspace_service(),
+        agent_registry=_build_agent_registry_store(),
+        agent_templates=_build_agent_templates_store(),
     )
 
 
-def _task_agent_runner(input_text: str, task_type, session_id: Optional[str]) -> str:
+def _task_agent_runner(
+    input_text: str,
+    task_type,
+    session_id: Optional[str],
+    project_id: Optional[str],
+) -> str:
     import asyncio
 
     from app.domain.schemas import AgentRunRequest, TaskType
 
     settings = get_settings()
     service = get_agent_service()
-    agent_id = settings.task_agent_id.strip()
-    if not agent_id:
-        agents = service.list_agents()
-        typed = [item for item in agents if item.task_type == task_type]
-        if typed:
-            agent_id = typed[0].agent_id
-        elif agents:
-            agent_id = agents[0].agent_id
+    agent_id = _resolve_task_agent_id(
+        input_text=input_text,
+        requested_task_type=task_type,
+        preferred_agent_id=settings.task_agent_id.strip(),
+        project_id=project_id,
+        service=service,
+    )
     if not agent_id:
         raise PlanningError("No agent configured for TERMIT_TASK_USE_AGENT.")
-    payload = AgentRunRequest(input=input_text, session_id=session_id)
+    payload = AgentRunRequest(input=input_text, session_id=session_id, project_id=project_id)
     result = asyncio.run(service.run_agent(agent_id, payload))
     return result.response or ""
+
+
+def _resolve_task_agent_id(
+    *,
+    input_text: str,
+    requested_task_type,
+    preferred_agent_id: str,
+    project_id: Optional[str],
+    service: AgentService,
+) -> str:
+    from app.domain.schemas import TaskType
+
+    if preferred_agent_id:
+        return preferred_agent_id
+
+    agents = service.list_agents()
+    effective_type = _infer_task_type_for_assignment(requested_task_type, input_text)
+    selected = _pick_existing_agent_id(agents, effective_type, input_text)
+    if selected:
+        return selected
+
+    templates = get_agent_templates_store()
+    if project_id:
+        for template_id in resolve_project_template_ids(effective_type, input_text):
+            try:
+                request = templates.to_create_request(template_id)
+            except ValueError:
+                continue
+            existing = next(
+                (item for item in agents if item.name == request.name and item.task_type == request.task_type),
+                None,
+            )
+            if existing is not None:
+                continue
+            created = service.create_agent(request)
+            agents.append(created)
+
+    template_id = _pick_template_for_task(effective_type, input_text)
+    if template_id:
+        try:
+            request = templates.to_create_request(template_id)
+        except ValueError:
+            request = None
+        if request is not None:
+            created = service.create_agent(request)
+            return created.agent_id
+
+    # Last fallback keeps previous behavior if templates are unavailable.
+    typed = [item for item in agents if item.task_type == requested_task_type]
+    if typed:
+        return typed[0].agent_id
+    if agents:
+        return agents[0].agent_id
+    return ""
+
+
+def _infer_task_type_for_assignment(requested_task_type, input_text: str):
+    from app.domain.schemas import TaskType
+
+    if requested_task_type != TaskType.general:
+        return requested_task_type
+
+    text = input_text.lower()
+    if any(term in text for term in ("online project", "deliverables", "journal", "assignment")):
+        return TaskType.online_project
+    if any(term in text for term in ("research", "источник", "sources", "web search", "http://", "https://")):
+        return TaskType.online_research
+    if any(term in text for term in ("image", "video", "storyboard", "render", "gif", "media", "tts")):
+        return TaskType.creative_media
+    if any(term in text for term in ("debug", "traceback", "error", "bugfix", "fix bug")):
+        return TaskType.debug
+    if any(term in text for term in ("review", "security audit", "audit", "vulnerability")):
+        return TaskType.review
+    if any(term in text for term in ("explain", "why", "how does")):
+        return TaskType.explain
+    return TaskType.coding
+
+
+def _pick_existing_agent_id(agents: list, task_type, input_text: str) -> str:
+    if not agents:
+        return ""
+    lowered = input_text.lower()
+
+    def _score(agent) -> int:
+        score = 0
+        if agent.task_type == task_type:
+            score += 100
+        if task_type.value.startswith("online") and getattr(agent, "allow_online", False):
+            score += 15
+        name = (getattr(agent, "name", "") or "").lower()
+        if "research" in lowered and "research" in name:
+            score += 10
+        if any(term in lowered for term in ("test", "tests", "unittest")) and "test" in name:
+            score += 10
+        if "ci" in lowered and "ci" in name:
+            score += 10
+        if any(term in lowered for term in ("security", "audit", "vulnerability")) and "security" in name:
+            score += 10
+        return score
+
+    ranked = sorted(agents, key=_score, reverse=True)
+    if _score(ranked[0]) > 0:
+        return ranked[0].agent_id
+    return ""
+
+
+def _pick_template_for_task(task_type, input_text: str) -> str:
+    return resolve_primary_template_id(task_type, input_text)
 
 
 def get_task_service() -> TaskService:

@@ -154,6 +154,12 @@ export class TermitClient {
     );
   }
 
+  listChildRuns(runId: string, limit = 20): Promise<AgentRunListResponse> {
+    return this.request<AgentRunListResponse>(
+      `/api/agents/runs/${encodeURIComponent(runId)}/children?limit=${limit}`
+    );
+  }
+
   getAgentRunEvents(runId: string): Promise<AgentRunEvent[]> {
     return this.request<AgentRunEvent[]>(
       `/api/agents/runs/${encodeURIComponent(runId)}/events`

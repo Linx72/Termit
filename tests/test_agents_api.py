@@ -127,6 +127,35 @@ class AgentsApiTests(unittest.TestCase):
         self.assertEqual(denied.status_code, 403)
         self.assertIn("not allowed", denied.json()["detail"])
 
+    def test_ask_and_plan_run_modes_are_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = _isolated_agent_service(tmp)
+            with patch("app.api.routes.agents.get_agent_service", return_value=service):
+                client = TestClient(app)
+                create_resp = client.post(
+                    "/api/agents",
+                    json={
+                        "name": "Mode Agent",
+                        "description": "mode test",
+                        "system_prompt": "Mode-aware agent.",
+                        "task_type": "general",
+                        "enabled_tools": ["read_file", "apply_patch", "execute_command"],
+                    },
+                )
+                self.assertEqual(create_resp.status_code, 200)
+                agent_id = create_resp.json()["agent_id"]
+
+                ask_resp = client.post(
+                    f"/api/agents/{agent_id}/runs",
+                    json={"input": "answer only", "run_mode": "ask"},
+                )
+                self.assertEqual(ask_resp.status_code, 200)
+                plan_resp = client.post(
+                    f"/api/agents/{agent_id}/runs",
+                    json={"input": "plan only", "run_mode": "plan"},
+                )
+                self.assertEqual(plan_resp.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

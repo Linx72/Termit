@@ -29,6 +29,7 @@ class SQLiteTaskStore:
                     task_type TEXT NOT NULL,
                     mode TEXT NOT NULL,
                     session_id TEXT,
+                    project_id TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     report TEXT,
@@ -39,6 +40,12 @@ class SQLiteTaskStore:
                 )
                 """
             )
+            columns = {
+                str(item["name"]): str(item["type"])
+                for item in conn.execute("PRAGMA table_info(tasks)").fetchall()
+            }
+            if "project_id" not in columns:
+                conn.execute("ALTER TABLE tasks ADD COLUMN project_id TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS task_events (
@@ -61,16 +68,17 @@ class SQLiteTaskStore:
             conn.execute(
                 """
                 INSERT INTO tasks(
-                    task_id, state, input, task_type, mode, session_id,
+                    task_id, state, input, task_type, mode, session_id, project_id,
                     created_at, updated_at, report, error, failure_class,
                     attempts, max_attempts
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(task_id) DO UPDATE SET
                     state=excluded.state,
                     input=excluded.input,
                     task_type=excluded.task_type,
                     mode=excluded.mode,
                     session_id=excluded.session_id,
+                    project_id=excluded.project_id,
                     created_at=excluded.created_at,
                     updated_at=excluded.updated_at,
                     report=excluded.report,
@@ -86,6 +94,7 @@ class SQLiteTaskStore:
                     task.task_type.value,
                     task.mode.value,
                     task.session_id,
+                    task.project_id,
                     task.created_at,
                     task.updated_at,
                     task.report,
@@ -160,6 +169,7 @@ class SQLiteTaskStore:
             task_type=TaskType(row["task_type"]),
             mode=TaskMode(row["mode"]),
             session_id=row["session_id"],
+            project_id=row["project_id"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             report=row["report"],

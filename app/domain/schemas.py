@@ -844,6 +844,7 @@ class TaskCreateRequest(BaseModel):
     task_type: TaskType = TaskType.general
     mode: TaskMode = TaskMode.auto
     session_id: Optional[str] = None
+    project_id: Optional[str] = Field(default=None, max_length=256)
 
 
 class TaskEvent(BaseModel):
@@ -866,6 +867,7 @@ class TaskStatusResponse(BaseModel):
     task_type: TaskType
     mode: TaskMode
     session_id: Optional[str] = None
+    project_id: Optional[str] = None
     created_at: str
     updated_at: str
     report: Optional[str] = None
@@ -904,6 +906,8 @@ class AgentProfileCreateRequest(BaseModel):
     online_timeout_seconds: int = Field(default=10, ge=1, le=60)
     online_capture_links_limit: int = Field(default=10, ge=1, le=50)
     enabled_tools: list[str] = Field(default_factory=list)
+    allowed_mcp_servers: list[str] = Field(default_factory=lambda: ["*"])
+    allowed_mcp_tools: list[str] = Field(default_factory=lambda: ["*"])
     use_tool_loop: bool = False
     max_tool_steps: int = Field(default=6, ge=1, le=20)
     use_long_term_memory: bool = True
@@ -928,6 +932,8 @@ class AgentProfileResponse(BaseModel):
     online_timeout_seconds: int = 10
     online_capture_links_limit: int = 10
     enabled_tools: list[str] = Field(default_factory=list)
+    allowed_mcp_servers: list[str] = Field(default_factory=lambda: ["*"])
+    allowed_mcp_tools: list[str] = Field(default_factory=lambda: ["*"])
     use_tool_loop: bool = False
     max_tool_steps: int = 6
     use_long_term_memory: bool = True

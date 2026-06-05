@@ -369,6 +369,47 @@ class SprintTop5Tests(unittest.TestCase):
             finally:
                 service.stop()
 
+    def test_child_timeline_event_is_forwarded_to_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            profile = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="timeline-agent",
+                    description="test",
+                    system_prompt="test",
+                    task_type=TaskType.coding,
+                    enabled_tools=["list_files"],
+                    use_tool_loop=True,
+                )
+            )
+            store = InMemoryAgentRunStore()
+            service = AgentService(
+                chat_service=LoopChatStub(['{"action":"final","answer":"ok"}']),
+                registry=registry,
+                run_store=store,
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=object(),  # type: ignore[arg-type]
+                verify_after_patch=False,
+                max_concurrency=1,
+            )
+            try:
+                parent = service.create_run(profile.agent_id, AgentRunRequest(input="parent"))
+                child = service.create_run(
+                    profile.agent_id,
+                    AgentRunRequest(input="child", parent_run_id=parent.run_id),
+                )
+                service._append_event(  # type: ignore[attr-defined]
+                    run_id=child.run_id,
+                    event_type="tool_loop_step",
+                    state=AgentRunState.running,
+                    message="child did work",
+                    attempt=1,
+                )
+                parent_events = service.get_run_events(parent.run_id, limit=100)
+                self.assertTrue(any(item.event_type == "child_run_timeline" for item in parent_events))
+            finally:
+                service.stop()
+
     def test_reindex_path_updates_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

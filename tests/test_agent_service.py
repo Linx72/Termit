@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -533,6 +534,143 @@ class AgentServiceTests(unittest.TestCase):
             )
             self.assertTrue(target.is_file())
             self.assertIn('"applied": true', observation.lower())
+
+    def test_spawn_agent_is_async_and_sets_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            created = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="Parent Agent",
+                    description="",
+                    system_prompt="test",
+                    task_type=TaskType.coding,
+                    enabled_tools=["spawn_agent"],
+                    use_tool_loop=True,
+                )
+            )
+            service = AgentService(
+                chat_service=StubChatService(),
+                registry=registry,
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=StubBrowserWorkflow(),
+                max_concurrency=1,
+                verify_after_patch=False,
+            )
+            observation, side_effects = service._invoke_loop_tool(
+                created.agent_id,
+                created,
+                "spawn_agent",
+                {"task": "child task"},
+                run_id="run_parent_1",
+            )
+            payload = json.loads(observation)
+            self.assertEqual(payload["state"], "queued")
+            child_run_id = payload["run_id"]
+            self.assertTrue(any("child_run_id=" in item[1] for item in side_effects))
+            self.assertTrue(any(item[0] == "spawn_agent_child_event" for item in side_effects))
+            child_run = service.get_run(child_run_id)
+            self.assertEqual(child_run.parent_run_id, "run_parent_1")
+            children = service.list_child_runs("run_parent_1")
+            self.assertEqual(children.total, 1)
+            self.assertEqual(children.runs[0].run_id, child_run_id)
+            synthetic_parent = service.create_run(created.agent_id, AgentRunRequest(input="parent for timeline"))
+            service._invoke_loop_tool(
+                created.agent_id,
+                created,
+                "spawn_agent",
+                {"task": "child for timeline"},
+                run_id=synthetic_parent.run_id,
+            )
+            events = service.get_run_events(synthetic_parent.run_id, limit=200)
+            self.assertTrue(any(event.event_type == "spawn_agent_child_event" for event in events))
+
+    def test_mcp_invoke_respects_allowed_servers(self) -> None:
+        class StubMcp:
+            def invoke_tool(self, server_id: str, tool_name: str, arguments: dict[str, object]) -> str:
+                return json.dumps({"server_id": server_id, "tool": tool_name, "arguments": arguments})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            created = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="Mcp Agent",
+                    description="",
+                    system_prompt="test",
+                    task_type=TaskType.coding,
+                    enabled_tools=["mcp_invoke"],
+                    allowed_mcp_servers=["allowed-server"],
+                    use_tool_loop=True,
+                )
+            )
+            service = AgentService(
+                chat_service=StubChatService(),
+                registry=registry,
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=StubBrowserWorkflow(),
+                mcp_registry=StubMcp(),  # type: ignore[arg-type]
+                max_concurrency=1,
+                verify_after_patch=False,
+            )
+            allowed, _ = service._invoke_loop_tool(
+                created.agent_id,
+                created,
+                "mcp_invoke",
+                {"server_id": "allowed-server", "tool_name": "ping", "arguments": {"x": 1}},
+            )
+            self.assertIn('"tool": "ping"', allowed)
+            with self.assertRaises(AgentPermissionError):
+                service._invoke_loop_tool(
+                    created.agent_id,
+                    created,
+                    "mcp_invoke",
+                    {"server_id": "blocked-server", "tool_name": "ping", "arguments": {}},
+                )
+
+    def test_mcp_invoke_respects_allowed_tools(self) -> None:
+        class StubMcp:
+            def invoke_tool(self, server_id: str, tool_name: str, arguments: dict[str, object]) -> str:
+                return json.dumps({"server_id": server_id, "tool": tool_name, "arguments": arguments})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = AgentRegistryStore(file_path=str(Path(tmp) / "agents.json"))
+            created = registry.create_agent(
+                AgentProfileCreateRequest(
+                    name="Mcp Tool Agent",
+                    description="",
+                    system_prompt="test",
+                    task_type=TaskType.coding,
+                    enabled_tools=["mcp_invoke"],
+                    allowed_mcp_servers=["allowed-server"],
+                    allowed_mcp_tools=["ping"],
+                    use_tool_loop=True,
+                )
+            )
+            service = AgentService(
+                chat_service=StubChatService(),
+                registry=registry,
+                run_store=InMemoryAgentRunStore(),
+                tooling=ToolingService(root_path=tmp),
+                browser_workflow=StubBrowserWorkflow(),
+                mcp_registry=StubMcp(),  # type: ignore[arg-type]
+                max_concurrency=1,
+                verify_after_patch=False,
+            )
+            allowed, _ = service._invoke_loop_tool(
+                created.agent_id,
+                created,
+                "mcp_invoke",
+                {"server_id": "allowed-server", "tool_name": "ping", "arguments": {"x": 1}},
+            )
+            self.assertIn('"tool": "ping"', allowed)
+            with self.assertRaises(AgentPermissionError):
+                service._invoke_loop_tool(
+                    created.agent_id,
+                    created,
+                    "mcp_invoke",
+                    {"server_id": "allowed-server", "tool_name": "delete", "arguments": {}},
+                )
 
 
 if __name__ == "__main__":

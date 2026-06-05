@@ -6,6 +6,7 @@ from typing import Callable, Optional
 from uuid import uuid4
 
 from app.domain.schemas import (
+    AgentProfileResponse,
     ListFilesRequest,
     ReadFileRequest,
     TaskCancelResponse,
@@ -17,9 +18,12 @@ from app.domain.schemas import (
     TaskStatusResponse,
     TaskType,
 )
+from app.services.agent_registry_store import AgentRegistryStore
+from app.services.agent_templates_store import AgentTemplatesStore
 from app.services.assignment_workspace_service import AssignmentWorkspaceService
 from app.services.task_store import TaskStore
 from app.services.telemetry_store import TelemetryStore
+from app.services.task_agent_assignment import resolve_project_template_ids
 from app.services.tooling_service import ToolingError, ToolingService
 from app.services.training_signal_store import TrainingSignalStore
 
@@ -44,7 +48,7 @@ class ExternalError(TaskExecutionError):
     error_class = "external_error"
 
 
-TaskAgentRunner = Callable[[str, TaskType, Optional[str]], str]
+TaskAgentRunner = Callable[[str, TaskType, Optional[str], Optional[str]], str]
 
 
 def _utc_now_iso() -> str:
@@ -65,6 +69,8 @@ class TaskService:
         use_agent_for_auto: bool = False,
         task_agent_id: str = "",
         assignment_workspace: AssignmentWorkspaceService | None = None,
+        agent_registry: AgentRegistryStore | None = None,
+        agent_templates: AgentTemplatesStore | None = None,
     ) -> None:
         self._tooling = tooling
         self._store = store
@@ -75,6 +81,8 @@ class TaskService:
         self._agent_runner = agent_runner
         self._use_agent_for_auto = use_agent_for_auto
         self._task_agent_id = task_agent_id.strip()
+        self._agent_registry = agent_registry
+        self._agent_templates = agent_templates
         self._lock = Lock()
 
     def create_task(self, payload: TaskCreateRequest) -> TaskCreateResponse:
@@ -87,6 +95,7 @@ class TaskService:
             task_type=payload.task_type,
             mode=payload.mode,
             session_id=payload.session_id,
+            project_id=payload.project_id,
             created_at=now,
             updated_at=now,
             attempts=0,
@@ -187,6 +196,7 @@ class TaskService:
 
         if self._use_agent_for_auto and self._agent_runner is not None:
             try:
+                self._ensure_project_agents(task)
                 if self._is_cross_platform_task(task_id):
                     self._run_cross_platform_via_agent(task_id)
                 else:
@@ -446,7 +456,7 @@ class TaskService:
             )
             if self._agent_runner is None:
                 raise PlanningError("Agent runner is not configured.")
-            response = self._agent_runner(prompt, task.task_type, session_id)
+            response = self._agent_runner(prompt, task.task_type, session_id, task.project_id)
             execution_notes.append(f"[{atomic.step_id}] {response[:500]}")
             self._append_event(
                 task_id,
@@ -469,7 +479,7 @@ class TaskService:
         )
         if self._agent_runner is None:
             raise PlanningError("Agent runner is not configured.")
-        response = self._agent_runner(task.input, task.task_type, task.session_id)
+        response = self._agent_runner(task.input, task.task_type, task.session_id, task.project_id)
         execution_notes = [response]
         self._append_event(
             task_id,
@@ -480,6 +490,50 @@ class TaskService:
         self._set_state(task_id, TaskState.verifying, "verification_started", "Verifying agent output")
         self._verify(task_id, execution_notes)
         self._complete(task_id, execution_notes)
+
+    def _ensure_project_agents(self, task: TaskStatusResponse) -> None:
+        # For project-scoped tasks we proactively ensure required helper agents
+        # (coding/research/media/security etc.) exist before dispatching the run.
+        project_id = (task.project_id or "").strip()
+        if not project_id:
+            return
+        if self._agent_registry is None or self._agent_templates is None:
+            return
+
+        template_ids = self._select_project_template_ids(task.task_type, task.input)
+        attached: list[str] = []
+        for template_id in template_ids:
+            template = self._agent_templates.get_template(template_id)
+            if template is None:
+                continue
+            request = self._agent_templates.to_create_request(template_id)
+            existing = self._find_agent_by_template_name(request.name, request.task_type)
+            agent = existing or self._agent_registry.create_agent(request)
+            attached.append(f"{template_id}:{agent.agent_id}")
+
+        if attached:
+            self._append_event(
+                task.task_id,
+                "project_agents_attached",
+                TaskState.running,
+                f"Project {project_id}: attached agents {', '.join(attached)}",
+            )
+
+    def _find_agent_by_template_name(
+        self,
+        name: str,
+        task_type: TaskType,
+    ) -> AgentProfileResponse | None:
+        if self._agent_registry is None:
+            return None
+        for agent in self._agent_registry.list_agents():
+            if agent.name == name and agent.task_type == task_type:
+                return agent
+        return None
+
+    @staticmethod
+    def _select_project_template_ids(task_type: TaskType, instruction: str) -> list[str]:
+        return resolve_project_template_ids(task_type, instruction)
 
     def _verify(self, task_id: str, execution_notes: list[str]) -> None:
         task = self.get_task(task_id)

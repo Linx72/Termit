@@ -306,6 +306,15 @@ class AgentService:
                 selected = self._run_store.list_runs(limit=safe_limit)
         return AgentRunListResponse(runs=selected, total=len(selected))
 
+    def list_child_runs(self, parent_run_id: str, limit: int = 50) -> AgentRunListResponse:
+        safe_limit = max(1, min(limit, 200))
+        with self._lock:
+            all_runs = self._run_store.list_runs(limit=5000)
+        children = [run for run in all_runs if (run.parent_run_id or "").strip() == parent_run_id]
+        children.sort(key=lambda item: item.updated_at, reverse=True)
+        selected = children[:safe_limit]
+        return AgentRunListResponse(runs=selected, total=len(children))
+
     def list_dlq_runs(self, limit: int = 50) -> AgentRunListResponse:
         safe_limit = max(1, min(limit, 200))
         with self._lock:
@@ -967,6 +976,28 @@ class AgentService:
                         message=message,
                         attempt=attempt,
                     )
+                    if event_type == "spawn_agent":
+                        child_run_id = ""
+                        for token in message.split():
+                            if token.startswith("child_run_id="):
+                                child_run_id = token.split("=", 1)[1].strip()
+                                break
+                        if child_run_id:
+                            try:
+                                child_events = self.get_run_events(child_run_id, limit=120)
+                            except AgentRunNotFoundError:
+                                child_events = []
+                            for child_event in child_events:
+                                self._append_event(
+                                    run_id=run_id,
+                                    event_type="spawn_agent_child_event",
+                                    state=AgentRunState.running,
+                                    message=(
+                                        f"child_run_id={child_run_id} {child_event.event_type}: "
+                                        f"{child_event.message}"
+                                    ),
+                                    attempt=attempt,
+                                )
             return observation
 
         def on_step(step) -> None:  # type: ignore[no-untyped-def]
@@ -1199,20 +1230,27 @@ class AgentService:
             child_payload = AgentRunRequest(
                 input=task,
                 parent_run_id=run_id,
-                use_tool_loop=False,
+                use_tool_loop=True,
             )
             child = self.create_run(child_agent_id, child_payload)
-            summary = self._wait_for_run(child.run_id, timeout_seconds=120)
+            summary = {"run_id": child.run_id, "state": "queued", "parent_run_id": run_id}
             side_effects.append(("spawn_agent", f"child_run_id={child.run_id}"))
+            side_effects.append(("spawn_agent_child_event", f"child_run_id={child.run_id} queued"))
             if self._training_signals is not None:
-                child_state = str(summary.get("state", "")) if isinstance(summary, dict) else ""
                 self._training_signals.try_capture_subagent_run(
                     parent_run_id=run_id or "",
                     child_run_id=child.run_id,
                     task=task,
-                    success=child_state == AgentRunState.completed.value,
+                    success=False,
                     summary=json.dumps(summary, ensure_ascii=True)[:8000],
                 )
+            self._append_event(
+                run_id=run_id,
+                event_type="spawn_agent_child_event",
+                state=AgentRunState.running,
+                message=f"child_run_id={child.run_id} queued",
+                attempt=1,
+            )
             return json.dumps(summary, ensure_ascii=True), side_effects
         if tool_name in {
             "generate_image",
@@ -1382,6 +1420,7 @@ class AgentService:
             mcp_args = arguments.get("arguments", {})
             if not isinstance(mcp_args, dict):
                 mcp_args = {}
+            self._ensure_mcp_tool_allowed(profile, server_id, mcp_tool)
             result_json = self._mcp.invoke_tool(server_id, mcp_tool, mcp_args)
             side_effects.append(("mcp_invoke", f"server={server_id} tool={mcp_tool}"))
             return result_json, side_effects
@@ -1571,6 +1610,23 @@ class AgentService:
         if tool_name not in set(profile.enabled_tools):
             raise AgentPermissionError(
                 f"Agent '{profile.name}' is not allowed to use tool '{tool_name}'."
+            )
+
+    @staticmethod
+    def _ensure_mcp_tool_allowed(
+        profile: AgentProfileResponse,
+        server_id: str,
+        tool_name: str,
+    ) -> None:
+        allowed_servers = [item.strip() for item in profile.allowed_mcp_servers if item.strip()]
+        if allowed_servers and "*" not in allowed_servers and server_id not in set(allowed_servers):
+            raise AgentPermissionError(
+                f"MCP server '{server_id}' is not allowed for agent '{profile.name}'."
+            )
+        allowed_tools = [item.strip() for item in profile.allowed_mcp_tools if item.strip()]
+        if allowed_tools and "*" not in allowed_tools and tool_name not in set(allowed_tools):
+            raise AgentPermissionError(
+                f"MCP tool '{tool_name}' is not allowed for agent '{profile.name}'."
             )
 
     def _worker_loop(self) -> None:
@@ -1900,6 +1956,25 @@ class AgentService:
         self._run_store.append_event(run_id=run_id, event=event)
         self._run_store.trim_events(run_id=run_id, max_events=self._max_events_per_run)
         self._notifier.publish(run_id, "timeline", event.model_dump(mode="json"))
+        self._append_parent_timeline_event(run_id, event)
+
+    def _append_parent_timeline_event(self, run_id: str, event: AgentRunEvent) -> None:
+        run = self._run_store.get_run(run_id)
+        if run is None or not run.parent_run_id:
+            return
+        parent = self._run_store.get_run(run.parent_run_id)
+        if parent is None:
+            return
+        child_event = AgentRunEvent(
+            event_type="child_run_timeline",
+            state=parent.state,
+            message=f"{run.run_id} · {event.event_type} · {event.message}",
+            timestamp=event.timestamp,
+            attempt=event.attempt,
+        )
+        self._run_store.append_event(parent.run_id, child_event)
+        self._run_store.trim_events(parent.run_id, max_events=self._max_events_per_run)
+        self._notifier.publish(parent.run_id, "timeline", child_event.model_dump(mode="json"))
 
     @staticmethod
     def _extract_patch_path(observation: str) -> str:

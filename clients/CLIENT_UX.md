@@ -26,8 +26,8 @@ They do **not** use Cursor's AI, billing, or `@cursor/sdk`.
 | @ folder / @ symbol | Desktop chat `@ folder`, `@ symbol` | `list_files`, `/api/retrieval/symbols/search` |
 | @ docs / @ web | Desktop `@ docs`, `@ web` | `read_file`, `POST /api/platform/search` |
 | @ codebase | Retrieval checkbox | `use_retrieval` |
-| Plan mode | Desktop **Plan** tab → Build → Composer | chat stream (plan-only prompt) |
-| Terminal | Desktop **Terminal** tab | `execute_command` |
+| Plan mode | Desktop **Plan** tab → Build → Composer | `POST /api/agents/{id}/runs` + `run_mode=plan` |
+| Terminal | Desktop **Terminal** tab + quick git/verify | `execute_command` |
 | Health / queue / index | Desktop sidebar | `/api/ops/*`, `/api/retrieval/stats` |
 | Model pull (Ollama) | Wizard + sidebar Model manager | `POST /api/local/models/pull` |
 | Model picker | Both (after Connect) | `GET /api/providers` |
@@ -38,6 +38,8 @@ They do **not** use Cursor's AI, billing, or `@cursor/sdk`.
 | **Cmd+K inline edit** | **VS Code** (`Cmd+Alt+K`) + **Desktop Editor** (`Cmd+K`) | chat + single patch + diff |
 | **Tab completion** | **VS Code + Desktop Editor** | `requestTabCompletion` |
 | **Agent run timeline** | **Desktop + VS Code** | SSE `GET /api/agents/runs/{id}/stream` + events |
+
+For multi-agent `spawn_agent`, child events are mirrored into parent timeline as `spawn_agent_child_event`, so one tape contains the full nested run context.
 
 ## Inline edit (VS Code)
 
@@ -61,6 +63,15 @@ Monaco editor tab in the desktop app:
 ## Agent timeline
 
 After enqueue or when selecting a run, clients stream run status via SSE and refresh tool-loop events on each status change until a terminal state (`completed`, `failed`, `cancelled`).
+Child runs created via `spawn_agent` are surfaced in parent timeline as `child_run_timeline` events.
+
+## Desktop interaction modes (Cursor-like)
+
+- `Agent`: full tool loop with edits/commands.
+- `Ask`: agent run with server-enforced read-only policy (`run_mode=ask`).
+- `Plan`: dedicated panel + server-enforced plan policy (`run_mode=plan`) and handoff to Composer.
+- `Terminal`: command-first flow with quick commands and queued verify commands from Composer/Plan.
+- Cursor-like `termit-prompts` flow: choose `Plan` in chat mode selector, draft plan, then `Build -> Composer` (or `Build -> Composer -> Verify`) for implementation handoff.
 
 Enable ghost-text completion in desktop: sidebar checkbox **Tab completion (Editor)**. In VS Code: `termit.inlineCompletion.enabled`.
 

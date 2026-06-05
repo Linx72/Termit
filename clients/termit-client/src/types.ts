@@ -92,6 +92,7 @@ export interface AgentProfile {
   task_type: TaskType;
   model?: string;
   enabled_tools?: string[];
+  allowed_mcp_servers?: string[];
   max_tool_steps?: number;
   use_tool_loop?: boolean;
 }
@@ -140,6 +141,7 @@ export interface AgentRunRecord {
   response?: string;
   error?: string;
   checkpoint_json?: string | null;
+  parent_run_id?: string | null;
 }
 
 export interface AgentRunListResponse {

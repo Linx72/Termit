@@ -29,6 +29,12 @@
 | Задания | Brief-проекты | Create → seed agent |
 | Справка | PDF локально | Help / Training |
 
+Примечание по режимам чата (Cursor-like):
+- `Agent` -> `run_mode=agent`
+- `Ask` -> `run_mode=ask` (server-enforced read-only tools)
+- `Plan` -> `run_mode=plan` (plan-only run, затем Build -> Composer)
+- `Terminal` -> запуск quick/suggested команд через TerminalPanel
+
 Тексты блоков: `clients/termit-desktop/src/i18n.ts` (`sg*Title`, `sg*Purpose`, `sg*Steps`).
 
 ### Единый UI-поток (desktop + web)
@@ -61,6 +67,8 @@ Backend: `data/desktop_policy_presets.json`, `AgentPolicyPresetService.apply_to_
 
 - [ ] Все строки через `t(locale, key)` — ключи в **ru и en**
 - [ ] SectionGuide на каждой вкладке + sidebar
+- [ ] Режимы `Ask/Plan/Agent/Terminal` отображаются в toolbar/badges и соответствуют backend `run_mode`
+- [ ] Cursor-like поток `termit-prompts`: `Plan` в селекторе чата -> `Build -> Composer` / `Build -> Composer -> Verify` без ручного `window.prompt`
 - [ ] `npm run build` в `clients/termit-desktop`
 - [ ] `./scripts/package_desktop.sh`
 
