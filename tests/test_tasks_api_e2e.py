@@ -1,4 +1,5 @@
 import unittest
+import time
 
 from fastapi.testclient import TestClient
 
@@ -32,6 +33,12 @@ class TasksApiE2ETests(unittest.TestCase):
             status_resp = client.get(f"/api/tasks/{task_id}")
             self.assertEqual(status_resp.status_code, 200)
             body = status_resp.json()
+            deadline = time.time() + 3.0
+            while body["state"] in {"queued", "running", "verifying"} and time.time() < deadline:
+                time.sleep(0.05)
+                status_resp = client.get(f"/api/tasks/{task_id}")
+                self.assertEqual(status_resp.status_code, 200)
+                body = status_resp.json()
             self.assertEqual(body["state"], "completed")
             self.assertEqual(body["project_id"], "e2e-project")
             self.assertIn("Task execution completed", body["report"])

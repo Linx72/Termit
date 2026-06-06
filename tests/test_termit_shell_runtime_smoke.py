@@ -33,6 +33,13 @@ class TermitShellRuntimeSmokeTests(unittest.TestCase):
         self.assertIn('resources.appendingPathComponent("renderer"', self.shell_main)
         self.assertIn('resources.appendingPathComponent("docs/pdf"', self.shell_main)
 
+    def test_renderer_loader_normalizes_vite_html_for_wkwebview(self) -> None:
+        self.assertIn("struct RendererCache", self.shell_main)
+        self.assertIn("private func normalizeRendererHtml(_ html: String)", self.shell_main)
+        self.assertIn("private func loadRenderer(into webView: WKWebView)", self.shell_main)
+        self.assertIn('pattern: #"<meta\\s+http-equiv="Content-Security-Policy"[^>]*>"#', self.shell_main)
+        self.assertIn("webView.loadFileURL(indexUrl, allowingReadAccessTo: cacheRoot)", self.shell_main)
+
     def test_packaging_script_supports_release_signing_and_notary(self) -> None:
         self.assertIn("TERMIT_CODESIGN_IDENTITY", self.package_script)
         self.assertIn("TERMIT_NOTARY_PROFILE", self.package_script)

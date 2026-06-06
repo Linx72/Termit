@@ -1,4 +1,5 @@
 import unittest
+import time
 from tempfile import TemporaryDirectory
 
 from app.domain.schemas import AgentProfileCreateRequest, TaskCreateRequest, TaskType
@@ -84,7 +85,11 @@ class TaskAgentAssignmentTests(unittest.TestCase):
                 project_id="demo-project",
             )
         )
+        deadline = time.time() + 2.0
         task = service.get_task(created.task_id)
+        while task.state.value in {"queued", "running"} and time.time() < deadline:
+            time.sleep(0.05)
+            task = service.get_task(created.task_id)
         event_types = [event.event_type for event in task.events]
         self.assertIn("project_agents_attached", event_types)
         agent_names = {agent.name for agent in self.registry.list_agents()}

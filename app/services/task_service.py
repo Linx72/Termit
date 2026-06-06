@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from threading import Lock
+from threading import Thread
 from typing import Callable, Optional
 from uuid import uuid4
 
@@ -113,13 +114,29 @@ class TaskService:
         with self._lock:
             self._store.put_task(task)
 
-        # MVP synchronous execution to validate lifecycle contract.
-        self._run_task(task_id)
+        # Keep local deterministic flow synchronous, but run agent-mode auto tasks
+        # in background to avoid blocking POST /api/tasks on long LLM runs.
+        if self._should_run_async(payload):
+            Thread(
+                target=self._run_task,
+                args=(task_id,),
+                daemon=True,
+                name=f"task-runner-{task_id[:8]}",
+            ).start()
+        else:
+            self._run_task(task_id)
         created = self.get_task(task_id)
         return TaskCreateResponse(
             task_id=created.task_id,
             state=created.state,
             created_at=created.created_at,
+        )
+
+    def _should_run_async(self, payload: TaskCreateRequest) -> bool:
+        return (
+            payload.mode == TaskMode.auto
+            and self._use_agent_for_auto
+            and self._agent_runner is not None
         )
 
     def list_tasks(self, limit: int = 50) -> list[TaskStatusResponse]:

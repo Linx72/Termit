@@ -391,16 +391,129 @@ func parseArgs() -> (rendererRoot: URL, docsRoot: URL, userDataDir: URL) {
     return (rendererRoot, docsRoot ?? defaultDocs, userDataDir ?? defaultUserData)
 }
 
+/// Copies bundled Vite output to a writable cache and writes WKWebView-safe index.html.
+/// ES modules do not bootstrap reliably via loadHTMLString; loadFileURL requires a real file on disk.
+struct RendererCache {
+    let fileManager = FileManager.default
+    let sourceRoot: URL
+    let cacheRoot: URL
+
+    init(sourceRoot: URL, userDataDir: URL) {
+        self.sourceRoot = sourceRoot
+        self.cacheRoot = userDataDir.appendingPathComponent("renderer-cache", isDirectory: true)
+    }
+
+    private func sourceVersion() -> String {
+        let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+        let indexSource = sourceRoot.appendingPathComponent("index.html")
+        guard let attrs = try? fileManager.attributesOfItem(atPath: indexSource.path),
+              let modified = attrs[.modificationDate] as? Date else {
+            return bundleVersion
+        }
+        return "\(bundleVersion)-\(Int(modified.timeIntervalSince1970))"
+    }
+
+    func prepare(normalizeHtml: (String) -> String) throws -> URL {
+        try fileManager.createDirectory(at: cacheRoot.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        let versionMarker = cacheRoot.appendingPathComponent(".source-version")
+        let neededVersion = sourceVersion()
+        let currentVersion = (try? String(contentsOf: versionMarker, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let assetsDir = cacheRoot.appendingPathComponent("assets", isDirectory: true)
+
+        guard fileManager.fileExists(atPath: sourceRoot.path) else {
+            throw NSError(
+                domain: "TermitShell",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Renderer bundle missing at \(sourceRoot.path)"]
+            )
+        }
+
+        if currentVersion != neededVersion || !fileManager.fileExists(atPath: assetsDir.path) {
+            if fileManager.fileExists(atPath: cacheRoot.path) {
+                try fileManager.removeItem(at: cacheRoot)
+            }
+            try fileManager.copyItem(at: sourceRoot, to: cacheRoot)
+        }
+
+        let indexSource = sourceRoot.appendingPathComponent("index.html")
+        let indexTarget = cacheRoot.appendingPathComponent("index.html")
+        let html = try String(contentsOf: indexSource, encoding: .utf8)
+        try normalizeHtml(html).write(to: indexTarget, atomically: true, encoding: .utf8)
+        try neededVersion.write(to: versionMarker, atomically: true, encoding: .utf8)
+        return cacheRoot
+    }
+}
+
+@MainActor
+final class NavigationLogger: NSObject, WKNavigationDelegate {
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        fputs("[TermitShell] Navigation failed: \(error.localizedDescription)\n", stderr)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        fputs("[TermitShell] Provisional navigation failed: \(error.localizedDescription)\n", stderr)
+    }
+}
+
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var webView: WKWebView?
     private var bridge: BridgeHandler?
     private var launcher: ServerLauncher?
+    private let navigationLogger = NavigationLogger()
     private let config: (rendererRoot: URL, docsRoot: URL, userDataDir: URL)
 
     init(config: (rendererRoot: URL, docsRoot: URL, userDataDir: URL)) {
         self.config = config
         super.init()
+    }
+
+    /// Vite build output is tuned for http(s). In WKWebView over file://, crossorigin and strict CSP
+    /// often block ES module bootstrap and leave a blank window.
+    private func normalizeRendererHtml(_ html: String) -> String {
+        var normalized = html
+        if let crossOrigin = try? NSRegularExpression(
+            pattern: #"\s+crossorigin(="[^"]*")?"#,
+            options: [.caseInsensitive]
+        ) {
+            let range = NSRange(normalized.startIndex..<normalized.endIndex, in: normalized)
+            normalized = crossOrigin.stringByReplacingMatches(
+                in: normalized,
+                options: [],
+                range: range,
+                withTemplate: ""
+            )
+        }
+        if let cspMeta = try? NSRegularExpression(
+            pattern: #"<meta\s+http-equiv="Content-Security-Policy"[^>]*>"#,
+            options: [.caseInsensitive]
+        ) {
+            let range = NSRange(normalized.startIndex..<normalized.endIndex, in: normalized)
+            normalized = cspMeta.stringByReplacingMatches(
+                in: normalized,
+                options: [],
+                range: range,
+                withTemplate: ""
+            )
+        }
+        return normalized
+    }
+
+    @MainActor
+    private func loadRenderer(into webView: WKWebView) {
+        let cache = RendererCache(sourceRoot: config.rendererRoot, userDataDir: config.userDataDir)
+        do {
+            let cacheRoot = try cache.prepare(normalizeHtml: normalizeRendererHtml)
+            let indexUrl = cacheRoot.appendingPathComponent("index.html")
+            webView.loadFileURL(indexUrl, allowingReadAccessTo: cacheRoot)
+        } catch {
+            fputs("[TermitShell] Renderer cache failed: \(error.localizedDescription)\n", stderr)
+            let indexUrl = config.rendererRoot.appendingPathComponent("index.html")
+            webView.loadFileURL(indexUrl, allowingReadAccessTo: config.rendererRoot)
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -419,6 +532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let webView = WKWebView(frame: .zero, configuration: webConfig)
         webView.setValue(true, forKey: "drawsBackground")
+        webView.navigationDelegate = navigationLogger
         bridge.attach(webView: webView)
 
         let window = NSWindow(
@@ -433,8 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = webView
         window.makeKeyAndOrderFront(nil)
 
-        let indexUrl = config.rendererRoot.appendingPathComponent("index.html")
-        webView.loadFileURL(indexUrl, allowingReadAccessTo: config.rendererRoot)
+        loadRenderer(into: webView)
 
         self.window = window
         self.webView = webView

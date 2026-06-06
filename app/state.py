@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+import time
 from typing import Optional
 
 from app.core.config import get_settings
@@ -328,9 +329,7 @@ def _task_agent_runner(
     session_id: Optional[str],
     project_id: Optional[str],
 ) -> str:
-    import asyncio
-
-    from app.domain.schemas import AgentRunRequest, TaskType
+    from app.domain.schemas import AgentRunRequest, AgentRunState, TaskType
 
     settings = get_settings()
     service = get_agent_service()
@@ -344,8 +343,16 @@ def _task_agent_runner(
     if not agent_id:
         raise PlanningError("No agent configured for TERMIT_TASK_USE_AGENT.")
     payload = AgentRunRequest(input=input_text, session_id=session_id, project_id=project_id)
-    result = asyncio.run(service.run_agent(agent_id, payload))
-    return result.response or ""
+    queued = service.create_run(agent_id, payload)
+    deadline = time.time() + 180
+    while time.time() < deadline:
+        run = service.get_run(queued.run_id)
+        if run.state == AgentRunState.completed:
+            return run.response or ""
+        if run.state in {AgentRunState.failed, AgentRunState.cancelled}:
+            raise PlanningError(run.error or f"Agent run finished with state={run.state.value}")
+        time.sleep(0.2)
+    raise PlanningError("Agent run timeout while handling task auto-mode.")
 
 
 def _resolve_task_agent_id(
