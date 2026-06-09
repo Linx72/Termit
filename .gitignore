@@ -45,3 +45,30 @@ data/eval_fixtures/*
 !data/eval_fixtures/patch_sample.txt
 !data/desktop_north_star.json
 !data/desktop_policy_presets.json
+
+# Cursor rules — keep
+!.cursor/
+!.cursor/rules/
+
+# Dependencies
+node_modules/
+.pnp/
+
+# Build
+dist/
+build/
+.next/
+out/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
