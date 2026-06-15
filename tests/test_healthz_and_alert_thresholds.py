@@ -166,6 +166,11 @@ class HealthzApiTests(unittest.TestCase):
         self.assertIn("tool_loop_verify_failures", body)
         self.assertIn("tool_loop_verify_retries", body)
         self.assertIn("tool_loop_verify_pass_rate", body)
+        self.assertIn("orchestration_runs_total", body)
+        self.assertIn("avg_coder_attempts", body)
+        self.assertIn("coder_retry_success_rate", body)
+        self.assertIn("openhands_contract_runs_total", body)
+        self.assertIn("openhands_contract_actions_total", body)
 
 
 class OpsServiceHealthzTests(unittest.IsolatedAsyncioTestCase):

@@ -20,7 +20,13 @@ from app.services.alert_health_service import build_alert_thresholds_response, e
 from app.services.metrics_snapshot_store import MetricsSnapshotStore
 from app.services.telemetry_store import TelemetryStore
 from app.services.agent_service import AgentService
-from app.state import get_agent_service, get_metrics_snapshot_store, get_telemetry_store
+from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
+from app.state import (
+    get_agent_service,
+    get_metrics_snapshot_store,
+    get_multi_agent_orchestrator,
+    get_telemetry_store,
+)
 
 router = APIRouter(prefix="/api", tags=["metrics"])
 
@@ -134,9 +140,11 @@ async def metrics_http_endpoints(
 async def metrics_prometheus(
     telemetry: TelemetryStore = Depends(get_telemetry_store),
     agent_service: AgentService = Depends(get_agent_service),
+    orchestrator: MultiAgentOrchestrator = Depends(get_multi_agent_orchestrator),
 ) -> PlainTextResponse:
     summary = telemetry.snapshot()
     queue = agent_service.queue_metrics()
+    orchestration = orchestrator.metrics_snapshot()
     lines = [
         "# HELP termit_chat_requests_total Total chat requests.",
         "# TYPE termit_chat_requests_total counter",
@@ -186,6 +194,26 @@ async def metrics_prometheus(
         lines.append(f"# HELP termit_{key} Tool-loop success ratio.")
         lines.append(f"# TYPE termit_{key} gauge")
         lines.append(_prom_line(f"termit_{key}", float(queue.get(key, 0.0))))
+    for key, help_text in (
+        ("orchestration_runs_total", "Total orchestration runs."),
+        ("coder_attempts_total", "Total coder attempts in orchestration loop."),
+        ("coder_retry_runs_total", "Orchestration runs requiring coder retry."),
+        ("coder_retry_success_runs_total", "Runs where retry recovered reviewer feedback."),
+        ("reviewer_reject_total", "Total reviewer reject outcomes."),
+        ("openhands_contract_runs_total", "Runs with OpenHands-style contract enabled."),
+        ("openhands_contract_actions_total", "Captured OpenHands action/observation pairs."),
+    ):
+        lines.append(f"# HELP termit_{key} {help_text}")
+        lines.append(f"# TYPE termit_{key} gauge")
+        lines.append(_prom_line(f"termit_{key}", float(orchestration.get(key, 0.0))))
+    for key, help_text in (
+        ("avg_coder_attempts", "Average coder attempts per orchestration run."),
+        ("coder_retry_run_rate", "Share of runs that required retry."),
+        ("coder_retry_success_rate", "Retry success ratio among retried runs."),
+    ):
+        lines.append(f"# HELP termit_{key} {help_text}")
+        lines.append(f"# TYPE termit_{key} gauge")
+        lines.append(_prom_line(f"termit_{key}", float(orchestration.get(key, 0.0))))
     for row in telemetry.http_endpoint_metrics():
         endpoint = str(row["endpoint"]).replace('"', "")
         labels = {"endpoint": endpoint}

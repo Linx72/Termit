@@ -43,6 +43,7 @@ from app.services.providers.openai_compat_provider import OpenAICompatProvider
 from app.services.sqlite_memory_store import SQLiteMemoryStore
 from app.services.sqlite_agent_run_store import SQLiteAgentRunStore
 from app.services.eval_report_store import EvalReportStore
+from app.services.orchestration_eval_report_store import OrchestrationEvalReportStore
 from app.services.eval_service import EvalService
 from app.services.finetune_service import FinetuneService
 from app.services.finetune_adapter_resolver import FinetuneAdapterResolver
@@ -597,6 +598,16 @@ def get_eval_service() -> EvalService:
 
 
 @lru_cache
+def _build_orchestration_eval_report_store() -> OrchestrationEvalReportStore:
+    settings = get_settings()
+    return OrchestrationEvalReportStore(file_path=settings.orchestration_eval_report_file_path)
+
+
+def get_orchestration_eval_report_store() -> OrchestrationEvalReportStore:
+    return _build_orchestration_eval_report_store()
+
+
+@lru_cache
 def _build_telemetry_store() -> TelemetryStore:
     settings = get_settings()
     return TelemetryStore(max_latency_points=settings.telemetry_max_latency_points)
@@ -758,11 +769,13 @@ def get_team_workspace_service() -> TeamWorkspaceService:
 
 @lru_cache
 def _build_multi_agent_orchestrator() -> MultiAgentOrchestrator:
+    settings = get_settings()
     return MultiAgentOrchestrator(
         task_service=_build_task_service(),
         chat_service=_build_chat_service(),
         tooling=_build_tooling_service(),
         code_retrieval=_build_code_retrieval_service(),
+        openhands_contract_enabled=settings.orchestration_openhands_contract_enabled,
     )
 
 

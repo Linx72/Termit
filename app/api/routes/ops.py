@@ -18,20 +18,26 @@ from app.domain.schemas import (
     QuotaResetResponse,
     QuotaSummaryResponse,
     QuotaEntrySummary,
+    OrchestrationEvalReportListResponse,
+    OrchestrationEvalTrendResponse,
 )
 from app.services.alert_health_service import evaluate_agent_health
 from app.services.ops_service import OpsService
 from app.services.agent_service import AgentService
+from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
 from app.services.agent_maintenance_scheduler_service import AgentMaintenanceSchedulerService
 from app.services.daily_improvement_scheduler_service import DailyImprovementSchedulerService
 from app.services.quota_store import QuotaStore
 from app.services.automation_control_service import AutomationControlService
+from app.services.orchestration_eval_report_store import OrchestrationEvalReportStore
 from app.state import (
     get_agent_maintenance_scheduler_service,
     get_agent_service,
     get_automation_control_service,
     get_chat_service,
     get_daily_improvement_scheduler_service,
+    get_multi_agent_orchestrator,
+    get_orchestration_eval_report_store,
     get_ops_service,
     get_quota_store,
 )
@@ -42,8 +48,11 @@ router = APIRouter(prefix="/api/ops", tags=["ops"])
 def _agent_runs_metrics_payload(
     service: AgentService,
     settings: Settings,
+    orchestration: MultiAgentOrchestrator | None = None,
 ) -> AgentRunsMetricsResponse:
     raw = service.queue_metrics()
+    if orchestration is not None:
+        raw.update(orchestration.metrics_snapshot())
     thresholds = AgentAlertThresholds(
         queue_utilization_percent=settings.agent_alert_queue_utilization_percent,
         dead_letter_rate=settings.agent_alert_dead_letter_rate,
@@ -140,8 +149,26 @@ async def reset_quota(
 async def agent_runs_metrics(
     settings: Settings = Depends(get_settings),
     service: AgentService = Depends(get_agent_service),
+    orchestration: MultiAgentOrchestrator = Depends(get_multi_agent_orchestrator),
 ) -> AgentRunsMetricsResponse:
-    return _agent_runs_metrics_payload(service, settings)
+    return _agent_runs_metrics_payload(service, settings, orchestration)
+
+
+@router.get("/orchestration/reports", response_model=OrchestrationEvalReportListResponse)
+async def orchestration_reports(
+    limit: int = 20,
+    store: OrchestrationEvalReportStore = Depends(get_orchestration_eval_report_store),
+) -> OrchestrationEvalReportListResponse:
+    reports = store.list_recent(limit=limit)
+    return OrchestrationEvalReportListResponse(reports=reports, total=len(reports))
+
+
+@router.get("/orchestration/trend", response_model=OrchestrationEvalTrendResponse)
+async def orchestration_trend(
+    limit: int = 24,
+    store: OrchestrationEvalReportStore = Depends(get_orchestration_eval_report_store),
+) -> OrchestrationEvalTrendResponse:
+    return OrchestrationEvalTrendResponse(points=store.trend_points(limit=limit))
 
 
 @router.post("/agent-runs/cleanup", response_model=AgentRunsCleanupResponse)
@@ -195,6 +222,7 @@ async def dispatch_ops_alerts(
     request: Request,
     settings: Settings = Depends(get_settings),
     agent_service: AgentService = Depends(get_agent_service),
+    orchestration: MultiAgentOrchestrator = Depends(get_multi_agent_orchestrator),
 ) -> dict[str, object]:
     from app.state import get_alert_webhook_service
 
@@ -203,7 +231,7 @@ async def dispatch_ops_alerts(
         if caller_role not in {"admin", "operator"}:
             raise HTTPException(status_code=403, detail="Operator role required.")
 
-    metrics = _agent_runs_metrics_payload(agent_service, settings)
+    metrics = _agent_runs_metrics_payload(agent_service, settings, orchestration)
     webhook = get_alert_webhook_service()
     if not webhook.enabled:
         return {"sent": False, "reason": "webhook_not_configured", "health_status": metrics.health_status}

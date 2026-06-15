@@ -132,6 +132,9 @@ class TelemetryStore:
                 self._task_completed / self._task_total if self._task_total else 0.0
             )
             automation_rate = self._task_auto_total / self._task_total if self._task_total else 0.0
+            cost_per_successful_task = (
+                self._estimated_cost_total_usd / self._task_completed if self._task_completed else 0.0
+            )
             return MetricsSummaryResponse(
                 chat_requests_total=self._chat_requests_total,
                 chat_success_total=self._chat_success_total,
@@ -154,6 +157,7 @@ class TelemetryStore:
                 task_success_rate=round(task_success_rate, 4),
                 automation_rate=round(automation_rate, 4),
                 estimated_cost_total_usd=round(self._estimated_cost_total_usd, 6),
+                cost_per_successful_task_usd=round(cost_per_successful_task, 6),
                 model_usage=dict(self._model_usage),
                 failure_classes=dict(self._failure_classes),
             )

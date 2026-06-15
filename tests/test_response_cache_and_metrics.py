@@ -54,6 +54,7 @@ class TelemetryStoreTests(unittest.TestCase):
         self.assertIn("external_error", snap.failure_classes)
         self.assertEqual(snap.chat_code_response_total, 1)
         self.assertEqual(snap.chat_empty_response_total, 0)
+        self.assertAlmostEqual(snap.cost_per_successful_task_usd, 0.01)
 
 
 class MetricsSnapshotStoreTests(unittest.TestCase):
@@ -328,6 +329,7 @@ class MetricsApiTests(unittest.TestCase):
         body = response.json()
         self.assertIn("chat_requests_total", body)
         self.assertIn("task_total", body)
+        self.assertIn("cost_per_successful_task_usd", body)
         self.assertIn("active_thresholds", body)
         self.assertIn("degrade_empty_response_rate", body["active_thresholds"])
         self.assertIn("degrade_fallback_rate", body["active_thresholds"])
@@ -365,6 +367,11 @@ class MetricsApiTests(unittest.TestCase):
         self.assertIn("termit_tool_loop_verify_failures", resp.text)
         self.assertIn("termit_tool_loop_verify_retries", resp.text)
         self.assertIn("termit_tool_loop_verify_pass_rate", resp.text)
+        self.assertIn("termit_orchestration_runs_total", resp.text)
+        self.assertIn("termit_avg_coder_attempts", resp.text)
+        self.assertIn("termit_coder_retry_success_rate", resp.text)
+        self.assertIn("termit_openhands_contract_runs_total", resp.text)
+        self.assertIn("termit_openhands_contract_actions_total", resp.text)
 
 
 if __name__ == "__main__":

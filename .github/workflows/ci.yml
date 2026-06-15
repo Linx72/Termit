@@ -16,6 +16,8 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -r requirements.txt
+      - name: OSS license/IP guardrail check
+        run: python3 scripts/check_oss_guardrail.py
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
@@ -47,6 +49,52 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"limit":53,"persist_report":false}' \
             | python3 scripts/eval_ci_gate.py
+      - name: Orchestration retry-loop eval slice
+        env:
+          TERMIT_ORCH_SPIKE_MIN_PASS_RATE: "0.00"
+        run: |
+          python3 scripts/eval_orchestration_spike.py \
+            --prompts-file data/eval_scenarios_orchestration.json \
+            --max-prompts 3 \
+            --timeout-seconds 120 \
+            --min-pass-rate "${TERMIT_ORCH_SPIKE_MIN_PASS_RATE}" \
+            --output-file /tmp/orch_eval_report.json \
+            --append-report-file data/orchestration_eval_reports.jsonl
+      - name: Configure orchestration gate thresholds
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ] || [ "${GITHUB_REF_NAME}" = "master" ]; then
+            echo "TERMIT_ORCH_DEEP_MIN_PASS_RATE=0.30" >> "$GITHUB_ENV"
+            echo "TERMIT_ORCH_DEEP_MIN_RETRY_SUCCESS_RATE=0.30" >> "$GITHUB_ENV"
+            echo "TERMIT_ORCH_RELEASE_MIN_PASS_RATE=0.50" >> "$GITHUB_ENV"
+            echo "TERMIT_ORCH_RELEASE_MIN_RETRY_SUCCESS_RATE=0.40" >> "$GITHUB_ENV"
+            echo "TERMIT_ORCH_GATE_MIN_TOTAL=3" >> "$GITHUB_ENV"
+          else
+            echo "TERMIT_ORCH_DEEP_MIN_PASS_RATE=0.00" >> "$GITHUB_ENV"
+            echo "TERMIT_ORCH_DEEP_MIN_RETRY_SUCCESS_RATE=0.00" >> "$GITHUB_ENV"
+            echo "TERMIT_ORCH_RELEASE_MIN_PASS_RATE=0.00" >> "$GITHUB_ENV"
+            echo "TERMIT_ORCH_RELEASE_MIN_RETRY_SUCCESS_RATE=0.00" >> "$GITHUB_ENV"
+            echo "TERMIT_ORCH_GATE_MIN_TOTAL=1" >> "$GITHUB_ENV"
+          fi
+      - name: Orchestration deep gate
+        env:
+          TERMIT_ORCH_GATE_TIER: "deep"
+          TERMIT_ORCH_MIN_PASS_RATE: ${{ env.TERMIT_ORCH_DEEP_MIN_PASS_RATE }}
+          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: ${{ env.TERMIT_ORCH_DEEP_MIN_RETRY_SUCCESS_RATE }}
+          TERMIT_ORCH_MIN_TOTAL: ${{ env.TERMIT_ORCH_GATE_MIN_TOTAL }}
+        run: cat /tmp/orch_eval_report.json | python3 scripts/eval_orchestration_gate.py
+      - name: Orchestration release gate
+        env:
+          TERMIT_ORCH_GATE_TIER: "release"
+          TERMIT_ORCH_MIN_PASS_RATE: ${{ env.TERMIT_ORCH_RELEASE_MIN_PASS_RATE }}
+          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: ${{ env.TERMIT_ORCH_RELEASE_MIN_RETRY_SUCCESS_RATE }}
+          TERMIT_ORCH_MIN_TOTAL: ${{ env.TERMIT_ORCH_GATE_MIN_TOTAL }}
+        run: cat /tmp/orch_eval_report.json | python3 scripts/eval_orchestration_gate.py
+      - name: Upload orchestration eval report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestration-eval-report
+          path: /tmp/orch_eval_report.json
+          if-no-files-found: error
 
   termit-shell-smoke:
     runs-on: macos-latest

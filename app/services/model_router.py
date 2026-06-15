@@ -24,6 +24,9 @@ class ModelRouter:
     ) -> None:
         self.settings = settings
         self._routing_policy = routing_policy
+        self._model_cost_overrides = self._parse_cost_overrides(
+            getattr(settings, "routing_model_costs", "")
+        )
 
     def resolve_profile_model(self, profile_name: str) -> Optional[str]:
         key = profile_name.strip().lower()
@@ -115,9 +118,57 @@ class ModelRouter:
                 unique = [preferred] + [item for item in unique if item != preferred]
             if routing_policy == "benchmark":
                 unique = self._routing_policy.rank_models_for_task(unique, task_type)
+        if getattr(self.settings, "routing_cost_aware_enabled", False):
+            unique = self._apply_cost_aware_ranking(unique, complexity=complexity)
         unique = filter_runtime_candidates(self.settings, unique)
         max_candidates = max(1, getattr(self.settings, "routing_max_candidates", 4))
         return unique[:max_candidates]
+
+    def _apply_cost_aware_ranking(self, models: list[str], *, complexity: str) -> list[str]:
+        if len(models) < 2:
+            return models
+        if complexity == "high":
+            return models
+        if complexity == "medium":
+            head = models[:1]
+            tail = sorted(
+                models[1:],
+                key=lambda model: (self._estimated_model_cost(model), models.index(model)),
+            )
+            return head + tail
+        return sorted(
+            models,
+            key=lambda model: (self._estimated_model_cost(model), models.index(model)),
+        )
+
+    def _estimated_model_cost(self, model: str) -> float:
+        if model in self._model_cost_overrides:
+            return self._model_cost_overrides[model]
+        provider = self.provider_for_model(model)
+        if provider == "openai_compat":
+            return float(getattr(self.settings, "routing_default_openai_cost_usd", 0.002))
+        if provider == "ollama":
+            return float(getattr(self.settings, "routing_default_ollama_cost_usd", 0.0))
+        return float(getattr(self.settings, "routing_default_openai_cost_usd", 0.002))
+
+    @staticmethod
+    def _parse_cost_overrides(raw: str) -> dict[str, float]:
+        overrides: dict[str, float] = {}
+        if not raw.strip():
+            return overrides
+        for item in raw.split(","):
+            chunk = item.strip()
+            if not chunk or "=" not in chunk:
+                continue
+            model, cost_raw = chunk.rsplit("=", 1)
+            model_name = model.strip()
+            try:
+                cost = float(cost_raw.strip())
+            except ValueError:
+                continue
+            if model_name:
+                overrides[model_name] = max(0.0, cost)
+        return overrides
 
     @staticmethod
     def complexity_tier(task_type: TaskType, message: str, history: list[ChatMessage]) -> str:

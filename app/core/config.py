@@ -139,6 +139,7 @@ class Settings:
     telemetry_max_latency_points: int = 5000
     metrics_snapshot_file_path: str = "./data/metrics_snapshots.jsonl"
     eval_report_file_path: str = "./data/eval_reports.jsonl"
+    orchestration_eval_report_file_path: str = "./data/orchestration_eval_reports.jsonl"
     eval_min_pass_rate: float = 0.95
     eval_ci_limit: int = 53
     eval_iq_scenarios_path: str = "./data/eval_scenarios_iq.json"
@@ -151,6 +152,7 @@ class Settings:
     frontier_fallback_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
     reasoning_draft_model: str = ""
     reasoning_critic_model: str = ""
+    orchestration_openhands_contract_enabled: bool = False
     finetune_pipeline_stuck_timeout_seconds: int = 3600
     retrieval_enabled: bool = True
     retrieval_mode: str = "semantic"
@@ -224,6 +226,10 @@ class Settings:
     finetune_shadow_traffic_percent: float = 10.0
     auto_start_ollama: bool = False
     routing_max_candidates: int = 4
+    routing_cost_aware_enabled: bool = False
+    routing_model_costs: str = ""
+    routing_default_openai_cost_usd: float = 0.002
+    routing_default_ollama_cost_usd: float = 0.0
     alert_webhook_url: str = ""
     skills_dir: str = "./data/skills"
     hooks_config_path: str = "./data/hooks/hooks.json"
@@ -389,6 +395,10 @@ def get_settings() -> Settings:
             "./data/metrics_snapshots.jsonl",
         ),
         eval_report_file_path=os.getenv("TERMIT_EVAL_REPORT_FILE", "./data/eval_reports.jsonl"),
+        orchestration_eval_report_file_path=os.getenv(
+            "TERMIT_ORCH_EVAL_REPORT_FILE",
+            "./data/orchestration_eval_reports.jsonl",
+        ),
         eval_min_pass_rate=_parse_clamped_float_env("TERMIT_EVAL_MIN_PASS_RATE", 0.95),
         eval_ci_limit=int(os.getenv("TERMIT_EVAL_CI_LIMIT", "53")),
         eval_iq_scenarios_path=os.getenv(
@@ -416,6 +426,11 @@ def get_settings() -> Settings:
         ),
         reasoning_draft_model=os.getenv("TERMIT_REASONING_DRAFT_MODEL", ""),
         reasoning_critic_model=os.getenv("TERMIT_REASONING_CRITIC_MODEL", ""),
+        orchestration_openhands_contract_enabled=os.getenv(
+            "TERMIT_ORCH_OPENHANDS_CONTRACT_ENABLED",
+            "false",
+        ).lower()
+        in {"1", "true", "yes"},
         finetune_pipeline_stuck_timeout_seconds=max(
             60, int(os.getenv("TERMIT_FINETUNE_PIPELINE_STUCK_TIMEOUT_SECONDS", "3600"))
         ),
@@ -603,6 +618,17 @@ def get_settings() -> Settings:
         in {"1", "true", "yes", "on"},
         alert_webhook_url=os.getenv("TERMIT_ALERT_WEBHOOK_URL", ""),
         routing_max_candidates=int(os.getenv("TERMIT_ROUTING_MAX_CANDIDATES", "4")),
+        routing_cost_aware_enabled=os.getenv("TERMIT_ROUTING_COST_AWARE_ENABLED", "false").lower()
+        in {"1", "true", "yes"},
+        routing_model_costs=os.getenv("TERMIT_ROUTING_MODEL_COSTS", ""),
+        routing_default_openai_cost_usd=max(
+            0.0,
+            float(os.getenv("TERMIT_ROUTING_DEFAULT_OPENAI_COST_USD", "0.002")),
+        ),
+        routing_default_ollama_cost_usd=max(
+            0.0,
+            float(os.getenv("TERMIT_ROUTING_DEFAULT_OLLAMA_COST_USD", "0.0")),
+        ),
         skills_dir=os.getenv("TERMIT_SKILLS_DIR", "./data/skills"),
         hooks_config_path=os.getenv("TERMIT_HOOKS_CONFIG_PATH", "./data/hooks/hooks.json"),
         hooks_webhook_url=os.getenv("TERMIT_HOOKS_WEBHOOK_URL", ""),
