@@ -44,7 +44,7 @@ class ModelRouterTests(unittest.TestCase):
         router = ModelRouter(build_settings())
         self.assertEqual(
             router.candidate_models(TaskType.coding),
-            ["ollama:code", "openai_compat:code"],
+            ["ollama:qwen2.5-coder", "ollama:code", "openai_compat:code"],
         )
 
     def test_candidate_models_requested_model_overrides(self) -> None:
@@ -95,6 +95,26 @@ class ModelRouterTests(unittest.TestCase):
                 "openai_compat:general",
             ],
         )
+
+    def test_low_complexity_prefers_fast_model(self) -> None:
+        router = ModelRouter(build_settings())
+        models = router.candidate_models(TaskType.coding, message="fix typo")
+        self.assertEqual(models[0], "ollama:qwen2.5-coder")
+
+    def test_high_complexity_includes_frontier_fallback(self) -> None:
+        router = ModelRouter(build_settings())
+        models = router.candidate_models(
+            TaskType.coding,
+            message="refactor architecture across multiple services with migration plan",
+        )
+        self.assertIn("openai_compat:deepseek-ai/DeepSeek-V3", models)
+
+    def test_routing_tiers_exposed(self) -> None:
+        router = ModelRouter(build_settings())
+        tiers = router.routing_tiers()
+        self.assertIn("fast", tiers)
+        self.assertIn("strong_local", tiers)
+        self.assertIn("frontier_fallback", tiers)
 
 
 if __name__ == "__main__":

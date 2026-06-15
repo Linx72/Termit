@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, HTTPException
 
 from app.domain.schemas import (
+    EvalBenchmarkRequest,
+    EvalBenchmarkResponse,
     EvalDashboardResponse,
     EvalReportSummaryResponse,
     EvalRunRequest,
@@ -9,8 +11,10 @@ from app.domain.schemas import (
     EvalSuiteRunRequest,
     EvalSuiteRunResponse,
 )
+from app.services.eval_benchmark_service import EvalBenchmarkService
+from app.services.eval_ci_gate import DEEP_GATE, FAST_GATE, RELEASE_GATE, evaluate_tier_gate
 from app.services.eval_service import EvalService
-from app.state import get_eval_service
+from app.state import get_eval_service, get_settings
 
 router = APIRouter(prefix="/api/eval", tags=["eval"])
 
@@ -98,3 +102,68 @@ async def list_reports(
 ) -> EvalReportSummaryResponse:
     reports = service.list_reports(limit=limit)
     return EvalReportSummaryResponse(reports=reports, total=len(reports))
+
+
+@router.post("/run-suite/{tier}", response_model=EvalSuiteRunResponse)
+async def run_suite_tier(
+    tier: str,
+    service: EvalService = Depends(get_eval_service),
+) -> EvalSuiteRunResponse:
+    gate_map = {
+        "fast": FAST_GATE,
+        "deep": DEEP_GATE,
+        "release": RELEASE_GATE,
+    }
+    selected = gate_map.get(tier.strip().lower())
+    if selected is None:
+        raise HTTPException(status_code=404, detail=f"Unknown eval tier: {tier}")
+    report = service.run_suite(
+        limit=None if selected.limit <= 0 else selected.limit,
+        persist_report=True,
+    )
+    ok, detail = evaluate_tier_gate(
+        tier=selected,
+        pass_rate=float(report["pass_rate"]),
+        total=int(report["total"]),
+        quality_median=float(report.get("quality_median", 0.0) or 0.0) or None,
+    )
+    if not ok:
+        raise HTTPException(status_code=412, detail=detail)
+    return EvalSuiteRunResponse(
+        run_id=str(report["run_id"]),
+        started_at=float(report["started_at"]),
+        finished_at=float(report["finished_at"]),
+        total=int(report["total"]),
+        passed=int(report["passed"]),
+        failed=int(report["failed"]),
+        pass_rate=float(report["pass_rate"]),
+        category_filter=str(report["category_filter"]) if report.get("category_filter") else None,
+        results=[_to_run_response(item) for item in report["results"]],
+    )
+
+
+@router.post("/benchmark/baselines", response_model=EvalBenchmarkResponse)
+async def run_benchmark_baselines(
+    payload: EvalBenchmarkRequest,
+    service: EvalService = Depends(get_eval_service),
+) -> EvalBenchmarkResponse:
+    settings = get_settings()
+    scenario_ids = payload.scenario_ids or ["IQ1", "SWE1", "A1"]
+    benchmark = EvalBenchmarkService(
+        report_file_path=settings.eval_report_file_path,
+        termit_model=settings.code_model,
+        reference_model=settings.eval_benchmark_reference_model,
+        scenario_runner=lambda scenario_id, _model: service.run_scenario(scenario_id),
+        quality_judge=lambda result: float(result.get("quality_score", 0.0) or 0.0),
+    )
+    report = benchmark.compare_on_scenarios(scenario_ids, persist=payload.persist)
+    return EvalBenchmarkResponse(
+        benchmark_id=str(report["benchmark_id"]),
+        termit_model=str(report["termit_model"]),
+        reference_model=str(report["reference_model"]),
+        termit_pass_rate=float(report["termit_pass_rate"]),
+        reference_pass_rate=float(report["reference_pass_rate"]),
+        termit_quality_mean=float(report["termit_quality_mean"]),
+        reference_quality_mean=float(report["reference_quality_mean"]),
+        rows=list(report.get("rows", [])),
+    )

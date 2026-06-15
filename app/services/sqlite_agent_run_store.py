@@ -72,6 +72,7 @@ class SQLiteAgentRunStore:
             self._ensure_column(conn, "agent_runs", "failure_class", "TEXT")
             self._ensure_column(conn, "agent_runs", "checkpoint_json", "TEXT")
             self._ensure_column(conn, "agent_runs", "parent_run_id", "TEXT")
+            self._ensure_column(conn, "agent_runs", "outcome_class", "TEXT")
             conn.commit()
 
     def put_run(self, run: AgentRunRecordResponse) -> None:
@@ -82,8 +83,8 @@ class SQLiteAgentRunStore:
                 INSERT INTO agent_runs(
                     run_id, agent_id, agent_name, state, created_at, updated_at,
                     input, session_id, provider, model, attempts, max_attempts, failure_class,
-                    attempted_models, response, error, checkpoint_json, parent_run_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    attempted_models, response, error, checkpoint_json, parent_run_id, outcome_class
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
                     agent_id=excluded.agent_id,
                     agent_name=excluded.agent_name,
@@ -101,7 +102,8 @@ class SQLiteAgentRunStore:
                     response=excluded.response,
                     error=excluded.error,
                     checkpoint_json=excluded.checkpoint_json,
-                    parent_run_id=excluded.parent_run_id
+                    parent_run_id=excluded.parent_run_id,
+                    outcome_class=excluded.outcome_class
                 """,
                 (
                     run.run_id,
@@ -122,6 +124,7 @@ class SQLiteAgentRunStore:
                     run.error,
                     run.checkpoint_json,
                     run.parent_run_id,
+                    run.outcome_class,
                 ),
             )
             conn.commit()
@@ -316,6 +319,7 @@ class SQLiteAgentRunStore:
             attempts=int(row["attempts"] or 0),
             max_attempts=int(row["max_attempts"] or 1),
             failure_class=row["failure_class"],
+            outcome_class=row["outcome_class"] if "outcome_class" in row.keys() else None,
             attempted_models=attempted,
             response=row["response"] or "",
             error=row["error"],

@@ -1,9 +1,10 @@
 import unittest
 from dataclasses import replace
+from unittest.mock import patch
 
 from app.domain.schemas import TaskType
 from app.services.model_router import ModelRouter
-from app.services.routing_policy_service import RoutingPolicyService
+from app.services.routing_policy_service import RepoModelProfile, RoutingPolicyService
 from tests.test_model_router import build_settings
 
 
@@ -60,6 +61,36 @@ class RoutingPolicyServiceTests(unittest.TestCase):
             routing_policy="benchmark",
         )
         self.assertEqual(models[0], "openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct")
+
+    def test_shadow_model_selected_by_traffic_percent(self) -> None:
+        profile = RepoModelProfile(
+            profile_id="shadow-test",
+            title="Shadow test",
+            path_prefix="",
+            task_type="coding",
+            preferred_model="ollama:termit-core-ft",
+            shadow_model="ollama:shadow-ft",
+            shadow_traffic_percent=10.0,
+        )
+        with patch.object(self.service, "get_repo_profile", return_value=profile):
+            with patch("app.services.routing_policy_service.random.random", return_value=0.05):
+                self.assertEqual(
+                    self.service.resolve_repo_model(
+                        profile_id="shadow-test",
+                        path_prefix="",
+                        task_type=TaskType.coding,
+                    ),
+                    "ollama:shadow-ft",
+                )
+            with patch("app.services.routing_policy_service.random.random", return_value=0.50):
+                self.assertEqual(
+                    self.service.resolve_repo_model(
+                        profile_id="shadow-test",
+                        path_prefix="",
+                        task_type=TaskType.coding,
+                    ),
+                    "ollama:termit-core-ft",
+                )
 
 
 if __name__ == "__main__":

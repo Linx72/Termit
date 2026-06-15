@@ -10,6 +10,7 @@ import time
 from typing import Optional
 from uuid import uuid4
 
+from app.services.agent_outcome_service import classify_agent_outcome
 from app.domain.schemas import (
     AgentProfileCreateRequest,
     AgentProfileResponse,
@@ -153,6 +154,7 @@ class AgentService:
         default_repo_profile_id: Optional[str] = None,
         policy_preset_service: Optional[AgentPolicyPresetService] = None,
         media_generation_service: Optional[object] = None,
+        reasoning_orchestrator: Optional[object] = None,
     ) -> None:
         self._chat_service = chat_service
         self._registry = registry
@@ -190,6 +192,7 @@ class AgentService:
         self._default_repo_profile_id = (default_repo_profile_id or "").strip() or None
         self._policy_presets = policy_preset_service
         self._media = media_generation_service
+        self._reasoning_orchestrator = reasoning_orchestrator
         self._ssh = SshWorkspaceService(tooling)
         self._notifier = AgentRunNotifier.get()
         self._queue_capacity = max(1, max_queue_size)
@@ -873,6 +876,35 @@ class AgentService:
             enrichment_lines = self._context_enrichment.build_agent_context_lines(payload, profile)
             if enrichment_lines:
                 memory_context = enrichment_lines + memory_context
+
+        run_mode = (payload.run_mode or "agent").strip().lower()
+        if run_mode == "plan" and self._reasoning_orchestrator is not None:
+            try:
+                reasoning = self._reasoning_orchestrator.run_reasoning_pass(task=payload.input)
+                profile_for_loop = profile_for_loop.model_copy(
+                    update={
+                        "system_prompt": (
+                            f"{profile_for_loop.system_prompt}\n\n{reasoning.memory_block()}"
+                        )
+                    }
+                )
+                if run_id:
+                    self._append_event(
+                        run_id=run_id,
+                        event_type="reasoning_pass",
+                        state=AgentRunState.running,
+                        message=json_dumps(reasoning.as_dict(), ensure_ascii=False)[:4000],
+                        attempt=attempt,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                if run_id:
+                    self._append_event(
+                        run_id=run_id,
+                        event_type="reasoning_pass_skipped",
+                        state=AgentRunState.running,
+                        message=str(exc)[:500],
+                        attempt=attempt,
+                    )
 
         tools_schema = build_openai_tools(list(profile.enabled_tools))
         run_verify_after_patch = (
@@ -1697,6 +1729,7 @@ class AgentService:
                     current.session_id = result.session_id
                     current.error = None
                     current.failure_class = None
+                    current.outcome_class = self._resolve_outcome_class(current, run_id)
                     self._run_store.put_run(current)
                     self._append_event(
                         run_id=run_id,
@@ -1776,6 +1809,7 @@ class AgentService:
                     current.updated_at = _utc_now_iso()
                     current.error = str(exc)
                     current.failure_class = failure_class
+                    current.outcome_class = self._resolve_outcome_class(current, run_id)
                     if is_last:
                         current.state = AgentRunState.failed
                         self._run_store.put_run(current)
@@ -1823,6 +1857,7 @@ class AgentService:
                         "Task was interrupted to keep workers healthy."
                     )
                     current.failure_class = failure_class
+                    current.outcome_class = self._resolve_outcome_class(current, run_id)
                     if is_last:
                         current.state = AgentRunState.failed
                         self._run_store.put_run(current)
@@ -1870,6 +1905,7 @@ class AgentService:
                     current.updated_at = _utc_now_iso()
                     current.error = str(exc)
                     current.failure_class = failure_class
+                    current.outcome_class = self._resolve_outcome_class(current, run_id)
                     if is_last:
                         current.state = AgentRunState.failed
                         self._run_store.put_run(current)
@@ -1917,6 +1953,19 @@ class AgentService:
         if isinstance(exc, TimeoutError):
             return "run_timeout"
         return "execution_error"
+
+    def _resolve_outcome_class(self, run: AgentRunRecordResponse, run_id: str) -> str:
+        events = [
+            {"message": event.message, "event_type": event.event_type}
+            for event in self._run_store.get_events(run_id, limit=80)
+        ]
+        return classify_agent_outcome(
+            state=run.state.value,
+            failure_class=run.failure_class,
+            response=run.response,
+            error=run.error,
+            events=events,
+        )
 
     @staticmethod
     def _safe_run_age_seconds(updated_at_iso: str, now_ts: float) -> float:

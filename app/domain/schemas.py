@@ -695,11 +695,29 @@ class EvalDashboardResponse(BaseModel):
     latency_p95_ms: int = 0
     chat_latency_p95_ms: Optional[int] = None
     estimated_cost_usd: float = 0.0
+    quality_median: float = 0.0
+    quality_mean: float = 0.0
     latest_run_id: Optional[str] = None
     latest_total: int = 0
     latest_passed: int = 0
     scenario_count: int = 0
     recent_reports: list[dict[str, object]] = Field(default_factory=list)
+
+
+class EvalBenchmarkRequest(BaseModel):
+    scenario_ids: list[str] = Field(default_factory=list)
+    persist: bool = True
+
+
+class EvalBenchmarkResponse(BaseModel):
+    benchmark_id: str
+    termit_model: str
+    reference_model: str
+    termit_pass_rate: float
+    reference_pass_rate: float
+    termit_quality_mean: float
+    reference_quality_mean: float
+    rows: list[dict[str, object]] = Field(default_factory=list)
 
 
 class ListFilesRequest(BaseModel):
@@ -1035,6 +1053,7 @@ class AgentRunRecordResponse(BaseModel):
     attempts: int = 0
     max_attempts: int = 1
     failure_class: Optional[str] = None
+    outcome_class: Optional[str] = None
     attempted_models: list[str] = Field(default_factory=list)
     response: str = ""
     error: Optional[str] = None
@@ -1302,6 +1321,25 @@ class FinetunePipelineCancelResponse(BaseModel):
     run_id: str
     cancelled: bool
     status: str
+
+
+class FinetunePipelineRecoverResponse(BaseModel):
+    recovered: list[dict[str, object]] = Field(default_factory=list)
+    total: int = 0
+
+
+class FinetuneTeacherDistillRequest(BaseModel):
+    name: str = "teacher-distill"
+    limit: int = Field(default=200, ge=1, le=2000)
+    min_samples: int = Field(default=1, ge=1)
+
+
+class FinetuneTeacherDistillResponse(BaseModel):
+    dataset_path: str
+    sample_count: int
+    teacher_model: str
+    skipped: int = 0
+    errors: int = 0
 
 
 class FinetuneTrainRequest(BaseModel):

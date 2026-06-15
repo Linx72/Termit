@@ -439,6 +439,61 @@ class FinetuneServiceTests(unittest.TestCase):
             self.assertEqual(profiles[0]["preferred_model"], "ollama:termit-core-ft")
             self.assertTrue(profiles[0]["finetuned"])
 
+    def test_register_adapter_deduplicates_same_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(Path(tmp))
+            first = service.register_adapter(
+                FinetuneAdapterRegisterRequest(
+                    name="termit-core-ft",
+                    model="ollama:termit-core-ft",
+                    base_model="ollama:deepseek-coder",
+                    repo_profile_id="termit-core",
+                    description="first",
+                )
+            )
+            second = service.register_adapter(
+                FinetuneAdapterRegisterRequest(
+                    name="termit-core-ft-v2",
+                    model="ollama:termit-core-ft",
+                    base_model="ollama:deepseek-coder",
+                    repo_profile_id="termit-core",
+                    description="updated",
+                )
+            )
+            self.assertEqual(first["adapter_id"], second["adapter_id"])
+            adapters = service.list_adapters()
+            self.assertEqual(len(adapters), 1)
+            self.assertEqual(adapters[0]["description"], "updated")
+
+    def test_shadow_profile_upsert_on_regression(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_path = root / "repo_model_profiles.json"
+            profiles_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "profile_id": "termit-core",
+                            "title": "Termit core",
+                            "path_prefix": "app/",
+                            "task_type": "coding",
+                            "preferred_model": "ollama:deepseek-coder",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            service = self._build_service(root)
+            service._upsert_repo_profile_shadow(
+                "termit-core",
+                "ollama:shadow-ft",
+                15.0,
+            )
+            profiles = json.loads(profiles_path.read_text(encoding="utf-8"))
+            self.assertEqual(profiles[0]["shadow_model"], "ollama:shadow-ft")
+            self.assertEqual(profiles[0]["shadow_traffic_percent"], 15.0)
+            self.assertTrue(profiles[0]["finetuned"])
+
     def test_training_recipe(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             service = self._build_service(Path(tmp))

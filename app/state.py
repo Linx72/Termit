@@ -62,7 +62,40 @@ from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingService
 from app.services.training_signal_store import TrainingSignalStore
 from app.services.alert_webhook_service import AlertWebhookService
-from app.domain.schemas import FinetuneStage1RunRequest
+from app.services.llm_caller_service import LlmCallerService
+from app.services.reasoning_orchestrator_service import ReasoningOrchestratorService
+
+
+@lru_cache
+def _build_llm_caller_service() -> LlmCallerService:
+    settings = get_settings()
+    providers: dict[str, BaseProvider] = {
+        "ollama": OllamaProvider(settings.ollama_base_url),
+        "openai_compat": OpenAICompatProvider(
+            settings.openai_compat_base_url,
+            settings.openai_compat_api_key,
+        ),
+    }
+    router = ModelRouter(settings, routing_policy=_build_routing_policy_service())
+    return LlmCallerService(providers=providers, model_router=router)
+
+
+def get_llm_caller_service() -> LlmCallerService:
+    return _build_llm_caller_service()
+
+
+@lru_cache
+def _build_reasoning_orchestrator_service() -> ReasoningOrchestratorService:
+    settings = get_settings()
+    return ReasoningOrchestratorService(
+        llm_caller=_build_llm_caller_service(),
+        draft_model=settings.reasoning_draft_model or settings.fast_model,
+        critic_model=settings.reasoning_critic_model or settings.frontier_fallback_model,
+    )
+
+
+def get_reasoning_orchestrator_service() -> ReasoningOrchestratorService:
+    return _build_reasoning_orchestrator_service()
 
 
 @lru_cache
@@ -204,6 +237,7 @@ def _build_agent_service() -> AgentService:
         default_repo_profile_id=settings.finetune_repo_profile_id,
         policy_preset_service=_build_agent_policy_preset_service(),
         media_generation_service=_build_media_generation_service(),
+        reasoning_orchestrator=_build_reasoning_orchestrator_service(),
     )
 
 
@@ -531,6 +565,15 @@ def get_feedback_store() -> FeedbackStore:
 @lru_cache
 def _build_eval_service() -> EvalService:
     settings = get_settings()
+    from app.core.model_roles import resolve_cloud_teacher_model
+    from app.services.eval_quality_judge_service import EvalQualityJudgeService
+
+    llm_caller = _build_llm_caller_service()
+    judge_model = settings.eval_quality_judge_model or resolve_cloud_teacher_model(settings)
+    quality_judge = EvalQualityJudgeService(
+        judge_model=judge_model,
+        llm_caller=llm_caller.call,
+    )
     return EvalService(
         scenarios_path=settings.eval_scenarios_path,
         task_service=_build_task_service(),
@@ -540,6 +583,12 @@ def _build_eval_service() -> EvalService:
         report_store=EvalReportStore(file_path=settings.eval_report_file_path),
         retrieval_service=_build_code_retrieval_service(),
         extra_scenarios_path=settings.media_eval_scenarios_path,
+        extra_scenarios_paths=[
+            settings.eval_iq_scenarios_path,
+            settings.eval_swe_scenarios_path,
+            settings.eval_humaneval_scenarios_path,
+        ],
+        quality_judge=quality_judge,
     )
 
 
@@ -798,6 +847,7 @@ def _build_finetune_service() -> FinetuneService:
         eval_report_file_path=settings.eval_report_file_path,
         repo_profiles_path=settings.repo_model_profiles_path,
         pipeline_max_concurrency=settings.finetune_pipeline_max_concurrency,
+        pipeline_stuck_timeout_seconds=settings.finetune_pipeline_stuck_timeout_seconds,
         trainer=_build_finetune_trainer_service(),
         auto_train_after_pipeline=settings.finetune_auto_train,
         auto_register_after_train=settings.finetune_auto_register_after_train,

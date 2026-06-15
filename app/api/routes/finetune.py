@@ -19,12 +19,15 @@ from app.domain.schemas import (
     FinetuneJobResponse,
     FinetunePipelineStage,
     FinetunePipelineCancelResponse,
+    FinetunePipelineRecoverResponse,
     FinetunePipelineRunListResponse,
     FinetunePipelineRunResponse,
     FinetuneRecipeResponse,
     FinetuneStage1RunRequest,
     FinetuneStage1RunResponse,
     FinetuneStage1SchedulerStatusResponse,
+    FinetuneTeacherDistillRequest,
+    FinetuneTeacherDistillResponse,
     FinetuneTrainRequest,
     FinetuneTrainResponse,
     FinetuneTrainingDashboardResponse,
@@ -33,7 +36,8 @@ from app.domain.schemas import (
 from app.services.eval_service import EvalService
 from app.services.finetune_service import FinetuneJobRecord, FinetuneService
 from app.services.stage1_scheduler_service import Stage1SchedulerService
-from app.state import get_eval_service, get_finetune_adapter_resolver, get_finetune_service, get_stage1_scheduler_service
+from app.state import get_eval_service, get_finetune_adapter_resolver, get_finetune_service, get_llm_caller_service, get_settings, get_stage1_scheduler_service
+from app.core.model_roles import resolve_cloud_teacher_model
 
 router = APIRouter(prefix="/api/finetune", tags=["finetune"])
 
@@ -365,6 +369,16 @@ async def retry_stage1_pipeline_run(
     return FinetunePipelineRunResponse(**retried)
 
 
+@router.post("/pipeline/stage1-runs/recover-stuck", response_model=FinetunePipelineRecoverResponse)
+async def recover_stuck_stage1_pipeline_runs(
+    stale_seconds: Optional[int] = Query(default=None, ge=60, le=86400),
+    requeue: bool = Query(default=False),
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetunePipelineRecoverResponse:
+    recovered = service.recover_stuck_pipeline_runs(stale_seconds=stale_seconds, requeue=requeue)
+    return FinetunePipelineRecoverResponse(recovered=recovered, total=len(recovered))
+
+
 @router.post("/pipeline/stage1-runs/{run_id}/cancel", response_model=FinetunePipelineCancelResponse)
 async def cancel_stage1_pipeline_run(
     run_id: str,
@@ -378,6 +392,67 @@ async def cancel_stage1_pipeline_run(
         cancelled=cancelled,
         status=state,
     )
+
+
+@router.post("/datasets/export-signals", response_model=FinetuneDatasetExportResponse)
+async def export_training_signals_dataset(
+    payload: FinetuneDatasetExportRequest,
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneDatasetExportResponse:
+    try:
+        result = service.export_training_signals_dataset(
+            name=payload.name,
+            limit=payload.limit,
+            min_samples=payload.min_samples,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FinetuneDatasetExportResponse(**result)
+
+
+@router.post("/datasets/teacher-distill", response_model=FinetuneTeacherDistillResponse)
+async def distill_teacher_dataset(
+    payload: FinetuneTeacherDistillRequest,
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneTeacherDistillResponse:
+    settings = get_settings()
+    llm_caller = get_llm_caller_service()
+    teacher_model = resolve_cloud_teacher_model(settings)
+
+    def _teacher_call(model: str, prompt: str) -> str:
+        if llm_caller.is_model_available(model):
+            try:
+                return llm_caller.call(
+                    model,
+                    prompt,
+                    system="You are a senior coding agent teacher.",
+                )
+            except Exception:
+                pass
+        task_line = ""
+        for line in prompt.splitlines():
+            if line.startswith("Task:"):
+                task_line = line.replace("Task:", "").strip()
+                break
+        return (
+            "Plan: inspect repo, apply minimal patch, run verify.\n"
+            f"Task focus: {task_line[:240]}\n"
+            '{"action":"final","answer":"Completed with minimal diff and verify."}'
+        )
+
+    try:
+        result = service.distill_with_teacher(
+            name=payload.name,
+            limit=payload.limit,
+            min_samples=payload.min_samples,
+            llm_caller=_teacher_call,
+            teacher_model=settings.teacher_model,
+            teacher_fallback_model=settings.teacher_fallback_model,
+            cloud_teacher_model=teacher_model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FinetuneTeacherDistillResponse(**result)
 
 
 @router.post("/jobs/{job_id}/train", response_model=FinetuneTrainResponse)

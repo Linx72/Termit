@@ -1,38 +1,29 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-05T10:54:07Z
-
-**Причина:** session stop
-
-**Последний checkpoint:** [`20260605-105407_6e35b420-fd69-4acb-8707-.md`](checkpoints/20260605-105407_6e35b420-fd69-4acb-8707-.md)
+**Последнее обновление:** 2026-06-15 (roadmap wave 2 — закрытие)
 
 ## Сводка
-- **Готово.** Полная пересборка выполнена: - `./scripts/package_termit_shell.sh` — frontend + Swift + bundle - [`TermitShell.app`](file:///Users/amoros/Projects/Termit/clients/termit-shell/release/TermitShell.app) создан и **запущен** - Backend `:8765` — `{"status":"ok"}` - Тесты…
-- **Исправлено.** Чёрный экран был из‑за того, что CSS загружался, а JS-модули — нет: `loadHTMLString` в WKWebView не запускает ES modules. **Что изменилось:** - Renderer копируется в `~/Library/Application Support/TermitShell/renderer-cache/` - `index.html` нормализуется (без `cr…
-- ## Что главное В Termit три слоя, не два «приложения»: | Что | Роль | Где | |-----|------|-----| | **Termit (сервер)** | Ядро: API, агенты, роутинг моделей | `uvicorn` на `:8765` | | **Termit Desktop (UI)** | Интерфейс: чат, задачи, агенты | React в [`clients/termit-desktop`](fi…
-- ## Коротко **Можно было** — но сознательно разделили: **сервер (Python)** и **клиент (UI + Shell)**. Это не «два приложения ради усложнения», а разные роли. --- ## Почему так сделано **1. Разный стек и жизненный цикл** - **Termit server** — Python, FastAPI, Ollama, агенты, tools…
+- Roadmap `termit_model_roadmap_73860914.plan.md` — инфраструктура закрыта; release gate ждёт quality uplift.
+- **426 тестов OK** (skipped=1): routing, adapter dedup, shadow routing, regression gate.
+- Live smoke (2026-06-15): `/health` 200, `/api/eval/dashboard` 200 (99 scenarios), `run-suite/fast` 200 (12/12), `run-suite/deep` 200 (52/53, 98.1%), `run-suite/release` **412** (quality_median 2.5 < 3.0), `teacher-distill` 200.
 
-## Файлы сессии
-- `/Users/amoros/Projects/Termit/clients/termit-shell/Sources/TermitShell/main.swift`
-- `/Users/amoros/Projects/Termit/scripts/package_termit_shell.sh`
-- `/Users/amoros/Projects/Termit/clients/termit-shell/release/TermitShell.app/Contents/Resources/renderer/index.html`
-- `/Users/amoros/Projects/Termit/tests/test_termit_shell_runtime_smoke.py`
-- `/Users/amoros/Projects/Termit/clients/termit-desktop`
-- `/Users/amoros/Projects/Termit/scripts/run_termit_shell.sh`
-- `/Users/amoros/Projects/Termit/clients/termit-desktop/src/App.tsx`
-- `/Users/amoros/Projects/Termit/clients/termit-desktop/vite.config.ts`
-- `/Users/amoros/Projects/Termit/clients/termit-desktop/index.html`
-- `/Users/amoros/Projects/Termit/clients/termit-desktop/src/main.tsx`
-- `/Users/amoros/Projects/Termit/clients/termit-desktop/src/settings.ts`
-- `/Users/amoros/Projects/Termit/clients/termit-shell/release/TermitShell.app/Contents/Resources/renderer/assets/index-C4O9FpZf.js`
-- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/terminals/946667.txt`
-- `/Users/amoros/Projects/Termit/clients/termit-desktop/electron/main.ts`
-- `/Users/amoros/Projects/Termit/clients/termit-shell/README.md`
-- `/Users/amoros/Projects/Termit/README.md`
-- `/Users/amoros/Projects/Termit/clients/termit-desktop/README.md`
-- `/Users/amoros/Projects/Termit`
-- `/Users/amoros/Projects/Termit/START_HERE_RU.md`
-- `/Users/amoros/Projects/Termit/scripts/run_termit_stack.sh`
+## Wave 1–2 (готово)
+- Stage1 recover/export, Modelfile `termit-core-ft`, weekly schedule
+- Eval 3.0: IQ/SWE/HumanEval, rubric judge, benchmark API, tier gates
+- Autonomy: `outcome_class`, agent loop stop-conditions
+- `LlmCallerService`, `ReasoningOrchestratorService`, 3-tier routing (fast/code/frontier)
+- `cloud_teacher` не в `teacher_model_ids`; adapter dedup on promote
+- Shadow/promote: `TERMIT_FINETUNE_SHADOW_TRAFFIC_PERCENT`, `_upsert_repo_profile_shadow`, `RoutingPolicyService._pick_profile_model` — покрыто тестами
+- Teacher distill: сначала `LlmCallerService` если provider доступен; offline fallback при отсутствии provider или ошибке вызова (локально без API key)
 
-## Открытые задачи
-- [ ] Заполните вручную или через compact-chat после крупной сессии
+## Файлы (ключевые)
+- `app/services/llm_caller_service.py`, `reasoning_orchestrator_service.py`, `model_router.py`
+- `app/core/model_roles.py`, `app/api/routes/finetune.py`
+- `app/services/finetune_service.py`, `routing_policy_service.py`, `finetune_trainer_service.py`
+- `tests/test_routing_policy_service.py`, `test_finetune_service.py`, `test_model_router.py`
+- `.env.example` — QLoRA GPU hint
+
+## Открытые блокеры
+- [ ] **Release eval gate**: quality_median 2.5 при пороге 3.0 — нужен cloud judge или улучшение heuristic/cloud `TERMIT_EVAL_QUALITY_JUDGE_MODEL`
+- [ ] **Реальный QLoRA/GGUF**: GPU + `TERMIT_FINETUNE_TRAINER=hf`, `TERMIT_FINETUNE_HF_DRY_RUN=false`, unsloth
+- [ ] **Cloud teacher live**: `OPENAI_COMPAT_BASE_URL` есть, `OPENAI_COMPAT_API_KEY` пуст — distillation может идти через offline fallback

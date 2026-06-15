@@ -23,6 +23,7 @@ from app.domain.schemas import (
 from app.services.browser_workflow_service import BrowserWorkflowService, WebWorkflowError
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.eval_report_store import EvalReportStore
+from app.services.eval_quality_judge_service import EvalQualityJudgeService
 from app.services.mcp_registry_service import McpRegistryService
 from app.services.search_provider import StubSearchProvider
 from app.services.agent_tool_schema import TOOL_DEFINITIONS
@@ -96,8 +97,15 @@ class EvalService:
         web_fetcher: Optional[Callable[[str, int], tuple[int, str, str]]] = None,
         retrieval_service: Optional[CodeRetrievalService] = None,
         extra_scenarios_path: Optional[str] = None,
+        extra_scenarios_paths: Optional[list[str]] = None,
+        quality_judge: Optional[EvalQualityJudgeService] = None,
     ) -> None:
         self._scenarios = self._load_scenarios(scenarios_path)
+        for extra_path in extra_scenarios_paths or []:
+            if extra_path:
+                path = Path(extra_path)
+                if path.is_file():
+                    self._scenarios = self._scenarios + self._load_scenarios(extra_path)
         if extra_scenarios_path:
             extra = Path(extra_scenarios_path)
             if extra.is_file():
@@ -109,6 +117,7 @@ class EvalService:
         self._report_store = report_store
         self._web_fetcher = web_fetcher
         self._retrieval = retrieval_service
+        self._quality_judge = quality_judge
 
     def _load_scenarios(self, scenarios_path: str) -> list[EvalScenario]:
         path = Path(scenarios_path)
@@ -198,7 +207,7 @@ class EvalService:
                 self._reset_patch_fixture()
 
         duration_ms = int((time.perf_counter() - started) * 1000)
-        return {
+        result = {
             "scenario_id": scenario.id,
             "category": scenario.category,
             "title": scenario.title,
@@ -211,7 +220,18 @@ class EvalService:
             "duration_ms": duration_ms,
             "failure_class": failure_class,
             "execution_ref": execution_ref,
+            "response": message,
         }
+        if self._quality_judge is not None:
+            judgement = self._quality_judge.judge_scenario(
+                prompt=scenario.prompt,
+                response=message,
+                category=scenario.category,
+                status=status,
+                task_success=result["task_success"],
+            )
+            result.update(judgement.as_dict())
+        return result
 
     def run_suite(
         self,
@@ -257,6 +277,13 @@ class EvalService:
             "results": results,
             "metrics": metrics.model_dump() if metrics else None,
         }
+        quality_scores = [
+            float(item["quality_score"])
+            for item in results
+            if item.get("quality_score") is not None
+        ]
+        if quality_scores and self._quality_judge is not None:
+            report.update(self._quality_judge.summarize_scores(quality_scores))
         if persist_report and self._report_store is not None:
             self._report_store.append_suite_report(report)
         return report
@@ -284,6 +311,8 @@ class EvalService:
             "latest_run_id": str(latest.get("run_id", "")) if latest else None,
             "latest_total": int(latest.get("total", 0)) if latest else 0,
             "latest_passed": int(latest.get("passed", 0)) if latest else 0,
+            "quality_median": float(latest.get("quality_median", 0.0)) if latest else 0.0,
+            "quality_mean": float(latest.get("quality_mean", 0.0)) if latest else 0.0,
             "scenario_count": len(self._scenarios),
             "recent_reports": reports,
         }

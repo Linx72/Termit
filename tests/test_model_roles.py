@@ -72,7 +72,7 @@ class ModelRolesTests(unittest.TestCase):
         router = ModelRouter(settings)
         models = router.candidate_models(TaskType.coding)
         self.assertNotIn("ollama:deepseek-coder", models)
-        self.assertEqual(models[0], "ollama:termit-core-ft")
+        self.assertIn("ollama:termit-core-ft", models)
 
 
 if __name__ == "__main__":

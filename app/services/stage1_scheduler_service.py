@@ -108,6 +108,7 @@ class Stage1SchedulerService:
             self._stop.wait(30)
 
     def _enqueue_once(self, *, source: str) -> dict[str, object]:
+        self._finetune_service.recover_stuck_pipeline_runs(requeue=False)
         with self._lock:
             now = self._now_provider()
             slot = self._slot_key(now)

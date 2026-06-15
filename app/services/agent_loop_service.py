@@ -519,6 +519,11 @@ class AgentLoopService:
             except Exception as exc:  # noqa: BLE001
                 observation = f"Tool error ({tool_name}): {exc}"
                 tool_error_streak += 1
+                if tool_error_streak >= 4:
+                    raise AgentLoopError(
+                        f"Tool error streak reached {tool_error_streak}; stopping run.",
+                        checkpoint=_checkpoint(step),
+                    )
                 if tool_error_streak >= 2:
                     repeat_blocks += 1
                     _maybe_escalate()
@@ -671,6 +676,11 @@ class AgentLoopService:
             except ToolJsonParseError as exc:
                 parse_errors += 1
                 _maybe_escalate()
+                if parse_errors >= 5:
+                    raise AgentLoopError(
+                        f"Too many parse errors ({parse_errors}); stopping run.",
+                        checkpoint=_checkpoint(step),
+                    )
                 observation = f"Tool parse error: {exc}"
                 step_result = LoopStepResult(step=step, action="parse_error", tool=None, observation=observation)
                 steps.append(step_result)

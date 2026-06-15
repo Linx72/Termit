@@ -76,6 +76,7 @@ class FinetuneService:
         repo_profiles_path: str = "./data/repo_model_profiles.json",
         pipelines_path: str = "./data/finetune/pipelines.json",
         pipeline_max_concurrency: int = 1,
+        pipeline_stuck_timeout_seconds: int = 3600,
         trainer: Optional[FinetuneTrainerService] = None,
         auto_train_after_pipeline: bool = False,
         auto_register_after_train: bool = False,
@@ -98,6 +99,7 @@ class FinetuneService:
         self.repo_profiles_path = Path(repo_profiles_path)
         self.pipelines_path = Path(pipelines_path)
         self._pipeline_max_concurrency = max(1, pipeline_max_concurrency)
+        self._pipeline_stuck_timeout_seconds = max(60, pipeline_stuck_timeout_seconds)
         self._trainer = trainer
         self._auto_train_after_pipeline = auto_train_after_pipeline
         self._auto_register_after_train = auto_register_after_train
@@ -321,6 +323,7 @@ class FinetuneService:
         return next((item for item in self.list_jobs() if item.job_id == job_id), None)
 
     def register_adapter(self, payload: FinetuneAdapterRegisterRequest) -> dict[str, object]:
+        now = datetime.now(timezone.utc).isoformat()
         adapter = {
             "adapter_id": f"fta_{uuid4().hex[:10]}",
             "name": payload.name,
@@ -328,10 +331,25 @@ class FinetuneService:
             "base_model": payload.base_model,
             "repo_profile_id": payload.repo_profile_id,
             "description": payload.description,
-            "registered_at": datetime.now(timezone.utc).isoformat(),
+            "registered_at": now,
         }
         with self._lock:
             adapters = self._read_adapters()
+            for index, existing in enumerate(adapters):
+                if (
+                    str(existing.get("model", "")).strip() == payload.model.strip()
+                    and str(existing.get("base_model", "")).strip() == payload.base_model.strip()
+                    and str(existing.get("repo_profile_id", "")).strip()
+                    == (payload.repo_profile_id or "").strip()
+                ):
+                    adapter["adapter_id"] = str(existing.get("adapter_id") or adapter["adapter_id"])
+                    adapter["registered_at"] = str(existing.get("registered_at") or now)
+                    adapters[index] = adapter
+                    self._write_adapters(adapters)
+                    if payload.repo_profile_id:
+                        self._upsert_repo_profile_model(payload.repo_profile_id, payload.model)
+                        self._write_repo_adapter_snapshot(payload.repo_profile_id, adapter)
+                    return adapter
             adapters.append(adapter)
             self._write_adapters(adapters)
             if payload.repo_profile_id:
@@ -815,6 +833,61 @@ class FinetuneService:
     def training_signal_store(self) -> TrainingSignalStore:
         return self._training_signal_store
 
+    def distill_with_teacher(
+        self,
+        *,
+        name: str,
+        limit: int,
+        min_samples: int,
+        llm_caller,
+        teacher_model: str = "",
+        teacher_fallback_model: str = "",
+        cloud_teacher_model: str = "",
+    ) -> dict[str, object]:
+        from app.services.teacher_distillation_service import TeacherDistillationService
+
+        samples = self._training_signal_store.load_samples(limit)
+        if not samples:
+            samples = self._load_agent_run_samples(limit, include_trajectory=True)
+        distiller = TeacherDistillationService(
+            teacher_model=teacher_model,
+            teacher_fallback_model=teacher_fallback_model,
+            cloud_teacher_model=cloud_teacher_model,
+            datasets_dir=str(self.datasets_dir),
+            llm_caller=llm_caller,
+            max_samples=limit,
+        )
+        result = distiller.distill_samples(samples, name=name)
+        if result.sample_count < min_samples:
+            raise ValueError(
+                f"Teacher distillation produced {result.sample_count} samples; "
+                f"minimum required is {min_samples}."
+            )
+        return result.as_dict()
+
+    def export_training_signals_dataset(
+        self,
+        *,
+        name: str = "stage1-signals-export",
+        limit: int = 500,
+        min_samples: int = 10,
+    ) -> dict[str, object]:
+        return self.export_dataset(
+            FinetuneDatasetExportRequest(
+                name=name,
+                include_feedback=True,
+                include_tasks=True,
+                include_agent_runs=True,
+                include_training_signals=True,
+                include_dpo_negatives=True,
+                include_trajectory=True,
+                curate_deduplicate=True,
+                curate_stratified_balance=True,
+                limit=limit,
+                min_samples=min_samples,
+            )
+        )
+
     def _append_pipeline_stage(self, run_id: str, stage: dict[str, str]) -> None:
         self._update_pipeline_run(run_id, append_stage=stage)
 
@@ -1082,13 +1155,75 @@ class FinetuneService:
             return None
         return self._pipeline_run_to_dict(match)
 
+    def recover_stuck_pipeline_runs(
+        self,
+        *,
+        stale_seconds: Optional[int] = None,
+        requeue: bool = False,
+    ) -> list[dict[str, object]]:
+        """Mark long-running pipeline runs as failed so queue slots are freed."""
+        timeout = stale_seconds or self._pipeline_stuck_timeout_seconds
+        now = datetime.now(timezone.utc)
+        recovered: list[dict[str, object]] = []
+        with self._lock:
+            runs = self._read_pipeline_runs()
+            updated: list[FinetunePipelineRunRecord] = []
+            for item in runs:
+                if item.status != "running" or item.cancelled:
+                    updated.append(item)
+                    continue
+                try:
+                    updated_at = datetime.fromisoformat(item.updated_at.replace("Z", "+00:00"))
+                except ValueError:
+                    updated_at = now
+                age_seconds = (now - updated_at).total_seconds()
+                if age_seconds < timeout:
+                    updated.append(item)
+                    continue
+                detail = (
+                    f"Recovered stuck pipeline after {int(age_seconds)}s "
+                    f"(timeout={timeout}s)."
+                )
+                next_status = "queued" if requeue else "failed"
+                recovered_run = FinetunePipelineRunRecord(
+                    run_id=item.run_id,
+                    status=next_status,
+                    created_at=item.created_at,
+                    updated_at=now.isoformat(),
+                    cancelled=False,
+                    request=item.request,
+                    result=None if requeue else item.result,
+                    error=None if requeue else detail,
+                    stages=(item.stages or [])
+                    + [
+                        {
+                            "stage": "recover_stuck",
+                            "status": "completed" if requeue else "failed",
+                            "detail": detail,
+                        }
+                    ],
+                )
+                updated.append(recovered_run)
+                recovered.append(
+                    {
+                        "run_id": item.run_id,
+                        "previous_status": "running",
+                        "new_status": next_status,
+                        "age_seconds": int(age_seconds),
+                        "requeued": requeue,
+                    }
+                )
+            if recovered:
+                self._write_pipeline_runs(updated)
+        return recovered
+
     def cancel_stage1_pipeline_run(self, run_id: str) -> tuple[bool, str]:
         with self._lock:
             runs = self._read_pipeline_runs()
             run = next((item for item in runs if item.run_id == run_id), None)
             if run is None:
                 return False, "not_found"
-            if run.status == "queued":
+            if run.status in {"queued", "running"}:
                 updated = FinetunePipelineRunRecord(
                     run_id=run.run_id,
                     status="cancelled",

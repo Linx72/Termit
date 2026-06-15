@@ -70,10 +70,17 @@ class ModelRouter:
 
         if task_type == TaskType.coding:
             models = [self.settings.code_model, self.settings.code_fallback_model]
-            if complexity == "high":
+            if complexity == "low":
+                models = [
+                    self.settings.fast_model,
+                    self.settings.code_model,
+                    self.settings.code_fallback_model,
+                ]
+            elif complexity == "high":
                 models = [
                     self.settings.code_model,
                     self.settings.analysis_model,
+                    self.settings.frontier_fallback_model,
                     self.settings.code_fallback_model,
                     self.settings.analysis_fallback_model,
                 ]
@@ -163,3 +170,10 @@ class ModelRouter:
         if ":" not in model_name:
             return "ollama"
         return model_name.split(":", 1)[0]
+
+    def routing_tiers(self) -> dict[str, str]:
+        return {
+            "fast": self.settings.fast_model,
+            "strong_local": self.settings.code_model,
+            "frontier_fallback": self.settings.frontier_fallback_model,
+        }

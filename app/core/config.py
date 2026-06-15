@@ -141,6 +141,17 @@ class Settings:
     eval_report_file_path: str = "./data/eval_reports.jsonl"
     eval_min_pass_rate: float = 0.95
     eval_ci_limit: int = 53
+    eval_iq_scenarios_path: str = "./data/eval_scenarios_iq.json"
+    eval_swe_scenarios_path: str = "./data/eval_scenarios_swe.json"
+    eval_humaneval_scenarios_path: str = "./data/eval_scenarios_humaneval.json"
+    eval_quality_judge_model: str = ""
+    eval_benchmark_reference_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
+    cloud_teacher_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
+    fast_model: str = "ollama:qwen2.5-coder"
+    frontier_fallback_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
+    reasoning_draft_model: str = ""
+    reasoning_critic_model: str = ""
+    finetune_pipeline_stuck_timeout_seconds: int = 3600
     retrieval_enabled: bool = True
     retrieval_mode: str = "semantic"
     retrieval_auto_reindex: bool = True
@@ -380,6 +391,34 @@ def get_settings() -> Settings:
         eval_report_file_path=os.getenv("TERMIT_EVAL_REPORT_FILE", "./data/eval_reports.jsonl"),
         eval_min_pass_rate=_parse_clamped_float_env("TERMIT_EVAL_MIN_PASS_RATE", 0.95),
         eval_ci_limit=int(os.getenv("TERMIT_EVAL_CI_LIMIT", "53")),
+        eval_iq_scenarios_path=os.getenv(
+            "TERMIT_EVAL_IQ_SCENARIOS_PATH", "./data/eval_scenarios_iq.json"
+        ),
+        eval_swe_scenarios_path=os.getenv(
+            "TERMIT_EVAL_SWE_SCENARIOS_PATH", "./data/eval_scenarios_swe.json"
+        ),
+        eval_humaneval_scenarios_path=os.getenv(
+            "TERMIT_EVAL_HUMANEVAL_SCENARIOS_PATH", "./data/eval_scenarios_humaneval.json"
+        ),
+        eval_quality_judge_model=os.getenv("TERMIT_EVAL_QUALITY_JUDGE_MODEL", ""),
+        eval_benchmark_reference_model=os.getenv(
+            "TERMIT_EVAL_BENCHMARK_REFERENCE_MODEL",
+            "openai_compat:deepseek-ai/DeepSeek-V3",
+        ),
+        cloud_teacher_model=os.getenv(
+            "TERMIT_CLOUD_TEACHER_MODEL",
+            "openai_compat:deepseek-ai/DeepSeek-V3",
+        ),
+        fast_model=os.getenv("TERMIT_FAST_MODEL", "ollama:qwen2.5-coder"),
+        frontier_fallback_model=os.getenv(
+            "TERMIT_FRONTIER_FALLBACK_MODEL",
+            "openai_compat:deepseek-ai/DeepSeek-V3",
+        ),
+        reasoning_draft_model=os.getenv("TERMIT_REASONING_DRAFT_MODEL", ""),
+        reasoning_critic_model=os.getenv("TERMIT_REASONING_CRITIC_MODEL", ""),
+        finetune_pipeline_stuck_timeout_seconds=max(
+            60, int(os.getenv("TERMIT_FINETUNE_PIPELINE_STUCK_TIMEOUT_SECONDS", "3600"))
+        ),
         retrieval_enabled=os.getenv("TERMIT_RETRIEVAL_ENABLED", "true").lower() in {"1", "true", "yes"},
         retrieval_mode=os.getenv("TERMIT_RETRIEVAL_MODE", "semantic"),
         retrieval_auto_reindex=os.getenv("TERMIT_RETRIEVAL_AUTO_REINDEX", "true").lower()

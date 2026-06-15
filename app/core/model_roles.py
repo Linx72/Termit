@@ -21,8 +21,12 @@ def bare_ollama_name(model_id: str) -> str:
 
 
 def teacher_model_ids(settings: Settings) -> frozenset[str]:
+    """Models reserved for distillation/train only — excluded from agent/chat routing."""
     ids: list[str] = []
-    for raw in (settings.teacher_model, settings.teacher_fallback_model):
+    for raw in (
+        settings.teacher_model,
+        settings.teacher_fallback_model,
+    ):
         value = raw.strip()
         if value:
             ids.append(value)
@@ -36,6 +40,16 @@ def is_teacher_model(settings: Settings, model_name: str) -> bool:
 def filter_runtime_candidates(settings: Settings, models: list[str]) -> list[str]:
     teachers = teacher_model_ids(settings)
     return [model for model in models if model not in teachers]
+
+
+def resolve_cloud_teacher_model(settings: Settings) -> str:
+    cloud = settings.cloud_teacher_model.strip()
+    if cloud:
+        return cloud
+    fallback = settings.teacher_fallback_model.strip()
+    if fallback.startswith("openai_compat:"):
+        return fallback
+    return settings.teacher_model.strip() or "ollama:deepseek-coder"
 
 
 def resolve_stage1_base_model(settings: Settings, base_model: str) -> str:
