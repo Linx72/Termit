@@ -1,29 +1,36 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-15 (roadmap wave 2 — закрытие)
+**Последнее обновление:** 2026-06-15T08:08:33Z
+
+**Причина:** session stop
+
+**Последний checkpoint:** [`20260615-080833_c9653b0d-c553-4202-b36f-.md`](checkpoints/20260615-080833_c9653b0d-c553-4202-b36f-.md)
 
 ## Сводка
-- Roadmap `termit_model_roadmap_73860914.plan.md` — инфраструктура закрыта; release gate ждёт quality uplift.
-- **426 тестов OK** (skipped=1): routing, adapter dedup, shadow routing, regression gate.
-- Live smoke (2026-06-15): `/health` 200, `/api/eval/dashboard` 200 (99 scenarios), `run-suite/fast` 200 (12/12), `run-suite/deep` 200 (52/53, 98.1%), `run-suite/release` **412** (quality_median 2.5 < 3.0), `teacher-distill` 200.
+- Да, пересмотрел и **обновил план под ваш запрос “reuse готового кода”**. Обновлённый план: [termit-deepseek-class-roadmap_6daef824.plan.md](file:///Users/amoros/.cursor/plans/termit-deepseek-class-roadmap_6daef824.plan.md) Что изменил по сути: - Добавил отдельный раздел **Reuse-…
 
-## Wave 1–2 (готово)
-- Stage1 recover/export, Modelfile `termit-core-ft`, weekly schedule
-- Eval 3.0: IQ/SWE/HumanEval, rubric judge, benchmark API, tier gates
-- Autonomy: `outcome_class`, agent loop stop-conditions
-- `LlmCallerService`, `ReasoningOrchestratorService`, 3-tier routing (fast/code/frontier)
-- `cloud_teacher` не в `teacher_model_ids`; adapter dedup on promote
-- Shadow/promote: `TERMIT_FINETUNE_SHADOW_TRAFFIC_PERCENT`, `_upsert_repo_profile_shadow`, `RoutingPolicyService._pick_profile_model` — покрыто тестами
-- Teacher distill: сначала `LlmCallerService` если provider доступен; offline fallback при отсутствии provider или ошибке вызова (локально без API key)
+## Файлы сессии
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/66885a7d-4b16-4fd9-97e5-2acb261f5d47.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/0d0a890b-f5d5-4c04-8452-eddcb40387ae.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/806d6090-2b8a-4836-8f1b-19778bc4ad80.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/ee889d88-4817-4e99-b636-a45b2ea4c9eb.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/626e163b-0239-4f23-968b-741cf4ca0248.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/adfe8a24-a5c3-4124-aeae-6e0a01bbb215.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/df7dccd2-7053-4835-bae8-8276cf9e33f0.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/95fecf26-a851-4698-8506-304a7c551043.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/20f9de8b-1ae4-48a4-830d-5647f682bf99.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/7f91795d-4d07-40b9-a2bc-8695c3373b9d.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/f7a414ee-3ae4-472d-bd84-1a31b965e520.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/mcps/cursor-ide-browser/tools`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/mcps/cursor-ide-browser`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/mcps/cursor-ide-browser/tools/browser_navigate.json`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/mcps/cursor-ide-browser/tools/browser_tabs.json`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/07689499-7be0-4aae-a342-a9badacbbb5c.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/e68fd43f-425d-494e-a870-776c86d39dd4.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/bed709fe-b686-4d76-917d-562e84aade97.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/965040e2-ab08-491f-8c96-892925dac9a7.txt`
+- `/Users/amoros/.cursor/projects/Users-amoros-Projects-Termit/agent-tools/4a63c365-7689-48b0-9127-2663c8136550.txt`
+- `/Users/amoros/.cursor/plans/termit-deepseek-class-roadmap_6daef824.plan.md`
 
-## Файлы (ключевые)
-- `app/services/llm_caller_service.py`, `reasoning_orchestrator_service.py`, `model_router.py`
-- `app/core/model_roles.py`, `app/api/routes/finetune.py`
-- `app/services/finetune_service.py`, `routing_policy_service.py`, `finetune_trainer_service.py`
-- `tests/test_routing_policy_service.py`, `test_finetune_service.py`, `test_model_router.py`
-- `.env.example` — QLoRA GPU hint
-
-## Открытые блокеры
-- [ ] **Release eval gate**: quality_median 2.5 при пороге 3.0 — нужен cloud judge или улучшение heuristic/cloud `TERMIT_EVAL_QUALITY_JUDGE_MODEL`
-- [ ] **Реальный QLoRA/GGUF**: GPU + `TERMIT_FINETUNE_TRAINER=hf`, `TERMIT_FINETUNE_HF_DRY_RUN=false`, unsloth
-- [ ] **Cloud teacher live**: `OPENAI_COMPAT_BASE_URL` есть, `OPENAI_COMPAT_API_KEY` пуст — distillation может идти через offline fallback
+## Открытые задачи
+- [ ] Заполните вручную или через compact-chat после крупной сессии
