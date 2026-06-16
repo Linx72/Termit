@@ -59,6 +59,9 @@
     "agent_resume_median_seconds": 30,
     "local_only_task_share": 0.6,
     "eval_pass_rate_min": 0.75,
-    "tool_loop_completion_rate_min": 0.8
+    "tool_loop_completion_rate_min": 0.8,
+    "task_success_rate_min": 0.75,
+    "automation_rate_min": 0.6,
+    "chat_p95_ttft_ms_max": 3000
   }
 }

@@ -24,6 +24,7 @@ from app.services.eval_service import EvalService
 from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
 from app.state import (
     get_agent_service,
+    get_desktop_kpi_gate_service,
     get_eval_service,
     get_metrics_snapshot_store,
     get_multi_agent_orchestrator,
@@ -175,6 +176,15 @@ async def metrics_prometheus(
         "# HELP termit_task_success_rate Completed tasks share.",
         "# TYPE termit_task_success_rate gauge",
         _prom_line("termit_task_success_rate", float(summary.task_success_rate)),
+        "# HELP termit_automation_rate Tasks completed without manual intervention share.",
+        "# TYPE termit_automation_rate gauge",
+        _prom_line("termit_automation_rate", float(summary.automation_rate)),
+        "# HELP termit_task_total Total tracked tasks.",
+        "# TYPE termit_task_total counter",
+        _prom_line("termit_task_total", int(summary.task_total)),
+        "# HELP termit_task_completed_total Completed tasks.",
+        "# TYPE termit_task_completed_total counter",
+        _prom_line("termit_task_completed_total", int(summary.task_completed)),
         "# HELP termit_cost_per_successful_task_usd Estimated USD per completed task.",
         "# TYPE termit_cost_per_successful_task_usd gauge",
         _prom_line("termit_cost_per_successful_task_usd", float(summary.cost_per_successful_task_usd)),
@@ -301,4 +311,15 @@ async def metrics_prometheus(
         lines.append(_prom_line("termit_http_requests_total", int(row["requests_total"]), labels=labels))
         lines.append(_prom_line("termit_http_errors_total", int(row["errors_total"]), labels=labels))
         lines.append(_prom_line("termit_http_latency_p95_ms", float(row["latency_p95_ms"]), labels=labels))
+    kpi_gates = get_desktop_kpi_gate_service().evaluate_gates()
+    lines.extend(
+        [
+            "# HELP termit_desktop_kpi_gates_passed 1 if all north-star KPI gates pass.",
+            "# TYPE termit_desktop_kpi_gates_passed gauge",
+            _prom_line("termit_desktop_kpi_gates_passed", 1.0 if kpi_gates.get("overall_passed") else 0.0),
+            "# HELP termit_desktop_kpi_gates_total Total north-star KPI gates evaluated.",
+            "# TYPE termit_desktop_kpi_gates_total gauge",
+            _prom_line("termit_desktop_kpi_gates_total", int(kpi_gates.get("total_gates", 0))),
+        ]
+    )
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")

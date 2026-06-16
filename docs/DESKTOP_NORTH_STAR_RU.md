@@ -25,6 +25,9 @@
 | Local-only task share | > 60% | execution_mode=local runs |
 | Eval pass rate | > 75% | `/api/eval/dashboard` |
 | Tool loop completion | > 80% | `/api/ops/agent-runs/metrics` |
+| Task success rate | ≥ 75% | TelemetryStore → `/api/desktop/kpi-gates` |
+| Automation rate | ≥ 60% | TelemetryStore → `/api/desktop/kpi-gates` |
+| Chat p95 TTFT | < 3000 ms | TelemetryStore → `/api/metrics/prometheus` |
 
 ## API
 

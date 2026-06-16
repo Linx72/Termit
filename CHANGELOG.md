@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.4] - 2026-06-17
+
+### Added
+- Product KPI targets in North Star gates + Prometheus
+
+
 ## [0.4.3] - 2026-06-17
 
 ### Added

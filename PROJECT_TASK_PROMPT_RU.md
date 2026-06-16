@@ -345,6 +345,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** media ops пишут spans при `run_id`; MS11 passed; hosted smoke с media gate зелёный при `TERMIT_MEDIA_ENABLED=true`.
 
+### Следующий этап (0.4.4): Product KPI targets (Phase 5)
+
+- [x] North Star KPI gates: task success ≥75%, automation ≥60%, chat p95 TTFT <3s
+- [x] Prometheus: `termit_automation_rate`, `termit_desktop_kpi_gates_passed`, task counters
+- [x] Desktop `KpiGatePanel` — корректный формат ms/s для latency gates
+- [x] `hosted_smoke.sh` — проверка `/api/desktop/kpi-gates`
+
+**DoD:** `/api/desktop/kpi-gates` включает product KPI при наличии telemetry; Prometheus экспортирует automation + KPI gate status.
+
 ---
 
 ## Порядок выполнения

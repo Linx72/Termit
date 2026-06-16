@@ -1133,11 +1133,15 @@ def _build_desktop_kpi_gate_service():
     def telemetry_summary_provider() -> dict[str, object]:
         return telemetry.summarize(settings.finetune_patch_outcomes_path)
 
+    def metrics_summary_provider() -> dict[str, object]:
+        return _build_telemetry_store().snapshot().model_dump()
+
     return DesktopKpiGateService(
         settings.desktop_north_star_path,
         eval_dashboard_provider=eval_dashboard_provider,
         agent_metrics_provider=agent_metrics_provider,
         telemetry_summary_provider=telemetry_summary_provider,
+        metrics_summary_provider=metrics_summary_provider,
     )
 
 

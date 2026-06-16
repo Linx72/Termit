@@ -77,6 +77,7 @@ echo "== 2/5 Ops + metrics =="
 expect_code /api/metrics/thresholds 200
 expect_code /api/ops/readiness 200
 expect_code /api/eval/dashboard 200
+expect_code /api/desktop/kpi-gates 200
 
 if [[ -n "$API_KEY" ]]; then
   expect_code /api/ops/agent-runs/metrics 200

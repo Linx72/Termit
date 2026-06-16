@@ -13,6 +13,16 @@ function formatRate(value: number): string {
   return `${(value * 100).toFixed(0)}%`;
 }
 
+function formatGateValue(gate: { gate_id: string; actual: number; target: number }): string {
+  if (gate.gate_id.includes("_ms") || gate.gate_id.endsWith("_ms")) {
+    return `${gate.actual.toFixed(0)}ms / ${gate.target.toFixed(0)}ms`;
+  }
+  if (gate.gate_id.includes("seconds") || gate.gate_id === "ttfuc_seconds") {
+    return `${gate.actual.toFixed(0)}s / ${gate.target.toFixed(0)}s`;
+  }
+  return `${formatRate(gate.actual)} / ${formatRate(gate.target)}`;
+}
+
 export function KpiGatePanel({ client, connected, locale }: KpiGatePanelProps) {
   const [payload, setPayload] = useState<DesktopKpiGateResponse | null>(null);
   const [error, setError] = useState("");
@@ -54,7 +64,7 @@ export function KpiGatePanel({ client, connected, locale }: KpiGatePanelProps) {
             {payload.gates.map((gate) => (
               <li key={gate.gate_id}>
                 <span className={`health-dot ${gate.passed ? "ok" : "bad"}`} />
-                {gate.label}: {formatRate(gate.actual)} / {formatRate(gate.target)}
+                {gate.label}: {formatGateValue(gate)}
               </li>
             ))}
           </ul>

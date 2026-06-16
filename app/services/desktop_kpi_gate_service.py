@@ -15,11 +15,13 @@ class DesktopKpiGateService:
         eval_dashboard_provider: Callable[[], dict[str, object]],
         agent_metrics_provider: Callable[[], dict[str, object]],
         telemetry_summary_provider: Callable[[], dict[str, object]] | None = None,
+        metrics_summary_provider: Callable[[], dict[str, object]] | None = None,
     ) -> None:
         self._path = Path(north_star_path)
         self._eval_dashboard_provider = eval_dashboard_provider
         self._agent_metrics_provider = agent_metrics_provider
         self._telemetry_summary_provider = telemetry_summary_provider
+        self._metrics_summary_provider = metrics_summary_provider
 
     def _load_targets(self) -> dict[str, float]:
         if not self._path.is_file():
@@ -84,8 +86,35 @@ class DesktopKpiGateService:
             "tool_loop_success",
             "Tool loop tool success",
             tool_loop_success,
-            targets.get("tool_loop_completion_rate_min", 0.8),
+            targets.get("tool_loop_tool_success_rate_min", targets.get("tool_loop_completion_rate_min", 0.8)),
         )
+
+        metrics_summary: dict[str, object] = {}
+        if self._metrics_summary_provider is not None:
+            metrics_summary = self._metrics_summary_provider()
+            task_total = int(metrics_summary.get("task_total", 0) or 0)
+            if task_total > 0:
+                add_gate(
+                    "task_success_rate",
+                    "Task success rate",
+                    float(metrics_summary.get("task_success_rate", 0.0)),
+                    targets.get("task_success_rate_min", 0.75),
+                )
+                add_gate(
+                    "automation_rate",
+                    "Automation rate",
+                    float(metrics_summary.get("automation_rate", 0.0)),
+                    targets.get("automation_rate_min", 0.6),
+                )
+            chat_total = int(metrics_summary.get("chat_requests_total", 0) or 0)
+            if chat_total > 0:
+                add_gate(
+                    "chat_p95_ttft_ms",
+                    "Chat p95 TTFT (ms)",
+                    float(metrics_summary.get("chat_latency_p95_ms", 0.0)),
+                    targets.get("chat_p95_ttft_ms_max", 3000.0),
+                    higher_is_better=False,
+                )
 
         telemetry: dict[str, object] = {}
         if self._telemetry_summary_provider is not None:
@@ -152,6 +181,7 @@ class DesktopKpiGateService:
                 "health_status": agent_metrics.get("health_status"),
             },
             "telemetry": telemetry,
+            "metrics_summary": metrics_summary,
         }
 
     def journeys_payload(self) -> dict[str, object]:

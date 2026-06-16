@@ -67,3 +67,21 @@ groups:
         annotations:
           summary: "Chat provider failure burst"
           description: "Chat error share above 50% over 5m (requests/min elevated)."
+
+      - alert: TermitDesktopKpiGatesFailing
+        expr: termit_desktop_kpi_gates_passed == 0 and termit_desktop_kpi_gates_total > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "North Star KPI gates failing"
+          description: "One or more desktop KPI gates below target for 30m."
+
+      - alert: TermitLowTaskSuccessRate
+        expr: termit_task_total > 10 and termit_task_success_rate < 0.75
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task success rate below 75% SLO"
+          description: "Task success rate {{ $value | humanizePercentage }} below target."

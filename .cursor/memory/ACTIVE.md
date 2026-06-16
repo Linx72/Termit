@@ -4,18 +4,15 @@
 
 ## Сводка
 
-**0.4.3 выкачен** — Media observability + hosted media smoke.
+**0.4.4** — Product KPI targets (Phase 5).
 
-### Trace spans
-- `media.render_video`, `media.export_gif`, `media.export_lottie` в TraceSpanStore
-
-### Eval + smoke
-- **MS11** — Lottie export scenario
-- `hosted_smoke.sh` step 5/5 — optional `TERMIT_HOSTED_MEDIA_EXPECT=true`
-- `deploy/docker.env.example` — Media Studio block
-
-**Тесты:** 526+ OK после релиза
+### North Star KPI gates
+- `task_success_rate_min` 75%, `automation_rate_min` 60%, `chat_p95_ttft_ms_max` 3000
+- `DesktopKpiGateService` + telemetry metrics provider
+- Prometheus: `termit_automation_rate`, `termit_desktop_kpi_gates_passed`, task counters
+- Alerts: `TermitDesktopKpiGatesFailing`, `TermitLowTaskSuccessRate`
+- `KpiGatePanel` — формат ms/s для latency gates
 
 ## Открытые задачи
 
-- Мастер-план `PROJECT_TASK_PROMPT_RU.md` закрыт через 0.4.3; следующий «do all» — новый этап 0.4.4+ (см. KPI targets / product growth)
+- Мастер-план закрыт через 0.4.4; следующий «do all» — growth/KPI measurement или новый product track
