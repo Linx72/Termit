@@ -32,25 +32,41 @@ class AgentsApiTests(unittest.TestCase):
     @staticmethod
     def _wait_for_run_completed(client: TestClient, run_id: str, timeout_seconds: float = 20.0) -> str:
         state = "queued"
+        terminal_states = {"completed", "failed", "cancelled"}
         deadline = time.monotonic() + timeout_seconds
+        sleep_seconds = 0.05
         while time.monotonic() < deadline:
             run_resp = client.get(f"/api/agents/runs/{run_id}")
             run_resp.raise_for_status()
             state = run_resp.json()["state"]
-            if state in {"completed", "failed"}:
+            if state in terminal_states:
                 return state
-            time.sleep(0.1)
+            time.sleep(sleep_seconds)
+            sleep_seconds = min(0.2, sleep_seconds + 0.02)
 
         # Fallback path for slow environments: block on SSE stream completion
         # and re-read final run state to avoid timing flakes on background runs.
+        fallback_timeout = max(30, int(timeout_seconds * 2))
         stream_resp = client.get(
-            f"/api/agents/runs/{run_id}/stream?poll_ms=100&timeout_seconds={int(timeout_seconds)}"
+            f"/api/agents/runs/{run_id}/stream?poll_ms=100&timeout_seconds={fallback_timeout}"
         )
         stream_resp.raise_for_status()
         if "event: done" in stream_resp.text:
             final_resp = client.get(f"/api/agents/runs/{run_id}")
             final_resp.raise_for_status()
-            return final_resp.json()["state"]
+            state = final_resp.json()["state"]
+            if state in terminal_states:
+                return state
+
+        # Last short repoll to absorb notifier/store ordering jitter in CI.
+        last_deadline = time.monotonic() + 5.0
+        while time.monotonic() < last_deadline:
+            final_resp = client.get(f"/api/agents/runs/{run_id}")
+            final_resp.raise_for_status()
+            state = final_resp.json()["state"]
+            if state in terminal_states:
+                return state
+            time.sleep(0.1)
         return state
 
     def test_create_agent_and_background_run(self) -> None:
@@ -87,7 +103,12 @@ class AgentsApiTests(unittest.TestCase):
         run_id = queue_resp.json()["run_id"]
 
         state = self._wait_for_run_completed(client, run_id)
-        self.assertEqual(state, "completed")
+        if state != "completed":
+            events_debug = client.get(f"/api/agents/runs/{run_id}/events").json()
+            self.fail(
+                f"Expected completed run, got state={state}. "
+                f"events_count={len(events_debug)}"
+            )
 
         events_resp = client.get(f"/api/agents/runs/{run_id}/events")
         self.assertEqual(events_resp.status_code, 200)

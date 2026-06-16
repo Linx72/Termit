@@ -167,6 +167,16 @@ class FinetuneTrainerService:
                 repo_profile_id=repo_profile_id,
             )
 
+        if mode in {"hf_dpo", "dpo"}:
+            return self._train_hf_dpo(
+                dataset=dataset,
+                base_model=base_model,
+                resolved_output=resolved_output,
+                slug=slug,
+                modelfile_path=modelfile_path,
+                repo_profile_id=repo_profile_id,
+            )
+
         if mode != "ollama":
             return FinetuneTrainResult(
                 trainer_mode=mode,
@@ -419,6 +429,107 @@ class FinetuneTrainerService:
             stderr=(completed.stderr or "")[:4000],
             duration_ms=duration_ms,
             detail=" ".join(detail_parts),
+        )
+
+    def _train_hf_dpo(
+        self,
+        *,
+        dataset: Path,
+        base_model: str,
+        resolved_output: str,
+        slug: str,
+        modelfile_path: Path,
+        repo_profile_id: Optional[str],
+    ) -> FinetuneTrainResult:
+        from_ref = base_model.split(":", 1)[-1] if ":" in base_model else base_model
+        if repo_profile_id:
+            output_dir = self.adapters_dir / repo_profile_id.strip() / resolved_output.replace(":", "_")
+        else:
+            output_dir = self.adapters_dir / resolved_output.replace(":", "_")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        root = Path(__file__).resolve().parents[2]
+        trainer_script = root / "scripts" / "unsloth_dpo_train.py"
+        command = [
+            sys.executable,
+            str(trainer_script),
+            "--dataset",
+            str(dataset),
+            "--base-model",
+            from_ref,
+            "--output-dir",
+            str(output_dir),
+            "--epochs",
+            str(self.hf_epochs),
+            "--lora-rank",
+            str(self.hf_lora_rank),
+            "--max-samples",
+            str(self.hf_max_samples),
+        ]
+
+        if self.hf_dry_run:
+            return FinetuneTrainResult(
+                trainer_mode="hf_dpo",
+                status="completed",
+                output_model=resolved_output,
+                modelfile_path=str(modelfile_path),
+                adapter_path=str(output_dir),
+                command=" ".join(command),
+                detail=(
+                    "HF DPO dry-run: Unsloth DPO command prepared. "
+                    "Set TERMIT_FINETUNE_HF_DRY_RUN=false and install unsloth to execute."
+                ),
+            )
+
+        started = time.perf_counter()
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=self.train_timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return FinetuneTrainResult(
+                trainer_mode="hf_dpo",
+                status="failed",
+                output_model=resolved_output,
+                modelfile_path=str(modelfile_path),
+                adapter_path=str(output_dir),
+                command=" ".join(command),
+                stdout=(exc.stdout or "")[:4000] if isinstance(exc.stdout, str) else "",
+                stderr=(exc.stderr or "")[:4000] if isinstance(exc.stderr, str) else "",
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                detail=f"HF DPO training timed out after {self.train_timeout_seconds}s",
+            )
+
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        if completed.returncode == 2:
+            return FinetuneTrainResult(
+                trainer_mode="hf_dpo",
+                status="completed",
+                output_model=resolved_output,
+                modelfile_path=str(modelfile_path),
+                adapter_path=str(output_dir),
+                command=" ".join(command),
+                stdout=(completed.stdout or "")[:4000],
+                stderr=(completed.stderr or "")[:4000],
+                duration_ms=duration_ms,
+                detail="Unsloth DPO stack not installed; command saved for manual GPU run.",
+            )
+        ok = completed.returncode == 0
+        return FinetuneTrainResult(
+            trainer_mode="hf_dpo",
+            status="completed" if ok else "failed",
+            output_model=resolved_output if ok else None,
+            modelfile_path=str(modelfile_path),
+            adapter_path=str(output_dir),
+            command=" ".join(command),
+            stdout=(completed.stdout or "")[:4000],
+            stderr=(completed.stderr or "")[:4000],
+            duration_ms=duration_ms,
+            detail="Unsloth DPO training completed." if ok else f"Unsloth DPO trainer exit {completed.returncode}",
         )
 
     def _gguf_target_path(

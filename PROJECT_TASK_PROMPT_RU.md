@@ -238,7 +238,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ### Трек 1 — Stability hardening (недели 1–2)
 
-- [ ] Закрыть источники `ResourceWarning` (unclosed sqlite connections) в runtime и тестах
+- [x] Закрыть источники `ResourceWarning` (unclosed sqlite connections) в runtime и тестах
 - [ ] Дожать флейки e2e для фоновых run (`running -> completed`)
 - [ ] Разделить unstable integration тесты в nightly-контур
 

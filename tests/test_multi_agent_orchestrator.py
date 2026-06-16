@@ -1,6 +1,7 @@
 import asyncio
 import tempfile
 import unittest
+from pathlib import Path
 
 from app.domain.schemas import ChatMessage, ChatRequest, OrchestrationRunRequest, TaskType
 from app.services.chat_service import ChatService
@@ -116,6 +117,47 @@ class MultiAgentOrchestratorTests(unittest.IsolatedAsyncioTestCase):
             metrics = orchestrator.metrics_snapshot()
             self.assertGreaterEqual(metrics["openhands_contract_runs_total"], 1)
             self.assertGreater(metrics["openhands_contract_actions_total"], 0)
+
+    async def test_tool_loop_execution_enabled_runs_tool_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "README.md").write_text("hello tool loop", encoding="utf-8")
+            router = build_router()
+            providers: dict[str, BaseProvider] = {
+                "ollama": SequencedProvider(
+                    [
+                        "1. inspect\n2. update\n3. verify",
+                        (
+                            '{"tool_actions":['
+                            '{"tool":"list_files","path":".","pattern":"*.md"},'
+                            '{"tool":"read_file","path":"README.md","max_bytes":2000}'
+                            ']}'
+                        ),
+                        "APPROVED: tools executed.",
+                    ]
+                ),
+                "openai_compat": StubProvider(response="fallback"),
+            }
+            chat = ChatService(router, providers, MemoryStore(), cache_ttl_seconds=0)
+            tasks = TaskService(ToolingService(root_path="."), InMemoryTaskStore(), max_attempts=2)
+            orchestrator = MultiAgentOrchestrator(
+                tasks,
+                chat,
+                tooling=ToolingService(root_path=tmp),
+                tool_loop_execution_enabled=True,
+            )
+            result = await orchestrator.run(
+                OrchestrationRunRequest(
+                    input="Inspect workspace and summarize markdown file",
+                    task_type=TaskType.coding,
+                    use_retrieval=False,
+                )
+            )
+            self.assertEqual(result.status, "completed")
+            phase_names = {item.phase for item in result.phases}
+            self.assertIn("coder_tool_loop", phase_names)
+            metrics = orchestrator.metrics_snapshot()
+            self.assertGreaterEqual(metrics["orchestration_tool_loop_runs_total"], 1)
+            self.assertGreaterEqual(metrics["orchestration_tool_steps_total"], 1)
 
 
 class SequencedProvider(BaseProvider):

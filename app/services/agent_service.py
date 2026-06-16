@@ -361,7 +361,16 @@ class AgentService:
         stale_running = 0
         max_queued_age = 0.0
         max_running_age = 0.0
+        timeout_runs_total = 0
+        completed_runs_total = 0
+        terminal_runs_total = 0
         for run in runs:
+            if run.failure_class == "run_timeout":
+                timeout_runs_total += 1
+            if run.state in {AgentRunState.completed, AgentRunState.failed, AgentRunState.cancelled}:
+                terminal_runs_total += 1
+            if run.state == AgentRunState.completed:
+                completed_runs_total += 1
             if run.state not in {AgentRunState.queued, AgentRunState.running}:
                 continue
             age = self._safe_run_age_seconds(run.updated_at, now_ts)
@@ -375,6 +384,10 @@ class AgentService:
                     stale_running += 1
         active_runs = int(by_state.get(AgentRunState.running.value, 0))
         utilization = round((queue_size / self._queue_capacity) * 100, 2)
+        lifecycle_stale_total = stale_queued + stale_running
+        lifecycle_completion_rate = (
+            round(completed_runs_total / terminal_runs_total, 4) if terminal_runs_total > 0 else 0.0
+        )
         metrics: dict[str, object] = {
             "queue_size": queue_size,
             "queue_capacity": self._queue_capacity,
@@ -386,6 +399,11 @@ class AgentService:
             "active_runs": active_runs,
             "stale_queued_runs": stale_queued,
             "stale_running_runs": stale_running,
+            "lifecycle_stale_total": lifecycle_stale_total,
+            "lifecycle_terminal_runs_total": terminal_runs_total,
+            "lifecycle_completed_runs_total": completed_runs_total,
+            "lifecycle_timeout_runs_total": timeout_runs_total,
+            "lifecycle_completion_rate": lifecycle_completion_rate,
             "max_queued_age_seconds": round(max_queued_age, 2),
             "max_running_age_seconds": round(max_running_age, 2),
             "queue_stuck_timeout_seconds": self._queue_stuck_timeout_seconds,

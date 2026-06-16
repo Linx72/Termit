@@ -202,6 +202,8 @@ async def metrics_prometheus(
         ("reviewer_reject_total", "Total reviewer reject outcomes."),
         ("openhands_contract_runs_total", "Runs with OpenHands-style contract enabled."),
         ("openhands_contract_actions_total", "Captured OpenHands action/observation pairs."),
+        ("orchestration_tool_loop_runs_total", "Runs where orchestrator tool-loop executed."),
+        ("orchestration_tool_steps_total", "Tool steps executed by orchestrator tool-loop."),
     ):
         lines.append(f"# HELP termit_{key} {help_text}")
         lines.append(f"# TYPE termit_{key} gauge")

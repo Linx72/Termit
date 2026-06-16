@@ -18,6 +18,8 @@ class OrchestrationApiTests(unittest.TestCase):
         self.assertIn("coder_retry_success_rate", body)
         self.assertIn("openhands_contract_runs_total", body)
         self.assertIn("openhands_contract_actions_total", body)
+        self.assertIn("orchestration_tool_loop_runs_total", body)
+        self.assertIn("orchestration_tool_steps_total", body)
 
 
 if __name__ == "__main__":

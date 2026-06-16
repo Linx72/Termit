@@ -153,6 +153,7 @@ class Settings:
     reasoning_draft_model: str = ""
     reasoning_critic_model: str = ""
     orchestration_openhands_contract_enabled: bool = False
+    orchestration_tool_loop_execution_enabled: bool = False
     finetune_pipeline_stuck_timeout_seconds: int = 3600
     retrieval_enabled: bool = True
     retrieval_mode: str = "semantic"
@@ -185,6 +186,7 @@ class Settings:
     finetune_jobs_path: str = "./data/finetune/jobs.json"
     finetune_adapters_path: str = "./data/finetune/adapters.json"
     finetune_pipelines_path: str = "./data/finetune/pipelines.json"
+    finetune_cycle_events_path: str = "./data/finetune/stage1_cycle_events.jsonl"
     finetune_pipeline_max_concurrency: int = 1
     stage1_schedule_enabled: bool = False
     stage1_schedule_weekday: int = 0
@@ -431,6 +433,11 @@ def get_settings() -> Settings:
             "false",
         ).lower()
         in {"1", "true", "yes"},
+        orchestration_tool_loop_execution_enabled=os.getenv(
+            "TERMIT_ORCH_TOOL_LOOP_EXECUTION_ENABLED",
+            "false",
+        ).lower()
+        in {"1", "true", "yes"},
         finetune_pipeline_stuck_timeout_seconds=max(
             60, int(os.getenv("TERMIT_FINETUNE_PIPELINE_STUCK_TIMEOUT_SECONDS", "3600"))
         ),
@@ -498,6 +505,10 @@ def get_settings() -> Settings:
         finetune_pipelines_path=os.getenv(
             "TERMIT_FINETUNE_PIPELINES_PATH",
             "./data/finetune/pipelines.json",
+        ),
+        finetune_cycle_events_path=os.getenv(
+            "TERMIT_FINETUNE_CYCLE_EVENTS_PATH",
+            "./data/finetune/stage1_cycle_events.jsonl",
         ),
         finetune_pipeline_max_concurrency=max(
             1,

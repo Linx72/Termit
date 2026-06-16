@@ -372,6 +372,8 @@ class MetricsApiTests(unittest.TestCase):
         self.assertIn("termit_coder_retry_success_rate", resp.text)
         self.assertIn("termit_openhands_contract_runs_total", resp.text)
         self.assertIn("termit_openhands_contract_actions_total", resp.text)
+        self.assertIn("termit_orchestration_tool_loop_runs_total", resp.text)
+        self.assertIn("termit_orchestration_tool_steps_total", resp.text)
 
 
 if __name__ == "__main__":

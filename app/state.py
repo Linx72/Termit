@@ -776,6 +776,7 @@ def _build_multi_agent_orchestrator() -> MultiAgentOrchestrator:
         tooling=_build_tooling_service(),
         code_retrieval=_build_code_retrieval_service(),
         openhands_contract_enabled=settings.orchestration_openhands_contract_enabled,
+        tool_loop_execution_enabled=settings.orchestration_tool_loop_execution_enabled,
     )
 
 
@@ -852,6 +853,7 @@ def _build_finetune_service() -> FinetuneService:
         jobs_path=settings.finetune_jobs_path,
         adapters_path=settings.finetune_adapters_path,
         pipelines_path=settings.finetune_pipelines_path,
+        cycle_events_path=settings.finetune_cycle_events_path,
         feedback_file_path=settings.feedback_file_path,
         task_sqlite_path=settings.task_sqlite_path,
         agent_run_sqlite_path=settings.agent_run_sqlite_path,

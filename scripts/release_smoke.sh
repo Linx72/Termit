@@ -35,7 +35,11 @@ fi
 
 echo "== Platform/HTTP smoke =="
 if "${PYTHON_BIN}" -c "import fastapi" >/dev/null 2>&1 && curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
-  ./scripts/smoke_http.sh
+  if [[ "${PROFILE}" == "core" ]]; then
+    ./scripts/smoke_http_core.sh
+  else
+    ./scripts/smoke_http_extended.sh
+  fi
 else
   echo "Skip smoke_http: fastapi missing or server is unreachable at $BASE_URL."
 fi

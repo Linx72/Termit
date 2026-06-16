@@ -63,6 +63,17 @@ class EvalCiGateTierTests(unittest.TestCase):
         )
         self.assertTrue(ok)
 
+    def test_release_gate_blocks_heuristic_only_coverage(self) -> None:
+        ok, detail = evaluate_tier_gate(
+            tier=RELEASE_GATE,
+            pass_rate=0.99,
+            total=40,
+            quality_median=4.2,
+            cloud_judge_coverage=0.0,
+        )
+        self.assertFalse(ok)
+        self.assertIn("cloud_judge_coverage", detail)
+
 
 if __name__ == "__main__":
     unittest.main()

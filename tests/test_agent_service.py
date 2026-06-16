@@ -294,6 +294,11 @@ class AgentServiceTests(unittest.TestCase):
             self.assertEqual(metrics["queue_capacity"], 10)
             self.assertIn("stale_queued_runs", metrics)
             self.assertIn("stale_running_runs", metrics)
+            self.assertIn("lifecycle_stale_total", metrics)
+            self.assertIn("lifecycle_terminal_runs_total", metrics)
+            self.assertIn("lifecycle_completed_runs_total", metrics)
+            self.assertIn("lifecycle_timeout_runs_total", metrics)
+            self.assertIn("lifecycle_completion_rate", metrics)
             self.assertIn("queue_stuck_timeout_seconds", metrics)
 
             agent = service.create_agent(
@@ -347,6 +352,7 @@ class AgentServiceTests(unittest.TestCase):
             metrics = service.queue_metrics()
             self.assertGreaterEqual(metrics["stale_queued_runs"], 1)
             self.assertGreaterEqual(metrics["stale_running_runs"], 1)
+            self.assertGreaterEqual(metrics["lifecycle_stale_total"], 2)
 
     def test_cleanup_stale_active_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

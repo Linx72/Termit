@@ -282,6 +282,18 @@ class EvalService:
             for item in results
             if item.get("quality_score") is not None
         ]
+        judge_models = [
+            str(item.get("judge_model", "")).strip().lower()
+            for item in results
+            if item.get("judge_model") is not None
+        ]
+        cloud_judge_hits = sum(1 for name in judge_models if name and name != "heuristic")
+        cloud_judge_coverage = (
+            round(cloud_judge_hits / len(judge_models), 4)
+            if judge_models
+            else 0.0
+        )
+        report["cloud_judge_coverage"] = cloud_judge_coverage
         if quality_scores and self._quality_judge is not None:
             report.update(self._quality_judge.summarize_scores(quality_scores))
         if persist_report and self._report_store is not None:

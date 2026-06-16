@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.schemas import (
     EvalBenchmarkRequest,
@@ -126,6 +126,7 @@ async def run_suite_tier(
         pass_rate=float(report["pass_rate"]),
         total=int(report["total"]),
         quality_median=float(report.get("quality_median", 0.0) or 0.0) or None,
+        cloud_judge_coverage=float(report.get("cloud_judge_coverage", 0.0) or 0.0),
     )
     if not ok:
         raise HTTPException(status_code=412, detail=detail)

@@ -342,6 +342,8 @@ class OrchestrationMetricsResponse(BaseModel):
     coder_retry_success_rate: float = 0.0
     openhands_contract_runs_total: float = 0
     openhands_contract_actions_total: float = 0
+    orchestration_tool_loop_runs_total: float = 0
+    orchestration_tool_steps_total: float = 0
 
 
 class CrossPlatformStackInfo(BaseModel):
@@ -541,8 +543,15 @@ class AgentRunsMetricsResponse(BaseModel):
     coder_retry_success_rate: float = 0.0
     openhands_contract_runs_total: float = 0.0
     openhands_contract_actions_total: float = 0.0
+    orchestration_tool_loop_runs_total: float = 0.0
+    orchestration_tool_steps_total: float = 0.0
     stale_queued_runs: int = 0
     stale_running_runs: int = 0
+    lifecycle_stale_total: int = 0
+    lifecycle_terminal_runs_total: int = 0
+    lifecycle_completed_runs_total: int = 0
+    lifecycle_timeout_runs_total: int = 0
+    lifecycle_completion_rate: float = 0.0
     max_queued_age_seconds: float = 0.0
     max_running_age_seconds: float = 0.0
     queue_stuck_timeout_seconds: int = 120
@@ -1211,6 +1220,26 @@ class FinetuneDpoExportResponse(BaseModel):
     format: str = "dpo_jsonl"
     negative_count: int = 0
     positive_pool: int = 0
+    contract_version: str = "1.0"
+    contract_valid: bool = False
+    contract_stats: dict[str, object] = Field(default_factory=dict)
+
+
+class FinetuneDpoValidateRequest(BaseModel):
+    dataset_path: str = Field(min_length=1, max_length=500)
+    min_text_chars: int = Field(default=4, ge=1, le=500)
+
+
+class FinetuneDpoValidateResponse(BaseModel):
+    dataset_path: str
+    contract_version: str
+    valid: bool
+    total: int
+    valid_rows: int
+    invalid_rows: int
+    missing_field_rows: int = 0
+    too_short_rows: int = 0
+    same_answer_rows: int = 0
 
 
 class FinetuneTrainingDashboardResponse(BaseModel):
@@ -1219,6 +1248,8 @@ class FinetuneTrainingDashboardResponse(BaseModel):
     datasets_count: int = 0
     training_signals_count: int = 0
     eval_trend: list[dict[str, object]] = Field(default_factory=list)
+    cycle_events: list[dict[str, object]] = Field(default_factory=list)
+    cycle_success_rate: float = 0.0
     regression_gate_enabled: bool = True
     shadow_traffic_percent: float = 10.0
     tuning_report: dict[str, object] = Field(default_factory=dict)

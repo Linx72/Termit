@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 
 
+DPO_CONTRACT_VERSION = "1.0"
+
+
 def build_dpo_pairs(
     negatives: list[dict[str, str]],
     positives: list[dict[str, str]],
@@ -52,3 +55,50 @@ def write_dpo_jsonl(path: Path | str, rows: list[dict[str, str]]) -> None:
     with target.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def validate_dpo_rows(
+    rows: list[dict[str, object]],
+    *,
+    min_text_chars: int = 4,
+) -> dict[str, object]:
+    required = ("instruction", "chosen", "rejected")
+    valid = 0
+    invalid = 0
+    missing_field_rows = 0
+    too_short_rows = 0
+    same_answer_rows = 0
+
+    for row in rows:
+        if not isinstance(row, dict):
+            invalid += 1
+            continue
+        if any(not str(row.get(field, "")).strip() for field in required):
+            invalid += 1
+            missing_field_rows += 1
+            continue
+        instruction = str(row.get("instruction", "")).strip()
+        chosen = str(row.get("chosen", "")).strip()
+        rejected = str(row.get("rejected", "")).strip()
+        if min(len(instruction), len(chosen), len(rejected)) < min_text_chars:
+            invalid += 1
+            too_short_rows += 1
+            continue
+        if chosen == rejected:
+            invalid += 1
+            same_answer_rows += 1
+            continue
+        valid += 1
+
+    total = valid + invalid
+    is_valid = total > 0 and invalid == 0
+    return {
+        "contract_version": DPO_CONTRACT_VERSION,
+        "valid": is_valid,
+        "total": total,
+        "valid_rows": valid,
+        "invalid_rows": invalid,
+        "missing_field_rows": missing_field_rows,
+        "too_short_rows": too_short_rows,
+        "same_answer_rows": same_answer_rows,
+    }
