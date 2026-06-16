@@ -17,7 +17,8 @@
 
 ## Открытые задачи
 
-- [ ] Push Track 3 на main + CI green
-- [ ] Track 1: e2e flake tail (unstable suites уже в nightly)
-- [ ] Track 5 / Фаза 5: rc→stable, docker prod, SLO dashboards
-- [ ] MS8/MS9 ffmpeg infra (не блокер release)
+- [x] Push Track 3 на main + CI green (run 27639779818)
+- [x] Track 5: `docs/RELEASE_FLOW.md`, `scripts/release_pack.sh`
+- [ ] Track 1: e2e flake tail (unstable → nightly only; PR deterministic)
+- [ ] Track 5: SLO/SLA dashboards и алерты
+- [ ] Фаза 5: docker prod polish, backup SQLite UI

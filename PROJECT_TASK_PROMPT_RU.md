@@ -270,8 +270,8 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ### Трек 5 — Release discipline & ops (недели 5–8)
 
-- [ ] Формализовать поток `rc -> stable -> hotfix`
-- [ ] Автоматизировать пакет `changelog + migration notes + rollback`
+- [x] Формализовать поток `rc -> stable -> hotfix` — `docs/RELEASE_FLOW.md`
+- [x] Автоматизировать пакет `changelog + migration notes + rollback` — `scripts/release_pack.sh`
 - [ ] Закрыть операционные SLO/SLA-дашборды и алерты
 
 **DoD:** релиз выполняется одной командой без ручных патчей скриптов.

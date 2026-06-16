@@ -15,6 +15,10 @@ cd "$ROOT"
 
 echo "== Termit release-all ($TAG) =="
 
+if [[ ! -f "$ROOT/docs/MIGRATION_NOTES_${VERSION}.md" ]]; then
+  echo "Hint: run ./scripts/release_pack.sh ${VERSION} --prev PREV --notes 'summary' first"
+fi
+
 echo "== 1/4 Python tests =="
 "${PYTHON_BIN}" -m unittest discover -s tests -q
 
