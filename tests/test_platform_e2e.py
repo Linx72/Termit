@@ -1,3 +1,4 @@
+import os
 import time
 import unittest
 
@@ -5,7 +6,13 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
+RUN_UNSTABLE_INTEGRATION = os.getenv("TERMIT_RUN_UNSTABLE_INTEGRATION") == "1"
 
+
+@unittest.skipUnless(
+    RUN_UNSTABLE_INTEGRATION,
+    "Nightly-only unstable integration suite. Set TERMIT_RUN_UNSTABLE_INTEGRATION=1 to run.",
+)
 class PlatformE2ETests(unittest.TestCase):
     @staticmethod
     def _read_run_state(client: TestClient, run_id: str) -> str:

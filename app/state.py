@@ -838,6 +838,8 @@ def get_finetune_trainer_service() -> FinetuneTrainerService:
 
 @lru_cache
 def _build_finetune_service() -> FinetuneService:
+    from app.domain.schemas import FinetuneStage1RunRequest
+
     settings = get_settings()
     signal_store = _build_training_signal_store()
 

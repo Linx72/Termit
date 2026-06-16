@@ -1,3 +1,4 @@
+import os
 import tempfile
 import time
 import unittest
@@ -12,6 +13,8 @@ from app.services.agent_run_store import InMemoryAgentRunStore
 from app.services.agent_service import AgentService
 from app.services.tooling_service import ToolingService
 from tests.test_agent_service import StubBrowserWorkflow, StubChatService
+
+RUN_UNSTABLE_INTEGRATION = os.getenv("TERMIT_RUN_UNSTABLE_INTEGRATION") == "1"
 
 
 def _isolated_agent_service(tmp: str) -> AgentService:
@@ -28,6 +31,10 @@ def _isolated_agent_service(tmp: str) -> AgentService:
     )
 
 
+@unittest.skipUnless(
+    RUN_UNSTABLE_INTEGRATION,
+    "Nightly-only unstable integration suite. Set TERMIT_RUN_UNSTABLE_INTEGRATION=1 to run.",
+)
 class AgentsApiTests(unittest.TestCase):
     @staticmethod
     def _read_run_state(client: TestClient, run_id: str) -> str:

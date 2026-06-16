@@ -50,10 +50,15 @@
 
 ## 6) Cursor parity release gates
 
+- Quality gate matrix (fast/deep/release):
+  - Fast gate (PR/main CI): cursor parity slice `limit=20` in `.github/workflows/ci.yml` (`Eval fast gate (PR/main)`).
+  - Deep gate (nightly): full eval suite `limit=53` in `.github/workflows/ci.yml` (`Nightly eval deep gate`).
+  - Release gate (nightly release profile): `TERMIT_EVAL_GATE_TIER=release` + `./scripts/release_smoke_extended.sh` in `.github/workflows/ci.yml` (`Extended release smoke`).
+
 - Release smoke profiles:
   - Deterministic core (default): `./scripts/release_smoke_core.sh`
   - Extended suite (nightly/integration): `./scripts/release_smoke_extended.sh`
-  - Nightly automation workflow: `.github/workflows/nightly-extended-smoke.yml`
+  - Dedicated nightly workflow: `.github/workflows/nightly-extended-smoke.yml`
 
 - Parity eval gate (20 scenarios):
   - `POST /api/eval/run-suite` with payload `{"category":"cursor_parity","limit":20,"persist_report":false}`

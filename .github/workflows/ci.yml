@@ -44,18 +44,13 @@ jobs:
         if: github.ref_name == 'main' || github.ref_name == 'master'
         run: ./scripts/smoke_http_extended.sh
 
-      - name: Eval suite CI gate
+      - name: Eval fast gate (PR/main)
         env:
-          TERMIT_EVAL_MIN_PASS_RATE: "0.95"
-          TERMIT_EVAL_CI_LIMIT: "53"
+          TERMIT_EVAL_GATE_TIER: "fast"
         run: |
           curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
             -H 'Content-Type: application/json' \
             -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
-            | python3 scripts/eval_ci_gate.py
-          curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
-            -H 'Content-Type: application/json' \
-            -d '{"limit":53,"persist_report":false}' \
             | python3 scripts/eval_ci_gate.py
       - name: Orchestration retry-loop eval slice
         env:
@@ -148,6 +143,14 @@ jobs:
           TERMIT_EVAL_GATE_TIER: "release"
           TERMIT_EVAL_MIN_PASS_RATE: "0.95"
         run: ./scripts/release_smoke_extended.sh
+      - name: Nightly eval deep gate
+        env:
+          TERMIT_EVAL_GATE_TIER: "deep"
+        run: |
+          curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
+            -H 'Content-Type: application/json' \
+            -d '{"limit":53,"persist_report":false}' \
+            | python3 scripts/eval_ci_gate.py
       - name: Nightly flaky-watch report
         run: |
           python3 scripts/flaky_watch_report.py \
@@ -156,6 +159,11 @@ jobs:
             --output /tmp/flaky_watch_report.json \
             --markdown-output /tmp/flaky_watch_report.md \
             --fail-on-failure
+      - name: Nightly unstable integration suites
+        env:
+          TERMIT_RUN_UNSTABLE_INTEGRATION: "1"
+        run: |
+          python -m unittest tests.test_agents_api tests.test_platform_e2e -v
       - name: Fetch previous flaky-watch artifact
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
