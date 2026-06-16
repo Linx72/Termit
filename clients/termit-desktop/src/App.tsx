@@ -22,6 +22,9 @@ import {
   type DesktopJourney,
 } from "@termit/client";
 import { FirstRunWizard } from "./FirstRunWizard";
+import { HealthDashboard } from "./HealthDashboard";
+import { AgentObservabilityPanel } from "./AgentObservabilityPanel";
+import { RuntimeStatusBar } from "./RuntimeStatusBar";
 import {
   attachmentPaths,
   buildMessageWithAttachments,
@@ -2123,11 +2126,50 @@ export function App() {
       return;
     }
     if (pathModalTarget === "repo") {
-      updateSettings({ repoRoot: value });
+      updateSettings({
+        repoRoot: value,
+        workspace: settings.workspace.trim() || value,
+      });
       await desktopRuntime.setLauncherConfig({
         repoRoot: value,
         autoStartServer: settings.autoStartServer,
       });
+    }
+  };
+
+  const finishFirstRunWizard = async () => {
+    await syncLauncherConfig();
+    if (settings.autoStartServer && settings.repoRoot.trim()) {
+      await desktopRuntime.ensureServer(settings.baseUrl);
+    }
+    if (settings.autoConnect) {
+      await connect();
+    }
+    markFirstRunComplete();
+    setShowWizard(false);
+  };
+
+  const quickStartWizard = async () => {
+    setConnecting(true);
+    try {
+      const launcher = await desktopRuntime.getLauncherConfig();
+      const repoRoot = settings.repoRoot.trim() || launcher.repoRoot.trim();
+      const workspace = settings.workspace.trim() || repoRoot;
+      updateSettings({
+        repoRoot,
+        workspace,
+        autoStartServer: true,
+        autoConnect: true,
+      });
+      await syncLauncherConfig({ repoRoot, autoStartServer: true });
+      if (repoRoot) {
+        await desktopRuntime.ensureServer(settings.baseUrl);
+      }
+      await connect();
+      markFirstRunComplete();
+      setShowWizard(false);
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -2191,17 +2233,8 @@ export function App() {
           onConnect={() => void ensureApiReady()}
           onToggleAutoStartServer={(enabled) => void toggleAutoStartServer(enabled)}
           onPullModel={(model) => void pullOllamaModel(model)}
-          onComplete={async () => {
-            await syncLauncherConfig();
-            if (settings.autoStartServer && settings.repoRoot.trim()) {
-              await desktopRuntime.ensureServer(settings.baseUrl);
-            }
-            if (settings.autoConnect) {
-              await connect();
-            }
-            markFirstRunComplete();
-            setShowWizard(false);
-          }}
+          onQuickStart={() => void quickStartWizard()}
+          onComplete={() => void finishFirstRunWizard()}
         />
       )}
       <nav className="cursor-rail" aria-label="Termit">
@@ -2314,6 +2347,10 @@ export function App() {
           Ollama {ollamaOk === true ? t(locale, "ollamaOk") : ollamaOk === false ? t(locale, "ollamaDown") : t(locale, "ollamaUnknown")}
           {termitVersion && <span className="version-tag">v{termitVersion}</span>}
         </div>
+
+        <RuntimeStatusBar client={client} connected={connected} locale={locale} />
+        <HealthDashboard client={client} connected={connected} locale={locale} />
+        <AgentObservabilityPanel client={client} connected={connected} locale={locale} />
 
         <div className="field">
           <label htmlFor="workspace">{t(locale, "workspaceFolder")}</label>
@@ -2830,6 +2867,8 @@ export function App() {
             </button>
           ) : null}
         </header>
+
+        <RuntimeStatusBar client={client} connected={connected} locale={locale} />
 
         {settings.chatInteractionMode === "plan" ? (
           <PlanPanel

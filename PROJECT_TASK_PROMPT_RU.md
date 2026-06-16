@@ -255,14 +255,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Трек 3 — Desktop product UX (недели 3–5)
 
 - [x] Улучшить post-run follow-up в стиле next best action — outcome-aware suggestions в desktop
-- [ ] Довести onboarding до first-run за < 2 минут
-- [ ] Вывести runtime status в UI (SLA, retries, active runs)
+- [x] Довести onboarding до first-run за < 2 минут — wizard Quick Start + optional Ollama
+- [x] Вывести runtime status в UI (SLA, retries, active runs) — RuntimeStatusBar + HealthDashboard в desktop
 
 **DoD:** P95 до первого осмысленного шага остаётся < 5s в реальном использовании.
 
 ### Трек 4 — Eval/quality 2.0 (недели 4–6)
 
-- [ ] Расширить parity-сценарии до 40+ (сложные multi-file/multi-step кейсы)
+- [x] Расширить parity-сценарии до 40+ (сложные multi-file/multi-step кейсы)
 - [x] Развести quality gates: fast (PR), deep (nightly), release (local/manual с cloud judge)
 - [x] Автоматизировать отчёт деградаций относительно предыдущего релиза — `scripts/eval_regression_report.py`
 

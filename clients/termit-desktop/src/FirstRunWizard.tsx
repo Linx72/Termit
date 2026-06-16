@@ -15,6 +15,7 @@ interface FirstRunWizardProps {
   onToggleAutoStartServer: (enabled: boolean) => void | Promise<void>;
   onPullModel: (model: string) => void | Promise<void>;
   onComplete: () => void | Promise<void>;
+  onQuickStart: () => void | Promise<void>;
 }
 
 export function FirstRunWizard({
@@ -31,14 +32,30 @@ export function FirstRunWizard({
   onToggleAutoStartServer,
   onPullModel,
   onComplete,
+  onQuickStart,
 }: FirstRunWizardProps) {
   const canFinish = Boolean(settings.baseUrl.trim() && settings.workspace.trim());
+  const canQuickStart = Boolean(settings.baseUrl.trim() && (settings.repoRoot.trim() || settings.workspace.trim()));
 
   return (
     <div className="modal-backdrop wizard-backdrop" role="presentation">
       <div className="modal wizard-modal" role="dialog" aria-labelledby="first-run-title">
         <h2 id="first-run-title">{t(locale, "wizardTitle")}</h2>
         <p className="hint">{t(locale, "wizardIntro")}</p>
+
+        <div className="wizard-quick-row">
+          <button
+            type="button"
+            className="primary"
+            disabled={!canQuickStart || busy}
+            onClick={() => void onQuickStart()}
+          >
+            {t(locale, "wizardQuickStart")}
+          </button>
+          <p className="hint muted">{t(locale, "wizardQuickStartHint")}</p>
+        </div>
+
+        <hr className="wizard-divider" />
 
         <div className="field">
           <label htmlFor="wizard-baseUrl">{t(locale, "wizardApiUrl")}</label>
@@ -75,7 +92,8 @@ export function FirstRunWizard({
           </button>
         </div>
 
-        <div className="wizard-section">
+        <details className="wizard-section wizard-advanced">
+          <summary>{t(locale, "wizardOptionalAdvanced")}</summary>
           <h3>{t(locale, "wizardOllama")}</h3>
           <p className="hint">{t(locale, "wizardOllamaHint")}</p>
           {missingOllamaModels.length === 0 ? (
@@ -97,7 +115,7 @@ export function FirstRunWizard({
               ))}
             </ul>
           )}
-        </div>
+        </details>
 
         <label className="checkbox-row">
           <input

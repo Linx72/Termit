@@ -33,6 +33,8 @@ interface HealthSnapshot {
   lifecycleTimeoutRunsTotal: number;
   lifecycleStaleTotal: number;
   lifecycleCompletionRate: number | null;
+  activeRuns: number;
+  byOutcomeClass: Record<string, number>;
   trainingSignals: number | null;
   latestDataset: string | null;
   tuningHint: string | null;
@@ -137,6 +139,9 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
         lifecycleTimeoutRunsTotal: metrics.lifecycle_timeout_runs_total ?? 0,
         lifecycleStaleTotal: metrics.lifecycle_stale_total ?? 0,
         lifecycleCompletionRate: metrics.lifecycle_completion_rate ?? null,
+        activeRuns: metrics.active_runs ?? 0,
+        byOutcomeClass:
+          (metrics as { by_outcome_class?: Record<string, number> }).by_outcome_class ?? {},
         trainingSignals: training.training_signals_count,
         latestDataset: training.latest_dataset ?? null,
         tuningHint,
@@ -194,6 +199,19 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
                 <li>
                   {t(locale, "kpiToolLoop")}: {formatRate(snapshot.toolLoopSuccessRate)} · {t(locale, "kpiCompletion")}{" "}
                   {formatRate(snapshot.toolLoopCompletionRate)}
+                </li>
+                <li>
+                  {t(locale, "runtimeActiveRuns")}: {snapshot.activeRuns} · {t(locale, "queue")}:{" "}
+                  {snapshot.queueSize}/{snapshot.queueCapacity}
+                </li>
+                <li>
+                  {t(locale, "runtimeOutcomes")}:{" "}
+                  {Object.keys(snapshot.byOutcomeClass).length === 0
+                    ? "—"
+                    : Object.entries(snapshot.byOutcomeClass)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([key, count]) => `${key} (${count})`)
+                        .join(" · ")}
                 </li>
                 <li>
                   {t(locale, "kpiLifecycleSummary")}:{" "}

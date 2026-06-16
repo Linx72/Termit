@@ -845,6 +845,50 @@ button.compact {
   color: #8b949e;
 }
 
+.runtime-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  padding: 6px 12px;
+  margin: 0 12px 8px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: #8b949e;
+  background: #0d1117;
+}
+
+.runtime-status-bar strong {
+  color: #e6edf3;
+}
+
+.runtime-outcomes {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wizard-quick-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wizard-divider {
+  border: none;
+  border-top: 1px solid #30363d;
+  margin: 12px 0;
+}
+
+.wizard-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
 .health-tag.ok {
   color: #3fb950;
 }

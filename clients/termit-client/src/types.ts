@@ -295,6 +295,7 @@ export interface AgentRunsMetrics {
   queue_stuck_timeout_seconds?: number;
   dead_letter_rate?: number;
   health_reasons?: string[];
+  by_outcome_class?: Record<string, number>;
 }
 
 export interface EvalReportSummary {
