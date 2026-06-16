@@ -1,5 +1,6 @@
 import unittest
 import time
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from app.domain.schemas import AgentProfileCreateRequest, TaskCreateRequest, TaskType
@@ -69,7 +70,8 @@ class TaskAgentAssignmentTests(unittest.TestCase):
         self.assertEqual(selected, "agent_preferred")
 
     def test_project_task_auto_attaches_multiple_agents(self) -> None:
-        templates = AgentTemplatesStore(file_path="/Users/amoros/Projects/Termit/data/agent_templates.json")
+        repo_root = Path(__file__).resolve().parents[1]
+        templates = AgentTemplatesStore(file_path=str(repo_root / "data/agent_templates.json"))
         service = TaskService(
             ToolingService(root_path="."),
             InMemoryTaskStore(),
