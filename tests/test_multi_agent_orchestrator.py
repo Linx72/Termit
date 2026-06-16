@@ -159,6 +159,29 @@ class MultiAgentOrchestratorTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreaterEqual(metrics["orchestration_tool_loop_runs_total"], 1)
             self.assertGreaterEqual(metrics["orchestration_tool_steps_total"], 1)
 
+    async def test_orchestration_survives_provider_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            router = build_router()
+            chat = ChatService(router, {}, MemoryStore(), cache_ttl_seconds=0)
+            tasks = TaskService(ToolingService(root_path="."), InMemoryTaskStore(), max_attempts=2)
+            orchestrator = MultiAgentOrchestrator(
+                tasks,
+                chat,
+                tooling=ToolingService(root_path=tmp),
+            )
+
+            result = await orchestrator.run(
+                OrchestrationRunRequest(
+                    input="Refactor module and update README for release",
+                    task_type=TaskType.coding,
+                    use_retrieval=False,
+                )
+            )
+            self.assertEqual(result.status, "failed")
+            coder_phases = [item for item in result.phases if item.phase == "coder"]
+            self.assertEqual(len(coder_phases), 1)
+            self.assertEqual(coder_phases[0].status, "failed")
+
 
 class SequencedProvider(BaseProvider):
     name = "sequence"

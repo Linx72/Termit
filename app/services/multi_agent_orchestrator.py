@@ -24,6 +24,7 @@ from app.domain.schemas import (
 )
 from app.services.chat_service import ChatService
 from app.services.code_retrieval_service import CodeRetrievalService
+from app.services.providers.base import ProviderError
 from app.services.task_service import TaskService
 from app.services.tooling_service import ToolingService
 from app.services.verify_command_resolver import resolve_verify_command
@@ -498,21 +499,38 @@ class MultiAgentOrchestrator:
                     f"{executor_prompt}\n\nReviewer issues to fix before finalizing:\n"
                     f"{feedback}\n\nAddress every issue explicitly."
                 )
-            chat_result = await self._chat.chat(
-                ChatRequest(
-                    message=message,
-                    task_type=payload.task_type,
-                    model=payload.model,
-                    session_id=session_id,
-                    use_memory=True,
-                    use_retrieval=payload.use_retrieval,
-                    retrieval_limit=payload.retrieval_limit,
-                    retrieval_path_prefix=payload.retrieval_path_prefix,
-                    repo_profile=payload.repo_profile,
-                    routing_policy=payload.routing_policy,
-                    history=[ChatMessage(role="system", content="You are the coder agent.")],
+            try:
+                chat_result = await self._chat.chat(
+                    ChatRequest(
+                        message=message,
+                        task_type=payload.task_type,
+                        model=payload.model,
+                        session_id=session_id,
+                        use_memory=True,
+                        use_retrieval=payload.use_retrieval,
+                        retrieval_limit=payload.retrieval_limit,
+                        retrieval_path_prefix=payload.retrieval_path_prefix,
+                        repo_profile=payload.repo_profile,
+                        routing_policy=payload.routing_policy,
+                        history=[ChatMessage(role="system", content="You are the coder agent.")],
+                    )
                 )
-            )
+            except ProviderError as exc:
+                review_detail = f"Coder provider error: {exc}"
+                self._append_contract_item(
+                    contract,
+                    action=f"coder.attempt_{attempt}",
+                    observation=review_detail[:500],
+                )
+                return (
+                    "",
+                    session_id,
+                    attempt,
+                    review_detail,
+                    False,
+                    contract,
+                    {"runs": tool_loop_runs, "steps": tool_loop_steps},
+                )
             session_id = chat_result.session_id
             executor_response = chat_result.response or ""
             self._append_contract_item(

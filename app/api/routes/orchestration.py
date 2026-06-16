@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.schemas import (
     OrchestrationMetricsResponse,
@@ -6,6 +6,7 @@ from app.domain.schemas import (
     OrchestrationRunResponse,
 )
 from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
+from app.services.providers.base import ProviderError
 from app.state import get_multi_agent_orchestrator
 
 router = APIRouter(prefix="/api/orchestration", tags=["orchestration"])
@@ -16,7 +17,10 @@ async def run_orchestration(
     payload: OrchestrationRunRequest,
     orchestrator: MultiAgentOrchestrator = Depends(get_multi_agent_orchestrator),
 ) -> OrchestrationRunResponse:
-    return await orchestrator.run(payload)
+    try:
+        return await orchestrator.run(payload)
+    except ProviderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/metrics", response_model=OrchestrationMetricsResponse)
