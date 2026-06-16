@@ -78,6 +78,26 @@ class MediaGenerationServiceTests(unittest.TestCase):
             self.assertGreaterEqual(len(spans), 1)
             self.assertEqual(spans[0]["name"], "media.generate_image")
 
+    def test_export_lottie_records_trace_span(self) -> None:
+        from app.services.trace_span_store import TraceSpanStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            span_store = TraceSpanStore(str(Path(tmp) / "spans.db"))
+            svc = MediaGenerationService(
+                asset_store=self.store,
+                enabled=True,
+                image_provider_name="stub",
+                trace_span_store=span_store,
+            )
+            ids = [
+                svc.generate_image(prompt=f"t{i}", width=64, height=64, provider="stub").asset.asset_id
+                for i in range(2)
+            ]
+            svc.export_lottie(asset_ids=ids, run_id="lottie_run_test", fps=4, width=64)
+            spans = span_store.list_for_run("lottie_run_test")
+            self.assertGreaterEqual(len(spans), 1)
+            self.assertEqual(spans[0]["name"], "media.export_lottie")
+
     def test_generate_requires_confirm_for_openai_tariff(self) -> None:
         svc = MediaGenerationService(
             asset_store=self.store,
@@ -123,7 +143,7 @@ class MediaGenerationServiceTests(unittest.TestCase):
             off.generate_image(prompt="x", provider="stub")
 
     def test_tools_registered(self) -> None:
-        for name in ("generate_image", "vision_qa_media", "estimate_media_cost"):
+        for name in ("generate_image", "vision_qa_media", "estimate_media_cost", "export_lottie"):
             self.assertIn(name, TOOL_DEFINITIONS)
         tools = build_openai_tools(
             ["generate_image", "vision_qa_media", "estimate_media_cost", "list_media_assets"]
@@ -171,6 +191,36 @@ class MediaApiTests(unittest.TestCase):
                 )
                 self.assertEqual(estimate_resp.status_code, 200)
                 self.assertLessEqual(estimate_resp.json()["total_usd"], 25.0)
+            img_resp = client.post(
+                "/api/media/generate-image",
+                json={
+                    "prompt": "lottie frame",
+                    "width": 64,
+                    "height": 64,
+                    "project_id": "api-test",
+                    "provider": "stub",
+                },
+            )
+            self.assertEqual(img_resp.status_code, 200)
+            frame_ids = [img_resp.json()["asset"]["asset_id"]]
+            img_resp2 = client.post(
+                "/api/media/generate-image",
+                json={
+                    "prompt": "lottie frame 2",
+                    "width": 64,
+                    "height": 64,
+                    "project_id": "api-test",
+                    "provider": "stub",
+                },
+            )
+            self.assertEqual(img_resp2.status_code, 200)
+            frame_ids.append(img_resp2.json()["asset"]["asset_id"])
+            lottie_resp = client.post(
+                "/api/media/export-lottie",
+                json={"asset_ids": frame_ids, "project_id": "api-test", "fps": 4, "width": 64},
+            )
+            self.assertEqual(lottie_resp.status_code, 200, lottie_resp.text)
+            self.assertEqual(lottie_resp.json()["mime"], "application/json")
         finally:
             app.dependency_overrides.clear()
             tmp.cleanup()

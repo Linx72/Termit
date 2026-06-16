@@ -124,6 +124,15 @@ class MediaEvalIntegrationTests(unittest.TestCase):
             result = ev.run_scenario(sid)
             self.assertEqual(result["status"], "passed", result)
 
+    def test_media_eval_ms11_lottie(self) -> None:
+        if not MEDIA_EVAL_SCENARIOS.is_file():
+            self.skipTest(f"Missing media eval scenarios: {MEDIA_EVAL_SCENARIOS}")
+        from app.services.eval_service import EvalService
+
+        ev = EvalService(extra_scenarios_path=str(MEDIA_EVAL_SCENARIOS))
+        result = ev.run_scenario("MS11")
+        self.assertEqual(result["status"], "passed", result)
+
 
 if __name__ == "__main__":
     unittest.main()

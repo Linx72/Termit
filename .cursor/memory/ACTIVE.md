@@ -4,20 +4,18 @@
 
 ## Сводка
 
-**0.4.2 выкачен** — Media Studio Fal I2V + Lottie export.
+**0.4.3 выкачен** — Media observability + hosted media smoke.
 
-### Fal I2V
-- `TERMIT_MEDIA_PUBLIC_BASE_URL` — публичный URL для `/api/media/assets/{id}/file`
-- Fallback: `FalVideoProvider.upload_local_image()` → fal CDN
-- `_execute_render_job` больше не падает на `provider=fal`
+### Trace spans
+- `media.render_video`, `media.export_gif`, `media.export_lottie` в TraceSpanStore
 
-### Lottie
-- [`app/services/media_lottie_service.py`](file:///Users/amoros/Projects/Termit/app/services/media_lottie_service.py)
-- `POST /api/media/export-lottie`, tool `export_lottie`
-- Desktop: кнопка «Экспорт Lottie» в MediaStudioPanel
+### Eval + smoke
+- **MS11** — Lottie export scenario
+- `hosted_smoke.sh` step 5/5 — optional `TERMIT_HOSTED_MEDIA_EXPECT=true`
+- `deploy/docker.env.example` — Media Studio block
 
-**Тесты:** 524 OK (skipped=6)
+**Тесты:** 526+ OK после релиза
 
 ## Открытые задачи
 
-- Следующий пункт roadmap — смотреть `PROJECT_TASK_PROMPT_RU.md` / `MEDIA_STUDIO_ROADMAP_RU.md` (Future optional пуст после 0.4.2)
+- Мастер-план `PROJECT_TASK_PROMPT_RU.md` закрыт через 0.4.3; следующий «do all» — новый этап 0.4.4+ (см. KPI targets / product growth)

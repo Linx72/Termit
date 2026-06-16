@@ -336,6 +336,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** `render_video` с `provider=fal` работает при `FAL_KEY` + public URL или CDN upload; Lottie JSON из PNG sequence; тесты `test_media_jobs` зелёные.
 
+### Следующий этап (0.4.3): Media observability + hosted media smoke
+
+- [x] Trace spans: `media.render_video`, `media.export_gif`, `media.export_lottie`
+- [x] Eval MS11 — Lottie export scenario
+- [x] `hosted_smoke.sh` optional media gate (`TERMIT_HOSTED_MEDIA_EXPECT=true`)
+- [x] `deploy/docker.env.example` — Media Studio env block
+
+**DoD:** media ops пишут spans при `run_id`; MS11 passed; hosted smoke с media gate зелёный при `TERMIT_MEDIA_ENABLED=true`.
+
 ---
 
 ## Порядок выполнения

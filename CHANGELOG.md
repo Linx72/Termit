@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.3] - 2026-06-17
+
+### Added
+- Media trace spans + MS11 + hosted media smoke
+
+
 ## [0.4.2] - 2026-06-17
 
 ### Added

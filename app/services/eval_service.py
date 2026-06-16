@@ -834,6 +834,18 @@ class EvalService:
                 waited = service.wait_media_job(job_id=job.job_id)
                 passed = passed and waited.status == "completed" and bool(waited.result_asset_id)
                 ref = waited.result_asset_id or job.job_id
+            if "export_lottie" in scenario.enabled_tools:
+                imgs = [
+                    service.generate_image(prompt=f"frame {i}", width=128, height=128, provider="stub")
+                    for i in range(3)
+                ]
+                lottie = service.export_lottie(
+                    asset_ids=[img.asset.asset_id for img in imgs],
+                    fps=4,
+                    width=128,
+                )
+                passed = passed and lottie.mime == (scenario.expect_asset_mime or "application/json")
+                ref = lottie.asset_id
             return ref or scenario.id, passed, None if passed else "verification_error", 1, "semi-auto"
         finally:
             tmp.cleanup()

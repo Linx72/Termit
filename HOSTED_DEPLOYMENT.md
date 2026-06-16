@@ -68,6 +68,14 @@ TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.
 
 Checks: proxy reachability, health/readiness/metrics, `X-Trace-Id` header, optional auth 401 without key.
 
+Optional Media Studio gate (requires `TERMIT_MEDIA_ENABLED=true` in `.env`):
+
+```bash
+TERMIT_MEDIA_ENABLED=true TERMIT_HOSTED_MEDIA_EXPECT=true ./scripts/hosted_smoke.sh
+```
+
+For Fal I2V in hosted deploy, set `TERMIT_MEDIA_PUBLIC_BASE_URL` to your public API origin (e.g. `https://your-domain.example`).
+
 Production overlay:
 
 ```bash

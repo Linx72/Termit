@@ -68,12 +68,12 @@ if ! curl -s --max-time 3 -o /dev/null "${BASE_URL}/health" 2>/dev/null; then
 fi
 
 echo ""
-echo "== 1/4 Public health via proxy =="
+echo "== 1/5 Public health via proxy =="
 expect_code /health 200
 expect_code /healthz 200
 
 echo ""
-echo "== 2/4 Ops + metrics =="
+echo "== 2/5 Ops + metrics =="
 expect_code /api/metrics/thresholds 200
 expect_code /api/ops/readiness 200
 expect_code /api/eval/dashboard 200
@@ -90,7 +90,7 @@ else
 fi
 
 echo ""
-echo "== 3/4 Trace header =="
+echo "== 3/5 Trace header =="
 headers="$(curl_headers /health)"
 if echo "$headers" | grep -qi '^x-trace-id:'; then
   echo "X-Trace-Id present on /health"
@@ -100,7 +100,7 @@ else
 fi
 
 echo ""
-echo "== 4/4 Auth policy (optional) =="
+echo "== 4/5 Auth policy (optional) =="
 if [[ "$AUTH_EXPECT" == "true" ]]; then
   if [[ -z "$API_KEY" ]]; then
     echo "TERMIT_HOSTED_AUTH_EXPECT=true requires TERMIT_API_KEY" >&2
@@ -115,6 +115,36 @@ if [[ "$AUTH_EXPECT" == "true" ]]; then
   expect_code /api/ops/agent-runs/metrics 200
 else
   echo "Skip auth gate (set TERMIT_HOSTED_AUTH_EXPECT=true to enforce)"
+fi
+
+echo ""
+echo "== 5/5 Media Studio (optional) =="
+MEDIA_EXPECT="${TERMIT_HOSTED_MEDIA_EXPECT:-false}"
+if [[ "$MEDIA_EXPECT" == "true" ]]; then
+  media_body='{"prompt":"hosted smoke icon","width":64,"height":64,"project_id":"hosted-smoke","provider":"stub"}'
+  if [[ -n "$API_KEY" ]]; then
+    media_code="$(curl -s --max-time "$TIMEOUT" -o /tmp/termit_media_smoke.json -w '%{http_code}' \
+      -H "Content-Type: application/json" -H "X-API-Key: ${API_KEY}" \
+      -d "$media_body" "${BASE_URL}/api/media/generate-image")"
+  else
+    media_code="$(curl -s --max-time "$TIMEOUT" -o /tmp/termit_media_smoke.json -w '%{http_code}' \
+      -H "Content-Type: application/json" \
+      -d "$media_body" "${BASE_URL}/api/media/generate-image")"
+  fi
+  echo "/api/media/generate-image -> HTTP ${media_code}"
+  if [[ "$media_code" != "200" ]]; then
+    echo "Media smoke failed (set TERMIT_MEDIA_ENABLED=true in docker env)" >&2
+    exit 1
+  fi
+  asset_id="$(python3 -c "import json; print(json.load(open('/tmp/termit_media_smoke.json'))['asset']['asset_id'])" 2>/dev/null || true)"
+  if [[ -z "$asset_id" ]]; then
+    echo "Media response missing asset_id" >&2
+    exit 1
+  fi
+  expect_code "/api/media/assets/${asset_id}/file" 200
+  echo "Media asset file download OK"
+else
+  echo "Skip media gate (set TERMIT_HOSTED_MEDIA_EXPECT=true to enforce)"
 fi
 
 echo ""

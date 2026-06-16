@@ -606,30 +606,32 @@ class MediaGenerationService:
             run_id=run_id,
             cost_usd=0.0,
         )
-        self._jobs.update(job.job_id, status="running")
-        try:
-            asset_id = self._execute_render_job(
-                job=job,
-                prompt=prompt,
-                project_id=project_id,
-                run_id=run_id,
-                scene_id=scene_id,
-                source_asset_id=source_asset_id,
-                duration_sec=duration_sec,
-                provider=chosen,
-            )
-            updated = self._jobs.update(
-                job.job_id,
-                status="completed",
-                result_asset_id=asset_id,
-                cost_usd=est if chosen == "fal" else 0.0,
-            )
-            self._ledger_add(run_id, est if chosen == "fal" else 0.0)
-            assert updated is not None
-            return updated
-        except Exception as exc:  # noqa: BLE001
-            self._jobs.update(job.job_id, status="failed", error=str(exc))
-            raise MediaStudioError(str(exc)) from exc
+        with self._media_trace(run_id=run_id, name="media.render_video") as meta:
+            self._jobs.update(job.job_id, status="running")
+            try:
+                asset_id = self._execute_render_job(
+                    job=job,
+                    prompt=prompt,
+                    project_id=project_id,
+                    run_id=run_id,
+                    scene_id=scene_id,
+                    source_asset_id=source_asset_id,
+                    duration_sec=duration_sec,
+                    provider=chosen,
+                )
+                updated = self._jobs.update(
+                    job.job_id,
+                    status="completed",
+                    result_asset_id=asset_id,
+                    cost_usd=est if chosen == "fal" else 0.0,
+                )
+                self._ledger_add(run_id, est if chosen == "fal" else 0.0)
+                assert updated is not None
+                meta["detail"] = f"job={job.job_id}, provider={chosen}, asset={asset_id}"
+                return updated
+            except Exception as exc:  # noqa: BLE001
+                self._jobs.update(job.job_id, status="failed", error=str(exc))
+                raise MediaStudioError(str(exc)) from exc
 
     def _execute_render_job(
         self,
@@ -734,32 +736,34 @@ class MediaGenerationService:
         self._ensure_enabled()
         if not asset_ids:
             raise MediaStudioError("export_gif requires asset_ids.")
-        paths: list[Path] = []
-        for aid in asset_ids:
-            rec = self._store.get_asset(aid)
-            if rec is None:
-                raise MediaStudioError(f"Unknown asset_id: {aid}")
-            paths.append(self._store.resolve_path(rec))
-        exports = self._store.root.resolve() / _project_slug(project_id) / "exports"
-        exports.mkdir(parents=True, exist_ok=True)
-        name = output_name or f"anim_{uuid4().hex[:8]}.gif"
-        if not name.endswith(".gif"):
-            name += ".gif"
-        out_path = exports / name
-        try:
-            self._gif.export_gif(image_paths=paths, output_path=out_path, fps=fps, width=width)
-        except MediaComposeError as exc:
-            raise MediaStudioError(str(exc)) from exc
-        record = self._store.register_file(
-            project_id=project_id,
-            file_path=out_path,
-            mime="image/gif",
-            provider="ffmpeg",
-            cost_usd=0.0,
-            prompt=f"gif:{len(asset_ids)} frames",
-            run_id=run_id,
-        )
-        return record
+        with self._media_trace(run_id=run_id, name="media.export_gif") as meta:
+            paths: list[Path] = []
+            for aid in asset_ids:
+                rec = self._store.get_asset(aid)
+                if rec is None:
+                    raise MediaStudioError(f"Unknown asset_id: {aid}")
+                paths.append(self._store.resolve_path(rec))
+            exports = self._store.root.resolve() / _project_slug(project_id) / "exports"
+            exports.mkdir(parents=True, exist_ok=True)
+            name = output_name or f"anim_{uuid4().hex[:8]}.gif"
+            if not name.endswith(".gif"):
+                name += ".gif"
+            out_path = exports / name
+            try:
+                self._gif.export_gif(image_paths=paths, output_path=out_path, fps=fps, width=width)
+            except MediaComposeError as exc:
+                raise MediaStudioError(str(exc)) from exc
+            record = self._store.register_file(
+                project_id=project_id,
+                file_path=out_path,
+                mime="image/gif",
+                provider="ffmpeg",
+                cost_usd=0.0,
+                prompt=f"gif:{len(asset_ids)} frames",
+                run_id=run_id,
+            )
+            meta["detail"] = f"frames={len(asset_ids)}, asset={record.asset_id}"
+            return record
 
     def export_lottie(
         self,
@@ -774,32 +778,34 @@ class MediaGenerationService:
         self._ensure_enabled()
         if not asset_ids:
             raise MediaStudioError("export_lottie requires asset_ids.")
-        paths: list[Path] = []
-        for aid in asset_ids:
-            rec = self._store.get_asset(aid)
-            if rec is None:
-                raise MediaStudioError(f"Unknown asset_id: {aid}")
-            paths.append(self._store.resolve_path(rec))
-        exports = self._store.root.resolve() / _project_slug(project_id) / "exports"
-        exports.mkdir(parents=True, exist_ok=True)
-        name = output_name or f"anim_{uuid4().hex[:8]}.json"
-        if not name.endswith(".json"):
-            name += ".json"
-        out_path = exports / name
-        try:
-            self._lottie.export_lottie(image_paths=paths, output_path=out_path, fps=fps, width=width)
-        except MediaLottieError as exc:
-            raise MediaStudioError(str(exc)) from exc
-        record = self._store.register_file(
-            project_id=project_id,
-            file_path=out_path,
-            mime="application/json",
-            provider="lottie",
-            cost_usd=0.0,
-            prompt=f"lottie:{len(asset_ids)} frames",
-            run_id=run_id,
-        )
-        return record
+        with self._media_trace(run_id=run_id, name="media.export_lottie") as meta:
+            paths: list[Path] = []
+            for aid in asset_ids:
+                rec = self._store.get_asset(aid)
+                if rec is None:
+                    raise MediaStudioError(f"Unknown asset_id: {aid}")
+                paths.append(self._store.resolve_path(rec))
+            exports = self._store.root.resolve() / _project_slug(project_id) / "exports"
+            exports.mkdir(parents=True, exist_ok=True)
+            name = output_name or f"anim_{uuid4().hex[:8]}.json"
+            if not name.endswith(".json"):
+                name += ".json"
+            out_path = exports / name
+            try:
+                self._lottie.export_lottie(image_paths=paths, output_path=out_path, fps=fps, width=width)
+            except MediaLottieError as exc:
+                raise MediaStudioError(str(exc)) from exc
+            record = self._store.register_file(
+                project_id=project_id,
+                file_path=out_path,
+                mime="application/json",
+                provider="lottie",
+                cost_usd=0.0,
+                prompt=f"lottie:{len(asset_ids)} frames",
+                run_id=run_id,
+            )
+            meta["detail"] = f"frames={len(asset_ids)}, asset={record.asset_id}"
+            return record
 
     def list_brand_kits(self) -> list[BrandKitRecord]:
         self._ensure_enabled()
