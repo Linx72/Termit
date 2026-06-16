@@ -1,6 +1,6 @@
 {
   "name": "termit",
-  "version": "0.3.2",
+  "version": "0.3.6",
   "description": "Termit — desktop AI coding assistant (Termit API + local Ollama)",
   "private": true,
   "scripts": {

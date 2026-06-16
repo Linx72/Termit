@@ -219,7 +219,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 - [x] Graceful shutdown workers, run retry policies — `TERMIT_AGENT_SHUTDOWN_GRACE_SECONDS`, `/api/ops/runtime-policy`
 - [x] Dead-letter queue UI — DLQ list/replay в desktop `AgentObservabilityPanel`
 - [x] Secret scan in patches — `GuardrailService.check_patch_content`
-- [ ] Signed desktop builds, sandbox hardening (extended)
+- [x] Signed desktop builds, sandbox hardening (extended) — `TermitShell.app` codesign/notary, `docs/DESKTOP_SIGNING_RU.md`, release workflow
 
 ### KPI targets
 

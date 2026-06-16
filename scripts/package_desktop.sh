@@ -1,31 +1,16 @@
 #!/usr/bin/env bash
-# Build Termit desktop app (Electron) into clients/termit-desktop/release/
+# Build native Termit desktop app (TermitShell.app) with optional codesign + notarization.
+#
+# Electron was removed; this script wraps package_termit_shell.sh.
+#
+# Signed release (macOS):
+#   export TERMIT_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+#   export TERMIT_NOTARY_PROFILE="termit-notary"   # xcrun notarytool store-credentials
+#   ./scripts/package_desktop.sh
+#
+# Verify after build:
+#   ./scripts/verify_desktop_signature.sh clients/termit-shell/release/TermitShell.app
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if ! command -v npm >/dev/null 2>&1; then
-  if [[ -x "/opt/homebrew/bin/npm" ]]; then
-    export PATH="/opt/homebrew/bin:$PATH"
-  elif [[ -x "/usr/local/bin/npm" ]]; then
-    export PATH="/usr/local/bin:$PATH"
-  else
-    "$ROOT/scripts/install_node_local.sh"
-    NODE_BIN="$(find "$ROOT/.tools" -path '*/bin/npm' 2>/dev/null | head -1)"
-    [[ -n "$NODE_BIN" ]] || { echo "error: npm not found" >&2; exit 1; }
-    export PATH="$(dirname "$NODE_BIN"):${PATH}"
-  fi
-fi
-
-cd "$ROOT/clients/termit-client"
-npm install
-npm run build
-npm test
-
-cd "$ROOT/clients/termit-desktop"
-npm install
-source "$ROOT/.venv/bin/activate" 2>/dev/null || true
-python3 "$ROOT/scripts/build_desktop_docs_pdf.py"
-npm run package
-
-echo "Desktop build output: $ROOT/clients/termit-desktop/release/"
-ls -la "$ROOT/clients/termit-desktop/release/" 2>/dev/null || true
+exec "$ROOT/scripts/package_termit_shell.sh" "$@"

@@ -17,6 +17,7 @@
 ### Security
 - Tool audit export from desktop settings (admin role)
 - API key quota summary panel for admin keys
+- Signed desktop release pipeline: codesign + notarization for `TermitShell.app` (see `docs/DESKTOP_SIGNING_RU.md`)
 
 
 ## [0.3.4] - 2026-06-04

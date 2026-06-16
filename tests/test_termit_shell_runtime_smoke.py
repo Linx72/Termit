@@ -47,6 +47,13 @@ class TermitShellRuntimeSmokeTests(unittest.TestCase):
         self.assertIn("xcrun notarytool submit", self.package_script)
         self.assertIn("xcrun stapler staple", self.package_script)
 
+    def test_package_desktop_wraps_termit_shell(self) -> None:
+        desktop_script = (self.root / "scripts" / "package_desktop.sh").read_text(encoding="utf-8")
+        self.assertIn("package_termit_shell.sh", desktop_script)
+        verify_script = (self.root / "scripts" / "verify_desktop_signature.sh").read_text(encoding="utf-8")
+        self.assertIn("codesign --verify", verify_script)
+        self.assertIn("spctl -a", verify_script)
+
 
 if __name__ == "__main__":
     unittest.main()

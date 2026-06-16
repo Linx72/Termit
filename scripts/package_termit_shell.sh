@@ -140,3 +140,13 @@ fi
 
 echo "Termit shell app bundle created:"
 echo "$APP_DIR"
+if [[ -n "${TERMIT_CODESIGN_IDENTITY:-}" ]]; then
+  echo "Signed: yes (${TERMIT_CODESIGN_IDENTITY})"
+else
+  echo "Signed: no (set TERMIT_CODESIGN_IDENTITY for release builds)"
+fi
+if [[ -n "${TERMIT_NOTARY_PROFILE:-}" ]]; then
+  echo "Notarized: yes (${TERMIT_NOTARY_PROFILE})"
+else
+  echo "Notarized: no (set TERMIT_NOTARY_PROFILE after codesign)"
+fi

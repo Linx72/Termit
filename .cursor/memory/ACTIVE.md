@@ -4,17 +4,18 @@
 
 ## Сводка
 
-- **0.3.6** — SLO/Grafana, DLQ UI, OpsSecurityPanel (quota + audit export), graceful shutdown, patch secret scan.
-- **Фаза 5** — почти закрыта; осталось: signed desktop builds.
+- **0.3.6 stable** — tagged, GitHub release, CI green.
+- **Фаза 5 закрыта** — signed desktop: `package_desktop.sh` → `TermitShell.app`, release workflow + checksums.
+- Post-parity roadmap (Track 1–5, Фаза 5) — **complete**.
 
-## Ключевые файлы
+## Ключевые файлы (signed desktop)
 
-- `app/services/agent_service.py` — graceful stop + draining
-- `clients/termit-desktop/src/OpsSecurityPanel.tsx`
-- `app/services/guardrail_service.py` — patch secret scan
-- `GET /api/ops/runtime-policy`
+- `scripts/package_desktop.sh` — wrapper для shell bundle
+- `scripts/package_termit_shell.sh` — codesign + notary
+- `scripts/verify_desktop_signature.sh`
+- `docs/DESKTOP_SIGNING_RU.md`
+- `.github/workflows/release.yml`
 
 ## Открытые задачи
 
-- [ ] Tag `v0.3.6` + GitHub release
-- [ ] Signed desktop builds
+- (none) — следующий этап: новые фичи по запросу или MS8/MS9 infra
