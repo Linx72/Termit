@@ -13,6 +13,7 @@ import time
 
 from app.services.media_brand_kit_store import BrandKitRecord, BrandKitStore
 from app.services.media_gif_service import MediaGifService
+from app.services.media_lottie_service import MediaLottieError, MediaLottieService
 from app.services.media_job_store import MediaJobRecord, MediaJobStore
 from app.services.media_compose_service import (
     MediaComposeError,
@@ -132,6 +133,7 @@ class MediaGenerationService:
         jobs_db_path: str = "./data/media/media_jobs.db",
         i2v_provider: str = "stub",
         fal_api_key: str = "",
+        media_public_base_url: str = "",
         i2v_cost_usd: float = 0.50,
         brand_kits_dir: str = "./data/media/brand_kits",
         run_cost_ledger: Optional[dict[str, float]] = None,
@@ -163,11 +165,13 @@ class MediaGenerationService:
         )
         self._compose = MediaComposeService(ffmpeg_path=ffmpeg_path, ffprobe_path=ffprobe_path)
         self._gif = MediaGifService(ffmpeg_path=ffmpeg_path)
+        self._lottie = MediaLottieService()
         self._stub_video = StubVideoProvider(ffmpeg_path=ffmpeg_path, ffprobe_path=ffprobe_path)
         self._fal_video = FalVideoProvider(api_key=fal_api_key, default_cost_usd=i2v_cost_usd)
         self._jobs = MediaJobStore(jobs_db_path)
         self._brand_kits = BrandKitStore(brand_kits_dir)
         self._i2v_provider = i2v_provider.strip().lower() or "stub"
+        self._media_public_base_url = media_public_base_url.strip().rstrip("/")
         self._i2v_cost = i2v_cost_usd
         self._ffmpeg_path = ffmpeg_path
         self._ffprobe_path = ffprobe_path
@@ -177,6 +181,14 @@ class MediaGenerationService:
     def _ensure_enabled(self) -> None:
         if not self._enabled:
             raise MediaStudioError("Media Studio is disabled (TERMIT_MEDIA_ENABLED=false).")
+
+    def _resolve_fal_image_url(self, *, source_asset_id: str, image_path: Path) -> str:
+        if self._media_public_base_url:
+            return f"{self._media_public_base_url}/api/media/assets/{source_asset_id}/file"
+        try:
+            return self._fal_video.upload_local_image(image_path)
+        except MediaVideoError as exc:
+            raise MediaStudioError(str(exc)) from exc
 
     def _record_media_span(
         self,
@@ -634,20 +646,40 @@ class MediaGenerationService:
         exports = self._store.root.resolve() / _project_slug(project_id) / "exports"
         exports.mkdir(parents=True, exist_ok=True)
         out_path = exports / f"clip_{scene_id or job.job_id}.mp4"
-        if provider == "fal" and self._fal_video.available and source_asset_id:
-            source = self._store.get_asset(source_asset_id)
-            if source is None:
-                raise MediaStudioError(f"Unknown source_asset_id: {source_asset_id}")
-            # Fal needs URL — fallback to stub if local file only
-            raise MediaStudioError(
-                "Fal I2V requires public image_url; use provider=stub for local files."
-            )
         if not source_asset_id:
             raise MediaStudioError("render_video image_to_video requires source_asset_id.")
         source = self._store.get_asset(source_asset_id)
         if source is None:
             raise MediaStudioError(f"Unknown source_asset_id: {source_asset_id}")
         image_path = self._store.resolve_path(source)
+        if provider == "fal" and self._fal_video.available:
+            image_url = self._resolve_fal_image_url(
+                source_asset_id=source_asset_id,
+                image_path=image_path,
+            )
+            try:
+                result = self._fal_video.render_image_to_video(
+                    image_url=image_url,
+                    prompt=prompt,
+                    output_path=out_path,
+                    duration_sec=duration_sec,
+                )
+            except MediaVideoError as exc:
+                raise MediaStudioError(str(exc)) from exc
+            record = self._store.register_file(
+                project_id=project_id,
+                file_path=out_path,
+                mime="video/mp4",
+                provider=result.provider,
+                cost_usd=result.cost_usd,
+                prompt=prompt,
+                run_id=run_id,
+                scene_id=scene_id,
+            )
+            self._store.append_audit(
+                {"action": "render_video", "job_id": job.job_id, "asset_id": record.asset_id}
+            )
+            return record.asset_id
         result = self._stub_video.render_image_to_video(
             image_path=image_path,
             output_path=out_path,
@@ -725,6 +757,46 @@ class MediaGenerationService:
             provider="ffmpeg",
             cost_usd=0.0,
             prompt=f"gif:{len(asset_ids)} frames",
+            run_id=run_id,
+        )
+        return record
+
+    def export_lottie(
+        self,
+        *,
+        asset_ids: list[str],
+        project_id: str = "default",
+        run_id: Optional[str] = None,
+        fps: int = 8,
+        width: int = 480,
+        output_name: Optional[str] = None,
+    ) -> MediaAssetRecord:
+        self._ensure_enabled()
+        if not asset_ids:
+            raise MediaStudioError("export_lottie requires asset_ids.")
+        paths: list[Path] = []
+        for aid in asset_ids:
+            rec = self._store.get_asset(aid)
+            if rec is None:
+                raise MediaStudioError(f"Unknown asset_id: {aid}")
+            paths.append(self._store.resolve_path(rec))
+        exports = self._store.root.resolve() / _project_slug(project_id) / "exports"
+        exports.mkdir(parents=True, exist_ok=True)
+        name = output_name or f"anim_{uuid4().hex[:8]}.json"
+        if not name.endswith(".json"):
+            name += ".json"
+        out_path = exports / name
+        try:
+            self._lottie.export_lottie(image_paths=paths, output_path=out_path, fps=fps, width=width)
+        except MediaLottieError as exc:
+            raise MediaStudioError(str(exc)) from exc
+        record = self._store.register_file(
+            project_id=project_id,
+            file_path=out_path,
+            mime="application/json",
+            provider="lottie",
+            cost_usd=0.0,
+            prompt=f"lottie:{len(asset_ids)} frames",
             run_id=run_id,
         )
         return record

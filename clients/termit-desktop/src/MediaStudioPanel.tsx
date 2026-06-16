@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TermitClient } from "@termit/client";
 import {
+  exportMediaLottie,
   generateMediaImage,
   isMediaConfirmationRequired,
   listBrandKits,
@@ -116,6 +117,32 @@ export function MediaStudioPanel({ client, connected, locale }: MediaStudioPanel
     }
   };
 
+  const onExportLottie = async () => {
+    const pngAssets = assets.filter((asset) => asset.mime.startsWith("image/") && asset.mime !== "image/gif");
+    if (pngAssets.length < 2) {
+      setError(t(locale, "mediaStudioLottieNeedFrames"));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const frameIds = pngAssets.slice(0, 6).map((asset) => asset.asset_id);
+      const result = await exportMediaLottie(client, {
+        asset_ids: frameIds,
+        project_id: projectId,
+        fps: 8,
+        width: 256,
+      });
+      setNotice(`${t(locale, "mediaStudioLottieDone")}: ${result.asset_id}`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onConfirmPending = async () => {
     if (!pendingAction) {
       return;
@@ -206,6 +233,14 @@ export function MediaStudioPanel({ client, connected, locale }: MediaStudioPanel
                   onClick={() => void onRunStoryboard()}
                 >
                   {t(locale, "mediaStudioRunStoryboard")}
+                </button>
+                <button
+                  type="button"
+                  className="secondary compact"
+                  disabled={busy}
+                  onClick={() => void onExportLottie()}
+                >
+                  {t(locale, "mediaStudioExportLottie")}
                 </button>
                 <button type="button" className="secondary compact" disabled={busy} onClick={() => void refresh()}>
                   {t(locale, "refresh")}

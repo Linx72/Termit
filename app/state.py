@@ -1177,6 +1177,7 @@ def _build_media_generation_service():
         jobs_db_path=settings.media_jobs_db_path,
         i2v_provider=settings.media_i2v_provider,
         fal_api_key=settings.fal_api_key,
+        media_public_base_url=settings.media_public_base_url,
         i2v_cost_usd=settings.media_i2v_cost_usd,
         brand_kits_dir=settings.media_brand_kits_dir,
     )

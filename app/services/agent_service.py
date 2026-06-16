@@ -1441,6 +1441,7 @@ class AgentService:
             "render_video",
             "wait_media_job",
             "export_gif",
+            "export_lottie",
             "run_storyboard",
         }:
             if self._media is None:
@@ -1560,6 +1561,17 @@ class AgentService:
                         width=int(arguments.get("width", 480)),
                     )
                     return json.dumps(gif_asset.to_dict(), ensure_ascii=True), side_effects
+                if tool_name == "export_lottie":
+                    raw_ids = arguments.get("asset_ids", [])
+                    asset_ids = [str(x) for x in raw_ids] if isinstance(raw_ids, list) else []
+                    lottie_asset = media.export_lottie(
+                        asset_ids=asset_ids,
+                        project_id=str(arguments.get("project_id", "default")),
+                        run_id=run_id,
+                        fps=int(arguments.get("fps", 8)),
+                        width=int(arguments.get("width", 480)),
+                    )
+                    return json.dumps(lottie_asset.to_dict(), ensure_ascii=True), side_effects
                 if tool_name == "run_storyboard":
                     sb_raw = arguments.get("storyboard")
                     storyboard = sb_raw if isinstance(sb_raw, dict) else None

@@ -11,6 +11,7 @@ from app.domain.schemas import (
     MediaComposeResponse,
     BrandKitResponse,
     MediaExportGifRequest,
+    MediaExportLottieRequest,
     MediaJobResponse,
     MediaRenderVideoRequest,
     MediaStoryboardRunRequest,
@@ -236,6 +237,24 @@ async def export_gif(
 ) -> MediaAssetResponse:
     try:
         asset = service.export_gif(
+            asset_ids=payload.asset_ids,
+            project_id=payload.project_id,
+            run_id=payload.run_id,
+            fps=payload.fps,
+            width=payload.width,
+        )
+    except MediaStudioError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _asset_response(asset)
+
+
+@router.post("/export-lottie", response_model=MediaAssetResponse)
+async def export_lottie(
+    payload: MediaExportLottieRequest,
+    service=Depends(get_media_generation_service),
+) -> MediaAssetResponse:
+    try:
+        asset = service.export_lottie(
             asset_ids=payload.asset_ids,
             project_id=payload.project_id,
             run_id=payload.run_id,

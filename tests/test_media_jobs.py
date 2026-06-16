@@ -57,6 +57,40 @@ class MediaJobTests(unittest.TestCase):
         path = self.service.resolve_asset_path(gif.asset_id)
         self.assertTrue(path.is_file())
 
+    def test_export_lottie(self) -> None:
+        ids = [
+            self.service.generate_image(prompt=f"l{i}", width=128, height=128, provider="stub").asset.asset_id
+            for i in range(3)
+        ]
+        lottie = self.service.export_lottie(asset_ids=ids, fps=4, width=128)
+        self.assertEqual(lottie.mime, "application/json")
+        path = self.service.resolve_asset_path(lottie.asset_id)
+        self.assertTrue(path.is_file())
+        payload = path.read_text(encoding="utf-8")
+        self.assertIn('"layers"', payload)
+        self.assertIn('"assets"', payload)
+
+    def test_fal_image_url_public_base(self) -> None:
+        service = MediaGenerationService(
+            asset_store=MediaAssetStore(self._tmp.name),
+            enabled=True,
+            image_provider_name="stub",
+            jobs_db_path=f"{self._tmp.name}/jobs2.db",
+            media_public_base_url="https://media.example.com",
+        )
+        img = service.generate_image(prompt="hero", width=64, height=64, provider="stub")
+        source = service._store.get_asset(img.asset.asset_id)
+        self.assertIsNotNone(source)
+        image_path = service._store.resolve_path(source)
+        url = service._resolve_fal_image_url(
+            source_asset_id=img.asset.asset_id,
+            image_path=image_path,
+        )
+        self.assertEqual(
+            url,
+            f"https://media.example.com/api/media/assets/{img.asset.asset_id}/file",
+        )
+
     @unittest.skipUnless(ffmpeg_available(), "ffmpeg required")
     def test_run_storyboard_short(self) -> None:
         if not STORYBOARD_EXAMPLE.is_file():

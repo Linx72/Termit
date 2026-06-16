@@ -356,6 +356,23 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
             },
         },
     },
+    "export_lottie": {
+        "type": "function",
+        "function": {
+            "name": "export_lottie",
+            "description": "Export Lottie JSON animation from PNG asset_ids.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "asset_ids": {"type": "array", "items": {"type": "string"}},
+                    "project_id": {"type": "string"},
+                    "fps": {"type": "integer"},
+                    "width": {"type": "integer"},
+                },
+                "required": ["asset_ids"],
+            },
+        },
+    },
     "run_storyboard": {
         "type": "function",
         "function": {

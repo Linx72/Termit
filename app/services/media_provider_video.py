@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import mimetypes
 import subprocess
 import time
 from dataclasses import dataclass
@@ -103,6 +104,37 @@ class FalVideoProvider:
     @property
     def available(self) -> bool:
         return bool(self._api_key)
+
+    def upload_local_image(self, image_path: Path) -> str:
+        """Upload a local image to fal CDN and return a public URL for I2V."""
+        if not self._api_key:
+            raise MediaVideoError("FAL_KEY is not configured.")
+        if not image_path.is_file():
+            raise MediaVideoError(f"Image not found: {image_path}")
+        mime = mimetypes.guess_type(str(image_path))[0] or "application/octet-stream"
+        headers = {"Authorization": f"Key {self._api_key}"}
+        upload_urls = (
+            "https://fal.run/storage/upload",
+            "https://rest.alpha.fal.ai/storage/upload",
+        )
+        last_error = ""
+        with httpx.Client(timeout=120.0) as client:
+            for upload_url in upload_urls:
+                with image_path.open("rb") as handle:
+                    response = client.post(
+                        upload_url,
+                        headers=headers,
+                        files={"file": (image_path.name, handle, mime)},
+                    )
+                if response.status_code < 400:
+                    body = response.json()
+                    url = body.get("url") or body.get("file_url")
+                    if url:
+                        return str(url)
+                    last_error = f"Fal upload missing url: {response.text[:200]}"
+                    continue
+                last_error = f"Fal upload {response.status_code}: {response.text[:200]}"
+        raise MediaVideoError(last_error or "Fal upload failed")
 
     def render_image_to_video(
         self,

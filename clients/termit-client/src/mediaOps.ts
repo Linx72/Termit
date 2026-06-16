@@ -88,6 +88,21 @@ export async function listBrandKits(client: TermitClient): Promise<BrandKit[]> {
   return client.requestMedia<BrandKit[]>("/api/media/brand-kits");
 }
 
+export async function exportMediaLottie(
+  client: TermitClient,
+  body: {
+    asset_ids: string[];
+    project_id?: string;
+    fps?: number;
+    width?: number;
+  },
+): Promise<MediaAsset> {
+  return client.requestMedia<MediaAsset>("/api/media/export-lottie", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function mediaAssetFileUrl(client: TermitClient, assetId: string): string {
   return `${client.baseUrl}/api/media/assets/${encodeURIComponent(assetId)}/file`;
 }

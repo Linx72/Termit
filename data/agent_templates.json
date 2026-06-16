@@ -377,6 +377,7 @@
       "tts_generate",
       "transcribe_media",
       "export_gif",
+      "export_lottie",
       "vision_qa_media",
       "list_media_assets"
     ],

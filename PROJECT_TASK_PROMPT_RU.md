@@ -328,6 +328,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** после `docker compose up` один прогон `./scripts/hosted_smoke.sh` зелёный; auth profile проверяется с `TERMIT_HOSTED_AUTH_EXPECT=true`.
 
+### Следующий этап (0.4.2): Media Studio Fal I2V + Lottie
+
+- [x] Fal I2V: `TERMIT_MEDIA_PUBLIC_BASE_URL` или upload в fal CDN (`FalVideoProvider.upload_local_image`)
+- [x] `POST /api/media/export-lottie` + agent tool `export_lottie`
+- [x] Desktop Media Studio: кнопка «Экспорт Lottie»
+
+**DoD:** `render_video` с `provider=fal` работает при `FAL_KEY` + public URL или CDN upload; Lottie JSON из PNG sequence; тесты `test_media_jobs` зелёные.
+
 ---
 
 ## Порядок выполнения

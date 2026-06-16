@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.2] - 2026-06-17
+
+### Added
+- Fal I2V public URL/CDN upload + Lottie export
+
+
 ## [0.4.1] - 2026-06-16
 
 ### Added

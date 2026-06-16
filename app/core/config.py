@@ -286,6 +286,7 @@ class Settings:
     media_jobs_db_path: str = "./data/media/media_jobs.db"
     media_i2v_provider: str = "stub"
     media_i2v_cost_usd: float = 0.50
+    media_public_base_url: str = ""
     media_brand_kits_dir: str = "./data/media/brand_kits"
     media_eval_scenarios_path: str = "./data/eval_scenarios_media.json"
     openai_api_key: str = ""
@@ -742,6 +743,7 @@ def get_settings() -> Settings:
         media_jobs_db_path=os.getenv("TERMIT_MEDIA_JOBS_DB_PATH", "./data/media/media_jobs.db"),
         media_i2v_provider=os.getenv("TERMIT_MEDIA_I2V_PROVIDER", "stub"),
         media_i2v_cost_usd=max(0.0, float(os.getenv("TERMIT_MEDIA_I2V_COST_USD", "0.50"))),
+        media_public_base_url=os.getenv("TERMIT_MEDIA_PUBLIC_BASE_URL", "").strip().rstrip("/"),
         media_brand_kits_dir=os.getenv("TERMIT_MEDIA_BRAND_KITS_DIR", "./data/media/brand_kits"),
         media_eval_scenarios_path=os.getenv(
             "TERMIT_MEDIA_EVAL_SCENARIOS_PATH",

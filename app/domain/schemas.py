@@ -1952,6 +1952,14 @@ class MediaExportGifRequest(BaseModel):
     width: int = Field(default=480, ge=64, le=1920)
 
 
+class MediaExportLottieRequest(BaseModel):
+    asset_ids: list[str] = Field(min_length=1)
+    project_id: str = "default"
+    run_id: Optional[str] = None
+    fps: int = Field(default=8, ge=1, le=60)
+    width: int = Field(default=480, ge=64, le=1920)
+
+
 class MediaStoryboardRunRequest(BaseModel):
     storyboard_path: Optional[str] = None
     storyboard: Optional[dict[str, object]] = None

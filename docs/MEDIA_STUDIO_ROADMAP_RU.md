@@ -23,6 +23,7 @@
 | POST | `/api/media/render-video` |
 | GET | `/api/media/jobs/{id}` |
 | POST | `/api/media/export-gif` |
+| POST | `/api/media/export-lottie` |
 | POST | `/api/media/run-storyboard` |
 | GET | `/api/media/brand-kits` |
 | GET | `/api/media/assets` |
@@ -34,6 +35,7 @@ TERMIT_MEDIA_ENABLED=true
 TERMIT_FFMPEG_PATH=ffmpeg
 FAL_KEY=   # optional; local stub I2V by default
 TERMIT_MEDIA_I2V_PROVIDER=stub
+TERMIT_MEDIA_PUBLIC_BASE_URL=   # optional; public base for Fal I2V asset URLs
 ```
 
 ## Tests
@@ -45,7 +47,7 @@ python3 -m unittest discover -s tests -p 'test_eval*.py' -q  # includes MS scena
 
 ## Future (optional)
 
-- Fal I2V with public image URL upload
-- Lottie export path
+- ~~Fal I2V with public image URL upload~~ — `TERMIT_MEDIA_PUBLIC_BASE_URL` or Fal CDN upload (0.4.2)
+- ~~Lottie export path~~ — `POST /api/media/export-lottie`, tool `export_lottie` (0.4.2)
 - ~~Human approve gate in Desktop before cloud spend~~ — Desktop confirm UI on HTTP 428 (0.3.9)
 - ~~OTEL spans per media tool~~ — `media.*` spans + `/api/platform/runs/{id}/spans/otel` (0.4.0)
