@@ -5,17 +5,27 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  schedule:
+    - cron: "20 2 * * *"
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      PYTHONWARNINGS: "error::ResourceWarning"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+      - name: OSS license/IP guardrail check
+        run: python3 scripts/check_oss_guardrail.py
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
@@ -32,21 +42,59 @@ jobs:
             curl -sf http://127.0.0.1:8765/health && break
             sleep 1
           done
-          ./scripts/smoke_http.sh
+          ./scripts/smoke_http_core.sh
+      - name: Extended HTTP smoke on main
+        if: github.ref_name == 'main' || github.ref_name == 'master'
+        run: ./scripts/smoke_http_extended.sh
 
-      - name: Eval suite CI gate
+      - name: Eval fast gate (PR/main)
         env:
-          TERMIT_EVAL_MIN_PASS_RATE: "0.95"
-          TERMIT_EVAL_CI_LIMIT: "53"
+          TERMIT_EVAL_GATE_TIER: "fast"
         run: |
           curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
             -H 'Content-Type: application/json' \
             -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
             | python3 scripts/eval_ci_gate.py
-          curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
-            -H 'Content-Type: application/json' \
-            -d '{"limit":53,"persist_report":false}' \
-            | python3 scripts/eval_ci_gate.py
+      - name: Orchestration retry-loop eval slice
+        env:
+          TERMIT_ORCH_SPIKE_MIN_PASS_RATE: "0.00"
+        run: |
+          python3 scripts/eval_orchestration_spike.py \
+            --prompts-file data/eval_scenarios_orchestration.json \
+            --max-prompts 3 \
+            --timeout-seconds 120 \
+            --min-pass-rate "${TERMIT_ORCH_SPIKE_MIN_PASS_RATE}" \
+            --output-file /tmp/orch_eval_report.json \
+            --append-report-file data/orchestration_eval_reports.jsonl
+      - name: Configure orchestration gate thresholds
+        run: |
+          # GitHub-hosted runners have no LLM provider keys; validate report shape only.
+          # Strict thresholds (0.30/0.50) belong to local release / stage1-weekly with providers.
+          echo "TERMIT_ORCH_DEEP_MIN_PASS_RATE=0.00" >> "$GITHUB_ENV"
+          echo "TERMIT_ORCH_DEEP_MIN_RETRY_SUCCESS_RATE=0.00" >> "$GITHUB_ENV"
+          echo "TERMIT_ORCH_RELEASE_MIN_PASS_RATE=0.00" >> "$GITHUB_ENV"
+          echo "TERMIT_ORCH_RELEASE_MIN_RETRY_SUCCESS_RATE=0.00" >> "$GITHUB_ENV"
+          echo "TERMIT_ORCH_GATE_MIN_TOTAL=1" >> "$GITHUB_ENV"
+      - name: Orchestration deep gate
+        env:
+          TERMIT_ORCH_GATE_TIER: "deep"
+          TERMIT_ORCH_MIN_PASS_RATE: ${{ env.TERMIT_ORCH_DEEP_MIN_PASS_RATE }}
+          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: ${{ env.TERMIT_ORCH_DEEP_MIN_RETRY_SUCCESS_RATE }}
+          TERMIT_ORCH_MIN_TOTAL: ${{ env.TERMIT_ORCH_GATE_MIN_TOTAL }}
+        run: cat /tmp/orch_eval_report.json | python3 scripts/eval_orchestration_gate.py
+      - name: Orchestration release gate
+        env:
+          TERMIT_ORCH_GATE_TIER: "release"
+          TERMIT_ORCH_MIN_PASS_RATE: ${{ env.TERMIT_ORCH_RELEASE_MIN_PASS_RATE }}
+          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: ${{ env.TERMIT_ORCH_RELEASE_MIN_RETRY_SUCCESS_RATE }}
+          TERMIT_ORCH_MIN_TOTAL: ${{ env.TERMIT_ORCH_GATE_MIN_TOTAL }}
+        run: cat /tmp/orch_eval_report.json | python3 scripts/eval_orchestration_gate.py
+      - name: Upload orchestration eval report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestration-eval-report
+          path: /tmp/orch_eval_report.json
+          if-no-files-found: error
 
   termit-shell-smoke:
     runs-on: macos-latest
@@ -66,3 +114,145 @@ jobs:
           test -f clients/termit-shell/release/TermitShell.app/Contents/Resources/docs/pdf/TERMIT_HELP_RU.pdf
       - name: Runtime smoke tests for shell bridge
         run: python3 -m unittest tests.test_termit_shell_runtime_smoke -v
+
+  nightly-quality-gates:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      PYTHONWARNINGS: "error::ResourceWarning"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+      - name: Start API server for nightly gates
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8765 &
+          for i in $(seq 1 45); do
+            curl -sf http://127.0.0.1:8765/health && break
+            sleep 1
+          done
+      - name: Extended release smoke
+        env:
+          TERMIT_SMOKE_REQUIRE_SERVER: "1"
+          # Pass-rate only on CI (no cloud judge/API keys). Full release tier
+          # (quality + cloud_judge_coverage) is for local/manual pre-release.
+          TERMIT_EVAL_MIN_PASS_RATE: "0.95"
+        run: ./scripts/release_smoke_extended.sh
+      - name: Nightly eval deep gate
+        env:
+          TERMIT_EVAL_GATE_TIER: "deep"
+        run: |
+          curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
+            -H 'Content-Type: application/json' \
+            -d '{"limit":53,"persist_report":false}' \
+            | tee /tmp/eval_current_nightly.json \
+            | python3 scripts/eval_ci_gate.py
+      - name: Nightly eval regression gate
+        run: |
+          python3 scripts/eval_regression_report.py \
+            --baseline data/eval_baseline_release.json \
+            --current /tmp/eval_current_nightly.json \
+            --max-pass-rate-drop 0.05
+      - name: Nightly flaky-watch report
+        run: |
+          python3 scripts/flaky_watch_report.py \
+            --suites tests.test_agents_api tests.test_platform_e2e \
+            --iterations 5 \
+            --output /tmp/flaky_watch_report.json \
+            --markdown-output /tmp/flaky_watch_report.md \
+            --fail-on-failure
+      - name: Nightly unstable integration suites
+        env:
+          TERMIT_RUN_UNSTABLE_INTEGRATION: "1"
+        run: |
+          python -m unittest tests.test_agents_api tests.test_platform_e2e -v
+      - name: Fetch previous flaky-watch artifact
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 scripts/flaky_watch_fetch_baseline.py \
+            --token "${GITHUB_TOKEN}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --artifact-name flaky-watch-nightly \
+            --output-json /tmp/flaky_watch_previous.json \
+            --output-zip /tmp/flaky-watch-previous.zip \
+            --status-path /tmp/flaky_watch_baseline_status.txt \
+            --note-path /tmp/flaky_watch_baseline_note.txt
+      - name: Nightly flaky-watch trend
+        run: |
+          BASELINE_STATUS="$(tr -d '\n' < /tmp/flaky_watch_baseline_status.txt 2>/dev/null || echo unknown)"
+          BASELINE_NOTE="$(tr '\n' ' ' < /tmp/flaky_watch_baseline_note.txt 2>/dev/null || true)"
+          if [ -f /tmp/flaky_watch_previous.json ]; then
+            python3 scripts/flaky_watch_trend.py \
+              --current /tmp/flaky_watch_report.json \
+              --baseline /tmp/flaky_watch_previous.json \
+              --baseline-status "${BASELINE_STATUS}" \
+              --baseline-note "${BASELINE_NOTE}" \
+              --output /tmp/flaky_watch_trend.json \
+              --markdown-output /tmp/flaky_watch_trend.md
+          else
+            python3 scripts/flaky_watch_trend.py \
+              --current /tmp/flaky_watch_report.json \
+              --baseline-status "${BASELINE_STATUS}" \
+              --baseline-note "${BASELINE_NOTE}" \
+              --output /tmp/flaky_watch_trend.json \
+              --markdown-output /tmp/flaky_watch_trend.md
+          fi
+      - name: Nightly flaky trend regression gate
+        run: |
+          # Runbook: docs/NIGHTLY_FLAKY_GATE_RUNBOOK_RU.md
+          NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          python3 scripts/flaky_watch_gate.py \
+            --trend /tmp/flaky_watch_trend.json \
+            --critical-suites tests.test_agents_api tests.test_platform_e2e \
+            --overrides data/flaky_watch_gate_overrides.json \
+            --now-utc "${NOW_UTC}"
+      - name: Nightly orchestration spike
+        env:
+          TERMIT_ORCH_SPIKE_MIN_PASS_RATE: "0.00"
+        run: |
+          python3 scripts/eval_orchestration_spike.py \
+            --prompts-file data/eval_scenarios_orchestration.json \
+            --max-prompts 10 \
+            --timeout-seconds 180 \
+            --min-pass-rate "${TERMIT_ORCH_SPIKE_MIN_PASS_RATE}" \
+            --output-file /tmp/orch_eval_report_nightly.json \
+            --append-report-file data/orchestration_eval_reports.jsonl
+      - name: Nightly orchestration deep gate
+        env:
+          TERMIT_ORCH_GATE_TIER: "deep"
+          # GitHub runners have no LLM provider keys; gate validates report shape only.
+          TERMIT_ORCH_MIN_PASS_RATE: "0.00"
+          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: "0.00"
+          TERMIT_ORCH_MIN_TOTAL: "3"
+        run: cat /tmp/orch_eval_report_nightly.json | python3 scripts/eval_orchestration_gate.py
+      - name: Nightly orchestration release gate
+        env:
+          TERMIT_ORCH_GATE_TIER: "release"
+          TERMIT_ORCH_MIN_PASS_RATE: "0.00"
+          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: "0.00"
+          TERMIT_ORCH_MIN_TOTAL: "3"
+        run: cat /tmp/orch_eval_report_nightly.json | python3 scripts/eval_orchestration_gate.py
+      - name: Upload nightly orchestration report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orchestration-eval-report-nightly
+          path: /tmp/orch_eval_report_nightly.json
+          if-no-files-found: error
+      - name: Upload nightly flaky-watch artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flaky-watch-nightly
+          path: |
+            /tmp/flaky_watch_report.json
+            /tmp/flaky_watch_report.md
+            /tmp/flaky_watch_trend.json
+            /tmp/flaky_watch_trend.md
+          if-no-files-found: error

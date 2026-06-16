@@ -33,7 +33,7 @@ def classify_agent_outcome(
         return OUTCOME_BLOCKED_POLICY
     if fc in {"run_timeout", "external_error", "provider_error"}:
         return OUTCOME_BLOCKED_EXTERNAL
-    if fc in {"verification_error", "tool_error", "parse_error"}:
+    if fc in {"verification_error", "tool_error", "parse_error", "step_limit"}:
         return OUTCOME_PARTIAL
 
     event_text = " ".join(

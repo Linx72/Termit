@@ -20,6 +20,17 @@ class EvalCiGateTests(unittest.TestCase):
         ok, _ = evaluate_ci_gate(pass_rate=1.0, min_rate=0.95, total=0)
         self.assertFalse(ok)
 
+    def test_fails_when_cloud_coverage_is_below_minimum(self) -> None:
+        ok, message = evaluate_ci_gate(
+            pass_rate=0.99,
+            min_rate=0.95,
+            total=20,
+            cloud_judge_coverage=0.5,
+            min_cloud_judge_coverage=1.0,
+        )
+        self.assertFalse(ok)
+        self.assertIn("cloud_judge_coverage", message)
+
 
 if __name__ == "__main__":
     unittest.main()

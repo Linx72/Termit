@@ -45,6 +45,8 @@ EVAL_STUB_PAGES: dict[str, tuple[int, str, str]] = {
 
 _EVAL_PATCH_FIXTURE = "data/eval_fixtures/patch_sample.txt"
 _EVAL_PATCH_BASELINE = "hello world\n"
+_EVAL_HUMANEVAL_FIXTURE = "data/eval_fixtures/humaneval_add.py"
+_EVAL_HUMANEVAL_BASELINE = "def add(a: int, b: int) -> int:\n    return a - b\n"
 
 
 @dataclass(frozen=True)
@@ -282,6 +284,18 @@ class EvalService:
             for item in results
             if item.get("quality_score") is not None
         ]
+        judge_models = [
+            str(item.get("judge_model", "")).strip().lower()
+            for item in results
+            if item.get("judge_model") is not None
+        ]
+        cloud_judge_hits = sum(1 for name in judge_models if name and name != "heuristic")
+        cloud_judge_coverage = (
+            round(cloud_judge_hits / len(judge_models), 4)
+            if judge_models
+            else 0.0
+        )
+        report["cloud_judge_coverage"] = cloud_judge_coverage
         if quality_scores and self._quality_judge is not None:
             report.update(self._quality_judge.summarize_scores(quality_scores))
         if persist_report and self._report_store is not None:
@@ -476,6 +490,8 @@ class EvalService:
             raise ValueError("tool_patch_verify runner requires verify_command.")
         if scenario.patch_path == _EVAL_PATCH_FIXTURE:
             self._reset_patch_fixture()
+        elif scenario.patch_path == _EVAL_HUMANEVAL_FIXTURE:
+            self._reset_humaneval_fixture()
         hunks = []
         if scenario.patch_old or scenario.patch_new:
             hunks = [ApplyPatchHunk(old_text=scenario.patch_old, new_text=scenario.patch_new)]
@@ -491,6 +507,22 @@ class EvalService:
         if patch_result.risk_level.value == "blocked":
             return patch_result.path, False, "safety_block", 0, "semi-auto"
         if not patch_result.applied and not scenario.patch_dry_run:
+            verify_result = self._tooling.execute_command(
+                ExecuteCommandRequest(
+                    command=scenario.verify_command,
+                    path=scenario.tool_path or ".",
+                    dry_run=False,
+                    confirmed=True,
+                )
+            )
+            if verify_result.executed and verify_result.exit_code == 0 and not scenario.expect_verify_failure:
+                return (
+                    f"{patch_result.path}|{verify_result.command}",
+                    True,
+                    None,
+                    1,
+                    "semi-auto",
+                )
             return patch_result.path, False, "verification_error", 1, "semi-auto"
 
         verify_result = self._tooling.execute_command(
@@ -595,6 +627,13 @@ class EvalService:
         target = self._tooling.root / _EVAL_PATCH_FIXTURE
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(_EVAL_PATCH_BASELINE, encoding="utf-8")
+
+    def _reset_humaneval_fixture(self) -> None:
+        if self._tooling is None:
+            return
+        target = self._tooling.root / _EVAL_HUMANEVAL_FIXTURE
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_EVAL_HUMANEVAL_BASELINE, encoding="utf-8")
 
     def _run_web_scenario(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
         url = scenario.web_url

@@ -17,7 +17,12 @@ from app.domain.schemas import (
     FinetuneStage1RunRequest,
     FinetuneTrajectoryExportRequest,
 )
-from app.services.finetune_dpo_export import build_dpo_pairs, write_dpo_jsonl
+from app.services.finetune_dpo_export import (
+    DPO_CONTRACT_VERSION,
+    build_dpo_pairs,
+    validate_dpo_rows,
+    write_dpo_jsonl,
+)
 from app.services.finetune_trainer_service import FinetuneTrainerService
 from app.services.finetune_dataset_curator import (
     CuratorConfig,
@@ -75,6 +80,7 @@ class FinetuneService:
         eval_report_file_path: str = "./data/eval_reports.jsonl",
         repo_profiles_path: str = "./data/repo_model_profiles.json",
         pipelines_path: str = "./data/finetune/pipelines.json",
+        cycle_events_path: str = "./data/finetune/stage1_cycle_events.jsonl",
         pipeline_max_concurrency: int = 1,
         pipeline_stuck_timeout_seconds: int = 3600,
         trainer: Optional[FinetuneTrainerService] = None,
@@ -98,6 +104,7 @@ class FinetuneService:
         self.eval_report_file_path = Path(eval_report_file_path)
         self.repo_profiles_path = Path(repo_profiles_path)
         self.pipelines_path = Path(pipelines_path)
+        self.cycle_events_path = Path(cycle_events_path)
         self._pipeline_max_concurrency = max(1, pipeline_max_concurrency)
         self._pipeline_stuck_timeout_seconds = max(60, pipeline_stuck_timeout_seconds)
         self._trainer = trainer
@@ -113,11 +120,13 @@ class FinetuneService:
         self._max_train_regression = max(0.0, max_train_regression)
         self._shadow_traffic_percent = max(0.0, min(shadow_traffic_percent, 100.0))
         self._lock = Lock()
+        self._cycle_lock = Lock()
         self._drain_lock = Lock()
         self.datasets_dir.mkdir(parents=True, exist_ok=True)
         self.jobs_path.parent.mkdir(parents=True, exist_ok=True)
         self.adapters_path.parent.mkdir(parents=True, exist_ok=True)
         self.pipelines_path.parent.mkdir(parents=True, exist_ok=True)
+        self.cycle_events_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.jobs_path.exists():
             self._write_jobs([])
         if not self.adapters_path.exists():
@@ -250,6 +259,12 @@ class FinetuneService:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         dataset_path = self.datasets_dir / f"{slug}_dpo_{timestamp}.jsonl"
         write_dpo_jsonl(dataset_path, pairs)
+        contract = validate_dpo_rows(
+            [dict(item) for item in pairs],
+            min_text_chars=payload.min_chosen_chars,
+        )
+        if not bool(contract.get("valid", False)):
+            raise ValueError("DPO dataset contract validation failed after export.")
         return {
             "name": payload.name,
             "dataset_path": str(dataset_path),
@@ -257,7 +272,53 @@ class FinetuneService:
             "format": "dpo_jsonl",
             "negative_count": len(negatives),
             "positive_pool": len(positives),
+            "contract_version": DPO_CONTRACT_VERSION,
+            "contract_valid": bool(contract.get("valid", False)),
+            "contract_stats": contract,
         }
+
+    def validate_dpo_dataset(
+        self,
+        *,
+        dataset_path: str,
+        min_text_chars: int = 4,
+    ) -> dict[str, object]:
+        path = Path(dataset_path)
+        if not path.exists():
+            raise ValueError(f"DPO dataset file missing: {dataset_path}")
+        rows = self._read_jsonl_rows(path)
+        contract = validate_dpo_rows(rows, min_text_chars=min_text_chars)
+        return {"dataset_path": str(path), **contract}
+
+    def train_dpo_dataset(
+        self,
+        *,
+        dataset_path: str,
+        base_model: str,
+        output_model: Optional[str] = None,
+        trainer_mode: Optional[str] = None,
+        repo_profile_id: Optional[str] = None,
+        min_text_chars: int = 4,
+    ) -> dict[str, object]:
+        if self._trainer is None:
+            raise ValueError("Finetune trainer is not configured.")
+        contract = self.validate_dpo_dataset(dataset_path=dataset_path, min_text_chars=min_text_chars)
+        if not contract.get("valid", False):
+            raise ValueError("DPO dataset contract is invalid; training is blocked.")
+        mode = (trainer_mode or "hf_dpo").strip()
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        train_result = self._trainer.train_dataset(
+            dataset_path=dataset_path,
+            base_model=base_model,
+            output_model=output_model,
+            trainer_mode=mode,
+            job_id=f"dpo_{stamp}",
+            repo_profile_id=repo_profile_id,
+        )
+        payload = train_result.to_dict()
+        payload["contract"] = contract
+        payload["dataset_path"] = dataset_path
+        return payload
 
     def create_job(
         self,
@@ -729,6 +790,9 @@ class FinetuneService:
         signal_path = self._training_signal_store.file_path
         if signal_path.exists():
             signal_count = sum(1 for line in signal_path.read_text(encoding="utf-8").splitlines() if line.strip())
+        cycle_events = self._load_cycle_events(limit=safe_limit)
+        completed_cycles = sum(1 for event in cycle_events if str(event.get("status", "")) == "completed")
+        cycle_success_rate = round(completed_cycles / len(cycle_events), 4) if cycle_events else 0.0
 
         return {
             "stage1_runs": runs[:safe_limit],
@@ -736,6 +800,8 @@ class FinetuneService:
             "datasets_count": len(datasets),
             "training_signals_count": signal_count,
             "eval_trend": list(reversed(eval_trend)),
+            "cycle_events": cycle_events,
+            "cycle_success_rate": cycle_success_rate,
             "regression_gate_enabled": self._regression_gate_enabled,
             "shadow_traffic_percent": self._shadow_traffic_percent,
             "tuning_report": self.tuning_report(),
@@ -1309,9 +1375,9 @@ class FinetuneService:
                 baseline_report = baseline_runner(payload)
             result = self.run_stage1_pipeline(payload, baseline_report=baseline_report)
             result = self._maybe_auto_train_pipeline(run_id, result, payload)
-            self._set_pipeline_run_completed(run_id, result)
+            self._set_pipeline_run_completed(run_id, result, payload=payload)
         except Exception as exc:  # noqa: BLE001
-            self._set_pipeline_run_failed(run_id, str(exc))
+            self._set_pipeline_run_failed(run_id, str(exc), payload=payload if "payload" in locals() else None)
         finally:
             self.drain_stage1_pipeline_queue(baseline_runner)
 
@@ -1575,6 +1641,21 @@ class FinetuneService:
             jobs.append(FinetuneJobRecord(**item))
         return jobs
 
+    @staticmethod
+    def _read_jsonl_rows(path: Path) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(item, dict):
+                rows.append(item)
+        return rows
+
     def _write_jobs(self, jobs: list[FinetuneJobRecord]) -> None:
         payload = {"jobs": [item.__dict__ for item in jobs]}
         self.jobs_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -1683,19 +1764,34 @@ class FinetuneService:
             self._write_pipeline_runs(runs)
             return claimed
 
-    def _set_pipeline_run_completed(self, run_id: str, result: dict[str, object]) -> None:
+    def _set_pipeline_run_completed(
+        self,
+        run_id: str,
+        result: dict[str, object],
+        payload: Optional[FinetuneStage1RunRequest] = None,
+    ) -> None:
+        enriched_result = dict(result)
+        if payload is not None:
+            enriched_result["request_name"] = payload.name
+            enriched_result["request_base_model"] = payload.base_model
         self._update_pipeline_run(
             run_id,
             status="completed",
-            result=result,
+            result=enriched_result,
             append_stage={
                 "stage": "complete",
                 "status": "completed",
                 "detail": "Pipeline execution completed.",
             },
         )
+        self._append_cycle_event(run_id, status="completed", result=enriched_result)
 
-    def _set_pipeline_run_failed(self, run_id: str, error: str) -> None:
+    def _set_pipeline_run_failed(
+        self,
+        run_id: str,
+        error: str,
+        payload: Optional[FinetuneStage1RunRequest] = None,
+    ) -> None:
         self._update_pipeline_run(
             run_id,
             status="failed",
@@ -1706,6 +1802,76 @@ class FinetuneService:
                 "detail": error[:500],
             },
         )
+        self._append_cycle_event(
+            run_id,
+            status="failed",
+            result={
+                "error": error,
+                "request_name": payload.name if payload is not None else "",
+                "request_base_model": payload.base_model if payload is not None else "",
+            },
+        )
+
+    def _append_cycle_event(self, run_id: str, *, status: str, result: dict[str, object]) -> None:
+        training = result.get("training")
+        if not isinstance(training, dict):
+            training = {}
+        post_eval = result.get("post_eval")
+        if not isinstance(post_eval, dict):
+            post_eval = {}
+        adapter_info = training.get("adapter")
+        adapter_status = "none"
+        shadow_percent = 0.0
+        if isinstance(adapter_info, dict):
+            if adapter_info.get("status") == "shadow":
+                adapter_status = "shadow"
+                shadow_percent = float(adapter_info.get("shadow_traffic_percent", 0.0) or 0.0)
+            elif adapter_info.get("model"):
+                adapter_status = "promoted"
+        elif training.get("deferred_registration"):
+            adapter_status = "deferred"
+        regression = training.get("regression")
+        regression_action = ""
+        if isinstance(regression, dict):
+            regression_action = str(regression.get("action", ""))
+        event = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "run_id": run_id,
+            "status": status,
+            "request_name": str(result.get("request_name", "") or result.get("pipeline_id", "")),
+            "request_base_model": str(result.get("request_base_model", "")),
+            "dataset_path": str((result.get("dataset") or {}).get("dataset_path", "")),
+            "sample_count": int((result.get("dataset") or {}).get("sample_count", 0) or 0),
+            "baseline_pass_rate": float(result.get("baseline_pass_rate", 0.0) or 0.0),
+            "training_status": str(training.get("status", "")),
+            "post_eval_pass_rate": float(post_eval.get("pass_rate", 0.0) or 0.0),
+            "adapter_status": adapter_status,
+            "shadow_traffic_percent": shadow_percent,
+            "regression_action": regression_action,
+            "error": str(result.get("error", ""))[:500],
+        }
+        with self._cycle_lock:
+            with self.cycle_events_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    def _load_cycle_events(self, *, limit: int) -> list[dict[str, object]]:
+        if not self.cycle_events_path.exists():
+            return []
+        with self._cycle_lock:
+            lines = self.cycle_events_path.read_text(encoding="utf-8").splitlines()
+        events: list[dict[str, object]] = []
+        for line in lines[-limit:]:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                events.append(payload)
+        events.reverse()
+        return events
 
     def _update_pipeline_run(
         self,

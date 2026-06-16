@@ -238,23 +238,23 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ### Трек 1 — Stability hardening (недели 1–2)
 
-- [ ] Закрыть источники `ResourceWarning` (unclosed sqlite connections) в runtime и тестах
-- [ ] Дожать флейки e2e для фоновых run (`running -> completed`)
-- [ ] Разделить unstable integration тесты в nightly-контур
+- [x] Закрыть источники `ResourceWarning` (unclosed sqlite connections) в runtime и тестах
+- [ ] Дожать флейки e2e для фоновых run (`running -> completed`) — unstable suites в nightly, SSE fallback в PR
+- [x] Разделить unstable integration тесты в nightly-контур
 
 **DoD:** 20 последовательных прогонов smoke/release smoke без критичных флейков.
 
 ### Трек 2 — Agent autonomy vNext (недели 2–4)
 
-- [ ] Усилить stop-conditions и recovery path в tool loop при деградации
-- [ ] Добавить policy-level fallback (constrained-plan + safe-exec)
-- [ ] Ввести явные outcome classes: success / partial / blocked-external / blocked-policy
+- [x] Усилить stop-conditions и recovery path в tool loop при деградации — typed `failure_class` на AgentLoopError
+- [x] Добавить policy-level fallback (constrained-plan + safe-exec)
+- [x] Ввести явные outcome classes: success / partial / blocked-external / blocked-policy
 
 **DoD:** рост completion-rate и снижение repeat/empty-final кейсов на типовых coding run.
 
 ### Трек 3 — Desktop product UX (недели 3–5)
 
-- [ ] Улучшить post-run follow-up в стиле next best action
+- [x] Улучшить post-run follow-up в стиле next best action — outcome-aware suggestions в desktop
 - [ ] Довести onboarding до first-run за < 2 минут
 - [ ] Вывести runtime status в UI (SLA, retries, active runs)
 
@@ -263,8 +263,8 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Трек 4 — Eval/quality 2.0 (недели 4–6)
 
 - [ ] Расширить parity-сценарии до 40+ (сложные multi-file/multi-step кейсы)
-- [ ] Развести quality gates: fast (PR), deep (nightly), release (обязательный)
-- [ ] Автоматизировать отчёт деградаций относительно предыдущего релиза
+- [x] Развести quality gates: fast (PR), deep (nightly), release (local/manual с cloud judge)
+- [x] Автоматизировать отчёт деградаций относительно предыдущего релиза — `scripts/eval_regression_report.py`
 
 **DoD:** каждый релиз проходит release gate; каждая регрессия имеет сценарий воспроизведения.
 
@@ -278,11 +278,11 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ### Следующий спринт (5–7 дней, immediate)
 
-1. [ ] Убрать unclosed sqlite warnings
-2. [ ] Стабилизировать `test_platform_e2e`/`test_agents_api` без тайминговых флейков
-3. [ ] Разделить release smoke на deterministic core и extended suite
-4. [ ] Добавить lifecycle summary в UI (completion/timeout/stale)
-5. [ ] Подготовить и выпустить `0.3.5` как stability release
+1. [x] Убрать unclosed sqlite warnings
+2. [x] Стабилизировать `test_platform_e2e`/`test_agents_api` без тайминговых флейков
+3. [x] Разделить release smoke на deterministic core и extended suite
+4. [x] Добавить lifecycle summary в UI (completion/timeout/stale)
+5. [x] Подготовить и выпустить `0.3.5` как stability release
 
 ---
 

@@ -68,6 +68,37 @@ class FinetuneTrainerServiceTests(unittest.TestCase):
             self.assertIn("unsloth_qlora_train.py", result.command or "")
             self.assertIn("dry-run", result.detail.lower())
 
+    def test_hf_dpo_mode_prepares_unsloth_dpo_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset = Path(tmp) / "dpo.jsonl"
+            dataset.write_text(
+                json.dumps(
+                    {
+                        "instruction": "Fix auth middleware",
+                        "input": "",
+                        "chosen": "Keep RBAC and add explicit error handling",
+                        "rejected": "Remove auth checks",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            trainer = FinetuneTrainerService(
+                modelfiles_dir=tmp,
+                adapters_dir=str(Path(tmp) / "adapters"),
+                trainer_mode="hf_dpo",
+                hf_dry_run=True,
+            )
+            result = trainer.train_dataset(
+                dataset_path=str(dataset),
+                base_model="ollama:deepseek-coder",
+                output_model="termit-ft-dpo",
+                job_id="hf-dpo-dry-run",
+            )
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(result.trainer_mode, "hf_dpo")
+            self.assertIn("unsloth_dpo_train.py", result.command or "")
+
     def test_build_modelfile_includes_adapter(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             adapters = Path(tmp) / "adapters" / "termit-core"

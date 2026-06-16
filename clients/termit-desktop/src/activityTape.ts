@@ -250,6 +250,55 @@ function tapeMarker(eventType: string): string {
 }
 
 /** Рекомендации после завершения run — текст + кликабельные follow-up команды. */
+function appendOutcomeFollowUps(
+  locale: "ru" | "en",
+  outcome: string | undefined | null,
+  actions: string[],
+  lines: string[]
+): void {
+  const normalized = (outcome ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return;
+  }
+  if (locale === "ru") {
+    lines.push("", `Класс исхода: \`${normalized}\`.`);
+    if (normalized === "blocked-policy") {
+      actions.unshift("Продолжи в safe mode: только read и patch с preview");
+      actions.unshift("Подтверди рискованную операцию или измени политику run");
+      return;
+    }
+    if (normalized === "blocked-external") {
+      actions.unshift("Проверь /api/providers/status и доступность модели, затем retry");
+      return;
+    }
+    if (normalized === "partial") {
+      actions.unshift("Доведи verify/tests до зелёного и закрой хвост задачи");
+      return;
+    }
+    if (normalized === "failed") {
+      actions.unshift("Сожми scope до минимального fix и перезапусти run");
+    }
+    return;
+  }
+  lines.push("", `Outcome class: \`${normalized}\`.`);
+  if (normalized === "blocked-policy") {
+    actions.unshift("Continue in safe mode — read-only and patch with preview");
+    actions.unshift("Approve the risky step or switch to a safer run policy");
+    return;
+  }
+  if (normalized === "blocked-external") {
+    actions.unshift("Check /api/providers/status and retry when the model is reachable");
+    return;
+  }
+  if (normalized === "partial") {
+    actions.unshift("Finish verify/tests and close the remaining task tail");
+    return;
+  }
+  if (normalized === "failed") {
+    actions.unshift("Shrink scope to a minimal fix and rerun");
+  }
+}
+
 export function buildCompletionSuggestions(
   locale: "ru" | "en",
   run: AgentRunRecord,
@@ -264,6 +313,7 @@ export function buildCompletionSuggestions(
   const hasPatch = events.some((ev) =>
     /apply_patch|write_file|patch/i.test(`${ev.event_type} ${ev.message ?? ""}`)
   );
+  const outcomeClass = run.outcome_class ?? undefined;
 
   if (locale === "ru") {
     const lines: string[] = ["### Итог", ""];
@@ -271,6 +321,7 @@ export function buildCompletionSuggestions(
 
     if (run.state === "failed") {
       lines.push("Задача завершилась с ошибкой. Смотрите ленту выполнения выше.");
+      appendOutcomeFollowUps(locale, outcomeClass, actions, lines);
       actions.push("Исправь ошибку из лога и повтори минимальный fix");
       actions.push("Покажи только diff и объясни причину падения");
       if (run.error) {
@@ -281,6 +332,7 @@ export function buildCompletionSuggestions(
 
     if (run.state === "awaiting_confirmation") {
       lines.push("Агент ждёт подтверждения опасной операции.");
+      appendOutcomeFollowUps(locale, "blocked-policy", actions, lines);
       actions.push("Продолжи без опасных команд, только read и patch с preview");
       return { text: lines.join("\n"), actions };
     }
@@ -290,6 +342,7 @@ export function buildCompletionSuggestions(
         ? run.response.trim().slice(0, 500) + (run.response.length > 500 ? "…" : "")
         : `Готово · статус: ${run.state}.`
     );
+    appendOutcomeFollowUps(locale, outcomeClass, actions, lines);
     lines.push("");
     lines.push("**Что можно сделать дальше:**");
 
@@ -316,6 +369,7 @@ export function buildCompletionSuggestions(
 
   if (run.state === "failed") {
     lines.push("The task failed. Review the activity tape above.");
+    appendOutcomeFollowUps(locale, outcomeClass, actions, lines);
     actions.push("Fix the error from the log with a minimal patch");
     actions.push("Explain the failure and show only the required diff");
     if (run.error) {
@@ -326,6 +380,7 @@ export function buildCompletionSuggestions(
 
   if (run.state === "awaiting_confirmation") {
     lines.push("The agent is awaiting human confirmation.");
+    appendOutcomeFollowUps(locale, "blocked-policy", actions, lines);
     actions.push("Continue without risky commands — read and patch with preview only");
     return { text: lines.join("\n"), actions };
   }
@@ -335,6 +390,7 @@ export function buildCompletionSuggestions(
       ? run.response.trim().slice(0, 500) + (run.response.length > 500 ? "…" : "")
       : `Done · state: ${run.state}.`
   );
+  appendOutcomeFollowUps(locale, outcomeClass, actions, lines);
   lines.push("");
   lines.push("**Suggested next steps:**");
 

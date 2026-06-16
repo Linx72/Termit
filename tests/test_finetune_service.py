@@ -13,6 +13,7 @@ from app.domain.schemas import (
     FinetuneTrajectoryExportRequest,
 )
 from app.services.finetune_service import FinetuneService
+from app.services.finetune_trainer_service import FinetuneTrainerService
 
 
 class FinetuneServiceTests(unittest.TestCase):
@@ -205,6 +206,7 @@ class FinetuneServiceTests(unittest.TestCase):
             jobs_path=str(root / "jobs.json"),
             adapters_path=str(root / "adapters.json"),
             pipelines_path=str(root / "pipelines.json"),
+            cycle_events_path=str(root / "stage1_cycle_events.jsonl"),
             feedback_file_path=str(feedback_path),
             task_sqlite_path=str(task_db),
             agent_run_sqlite_path=str(agent_db),
@@ -318,6 +320,57 @@ class FinetuneServiceTests(unittest.TestCase):
             )
             self.assertEqual(result["format"], "dpo_jsonl")
             self.assertGreaterEqual(result["pair_count"], 1)
+            self.assertTrue(result["contract_valid"])
+
+    def test_train_dpo_dataset_runs_hf_dpo_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = self._build_service(root)
+            from app.services.training_signal_store import TrainingSignalStore
+
+            instruction = "Fix verify command path"
+            store = TrainingSignalStore(
+                str(root / "training_signals.jsonl"),
+                min_output_chars=8,
+                enabled=True,
+            )
+            store.try_capture_tool_step(
+                run_id="dpo-pos-2",
+                step=1,
+                action="tool",
+                tool="apply_patch",
+                observation="Use repo root verify command to avoid cwd issues.",
+                instruction=instruction,
+                verified=True,
+            )
+            store.try_capture_negative_tool_step(
+                run_id="dpo-neg-2",
+                step=2,
+                action="tool",
+                tool="apply_patch",
+                observation="verify failed: command executed from wrong directory",
+                instruction=instruction,
+                reason="verify_failed",
+            )
+            service._training_signal_store = store
+            export = service.export_dpo_dataset(
+                FinetuneDpoExportRequest(name="dpo-train", min_pairs=1, min_chosen_chars=8)
+            )
+            service._trainer = FinetuneTrainerService(
+                modelfiles_dir=str(root / "modelfiles"),
+                adapters_dir=str(root / "adapters"),
+                trainer_mode="hf_dpo",
+                hf_dry_run=True,
+            )
+            train = service.train_dpo_dataset(
+                dataset_path=str(export["dataset_path"]),
+                base_model="ollama:deepseek-coder",
+                output_model="termit-dpo-ft",
+                trainer_mode="hf_dpo",
+                repo_profile_id="termit-core",
+            )
+            self.assertEqual(train["status"], "completed")
+            self.assertIn("unsloth_dpo_train.py", str(train.get("command", "")))
 
     def test_export_boosts_eval_passed_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -553,7 +606,8 @@ class FinetuneServiceTests(unittest.TestCase):
 
     def test_stage1_pipeline_queue_drain_completes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            service = self._build_service(Path(tmp))
+            root = Path(tmp)
+            service = self._build_service(root)
             queued = service.enqueue_stage1_pipeline(
                 FinetuneStage1RunRequest(
                     name="queued-drain",
@@ -577,6 +631,10 @@ class FinetuneServiceTests(unittest.TestCase):
             assert done is not None
             self.assertEqual(done["status"], "completed")
             self.assertIsNotNone(done["result"])
+            dashboard = service.training_dashboard(limit=5)
+            self.assertIn("cycle_events", dashboard)
+            self.assertGreaterEqual(len(dashboard["cycle_events"]), 1)
+            self.assertEqual(dashboard["cycle_events"][0]["status"], "completed")
 
     def test_stage1_pipeline_list_failed_filter(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

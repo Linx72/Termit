@@ -116,6 +116,19 @@ class ModelRouterTests(unittest.TestCase):
         self.assertIn("strong_local", tiers)
         self.assertIn("frontier_fallback", tiers)
 
+    def test_cost_aware_routing_prefers_cheaper_model_for_low_complexity(self) -> None:
+        settings = Settings(
+            **{
+                **build_settings().__dict__,
+                "default_model": "openai_compat:general",
+                "default_fallback_model": "ollama:general",
+                "routing_cost_aware_enabled": True,
+            }
+        )
+        router = ModelRouter(settings)
+        models = router.candidate_models(TaskType.general, message="hello")
+        self.assertEqual(models[0], "ollama:general")
+
 
 if __name__ == "__main__":
     unittest.main()

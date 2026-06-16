@@ -315,14 +315,35 @@ class OrchestrationPhaseResult(BaseModel):
     duration_ms: int = 0
 
 
+class OrchestrationActionObservation(BaseModel):
+    action: str
+    observation: str
+
+
 class OrchestrationRunResponse(BaseModel):
     run_id: str
     status: str
     plan_steps: list[str] = Field(default_factory=list)
     phases: list[OrchestrationPhaseResult] = Field(default_factory=list)
+    action_observation: list[OrchestrationActionObservation] = Field(default_factory=list)
     report: str
     executor_response: str = ""
     session_id: Optional[str] = None
+
+
+class OrchestrationMetricsResponse(BaseModel):
+    orchestration_runs_total: float = 0
+    coder_attempts_total: float = 0
+    coder_retry_runs_total: float = 0
+    coder_retry_success_runs_total: float = 0
+    reviewer_reject_total: float = 0
+    avg_coder_attempts: float = 0.0
+    coder_retry_run_rate: float = 0.0
+    coder_retry_success_rate: float = 0.0
+    openhands_contract_runs_total: float = 0
+    openhands_contract_actions_total: float = 0
+    orchestration_tool_loop_runs_total: float = 0
+    orchestration_tool_steps_total: float = 0
 
 
 class CrossPlatformStackInfo(BaseModel):
@@ -512,11 +533,29 @@ class AgentRunsMetricsResponse(BaseModel):
     tool_loop_verify_pass_rate: float = 0.0
     tool_loop_tool_success_rate: float = 0.0
     tool_loop_completion_rate: float = 0.0
+    orchestration_runs_total: float = 0.0
+    coder_attempts_total: float = 0.0
+    coder_retry_runs_total: float = 0.0
+    coder_retry_success_runs_total: float = 0.0
+    reviewer_reject_total: float = 0.0
+    avg_coder_attempts: float = 0.0
+    coder_retry_run_rate: float = 0.0
+    coder_retry_success_rate: float = 0.0
+    openhands_contract_runs_total: float = 0.0
+    openhands_contract_actions_total: float = 0.0
+    orchestration_tool_loop_runs_total: float = 0.0
+    orchestration_tool_steps_total: float = 0.0
     stale_queued_runs: int = 0
     stale_running_runs: int = 0
+    lifecycle_stale_total: int = 0
+    lifecycle_terminal_runs_total: int = 0
+    lifecycle_completed_runs_total: int = 0
+    lifecycle_timeout_runs_total: int = 0
+    lifecycle_completion_rate: float = 0.0
     max_queued_age_seconds: float = 0.0
     max_running_age_seconds: float = 0.0
     queue_stuck_timeout_seconds: int = 120
+    by_outcome_class: dict[str, int] = Field(default_factory=dict)
 
 
 class AgentRunsCleanupRequest(BaseModel):
@@ -533,6 +572,22 @@ class AgentRunsCleanupResponse(BaseModel):
     remaining_runs: int
     cancelled_stale_runs: int = 0
     stale_before: str = ""
+
+
+class OrchestrationEvalTrendPoint(BaseModel):
+    captured_at: str
+    pass_rate: float
+    retry_success_rate: float
+    total: int
+
+
+class OrchestrationEvalTrendResponse(BaseModel):
+    points: list[OrchestrationEvalTrendPoint] = Field(default_factory=list)
+
+
+class OrchestrationEvalReportListResponse(BaseModel):
+    reports: list[dict[str, object]] = Field(default_factory=list)
+    total: int = 0
 
 
 class MetricsSummaryResponse(BaseModel):
@@ -557,6 +612,7 @@ class MetricsSummaryResponse(BaseModel):
     task_success_rate: float
     automation_rate: float
     estimated_cost_total_usd: float
+    cost_per_successful_task_usd: float = 0.0
     model_usage: dict[str, int] = Field(default_factory=dict)
     failure_classes: dict[str, int] = Field(default_factory=dict)
     active_thresholds: MetricsActiveThresholds = Field(default_factory=MetricsActiveThresholds)
@@ -1165,6 +1221,26 @@ class FinetuneDpoExportResponse(BaseModel):
     format: str = "dpo_jsonl"
     negative_count: int = 0
     positive_pool: int = 0
+    contract_version: str = "1.0"
+    contract_valid: bool = False
+    contract_stats: dict[str, object] = Field(default_factory=dict)
+
+
+class FinetuneDpoValidateRequest(BaseModel):
+    dataset_path: str = Field(min_length=1, max_length=500)
+    min_text_chars: int = Field(default=4, ge=1, le=500)
+
+
+class FinetuneDpoValidateResponse(BaseModel):
+    dataset_path: str
+    contract_version: str
+    valid: bool
+    total: int
+    valid_rows: int
+    invalid_rows: int
+    missing_field_rows: int = 0
+    too_short_rows: int = 0
+    same_answer_rows: int = 0
 
 
 class FinetuneTrainingDashboardResponse(BaseModel):
@@ -1173,6 +1249,8 @@ class FinetuneTrainingDashboardResponse(BaseModel):
     datasets_count: int = 0
     training_signals_count: int = 0
     eval_trend: list[dict[str, object]] = Field(default_factory=list)
+    cycle_events: list[dict[str, object]] = Field(default_factory=list)
+    cycle_success_rate: float = 0.0
     regression_gate_enabled: bool = True
     shadow_traffic_percent: float = 10.0
     tuning_report: dict[str, object] = Field(default_factory=dict)

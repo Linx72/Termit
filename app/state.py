@@ -45,6 +45,7 @@ from app.services.providers.openai_compat_provider import OpenAICompatProvider
 from app.services.sqlite_memory_store import SQLiteMemoryStore
 from app.services.sqlite_agent_run_store import SQLiteAgentRunStore
 from app.services.eval_report_store import EvalReportStore
+from app.services.orchestration_eval_report_store import OrchestrationEvalReportStore
 from app.services.eval_service import EvalService
 from app.services.finetune_service import FinetuneService
 from app.services.finetune_adapter_resolver import FinetuneAdapterResolver
@@ -599,6 +600,16 @@ def get_eval_service() -> EvalService:
 
 
 @lru_cache
+def _build_orchestration_eval_report_store() -> OrchestrationEvalReportStore:
+    settings = get_settings()
+    return OrchestrationEvalReportStore(file_path=settings.orchestration_eval_report_file_path)
+
+
+def get_orchestration_eval_report_store() -> OrchestrationEvalReportStore:
+    return _build_orchestration_eval_report_store()
+
+
+@lru_cache
 def _build_telemetry_store() -> TelemetryStore:
     settings = get_settings()
     return TelemetryStore(max_latency_points=settings.telemetry_max_latency_points)
@@ -760,11 +771,14 @@ def get_team_workspace_service() -> TeamWorkspaceService:
 
 @lru_cache
 def _build_multi_agent_orchestrator() -> MultiAgentOrchestrator:
+    settings = get_settings()
     return MultiAgentOrchestrator(
         task_service=_build_task_service(),
         chat_service=_build_chat_service(),
         tooling=_build_tooling_service(),
         code_retrieval=_build_code_retrieval_service(),
+        openhands_contract_enabled=settings.orchestration_openhands_contract_enabled,
+        tool_loop_execution_enabled=settings.orchestration_tool_loop_execution_enabled,
     )
 
 
@@ -826,6 +840,8 @@ def get_finetune_trainer_service() -> FinetuneTrainerService:
 
 @lru_cache
 def _build_finetune_service() -> FinetuneService:
+    from app.domain.schemas import FinetuneStage1RunRequest
+
     settings = get_settings()
     signal_store = _build_training_signal_store()
 
@@ -841,6 +857,7 @@ def _build_finetune_service() -> FinetuneService:
         jobs_path=settings.finetune_jobs_path,
         adapters_path=settings.finetune_adapters_path,
         pipelines_path=settings.finetune_pipelines_path,
+        cycle_events_path=settings.finetune_cycle_events_path,
         feedback_file_path=settings.feedback_file_path,
         task_sqlite_path=settings.task_sqlite_path,
         agent_run_sqlite_path=settings.agent_run_sqlite_path,

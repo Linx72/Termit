@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
+import threading
 import time
 from uuid import uuid4
 
 from app.domain.schemas import (
+    ExecuteCommandRequest,
+    ListFilesRequest,
+    ReadFileRequest,
+    OrchestrationActionObservation,
     ChatMessage,
     ChatRequest,
     OrchestrationPhaseResult,
@@ -18,6 +24,7 @@ from app.domain.schemas import (
 )
 from app.services.chat_service import ChatService
 from app.services.code_retrieval_service import CodeRetrievalService
+from app.services.providers.base import ProviderError
 from app.services.task_service import TaskService
 from app.services.tooling_service import ToolingService
 from app.services.verify_command_resolver import resolve_verify_command
@@ -30,15 +37,35 @@ class MultiAgentOrchestrator:
         chat_service: ChatService,
         tooling: ToolingService | None = None,
         code_retrieval: CodeRetrievalService | None = None,
+        openhands_contract_enabled: bool = False,
+        tool_loop_execution_enabled: bool = False,
     ) -> None:
         self._tasks = task_service
         self._chat = chat_service
         self._tooling = tooling
         self._retrieval = code_retrieval
+        self._openhands_contract_enabled = bool(openhands_contract_enabled)
+        self._tool_loop_execution_enabled = bool(tool_loop_execution_enabled)
+        self._max_coder_attempts = 2
+        self._metrics_lock = threading.Lock()
+        self._metrics: dict[str, float] = {
+            "orchestration_runs_total": 0,
+            "coder_attempts_total": 0,
+            "coder_retry_runs_total": 0,
+            "coder_retry_success_runs_total": 0,
+            "reviewer_reject_total": 0,
+            "openhands_contract_runs_total": 0,
+            "openhands_contract_actions_total": 0,
+            "orchestration_tool_loop_runs_total": 0,
+            "orchestration_tool_steps_total": 0,
+        }
 
     async def run(self, payload: OrchestrationRunRequest) -> OrchestrationRunResponse:
         run_id = f"orch_{uuid4().hex[:12]}"
         phases: list[OrchestrationPhaseResult] = []
+        action_observation: list[OrchestrationActionObservation] = []
+        with self._metrics_lock:
+            self._metrics["orchestration_runs_total"] += 1
 
         plan_started = time.perf_counter()
         plan_steps = await self._planner_steps(payload)
@@ -50,6 +77,11 @@ class MultiAgentOrchestrator:
                 duration_ms=int((time.perf_counter() - plan_started) * 1000),
             )
         )
+        self._append_contract_item(
+            action_observation,
+            action="planner.plan",
+            observation=f"Prepared {len(plan_steps)} execution steps.",
+        )
 
         explore_started = time.perf_counter()
         explore_detail = await self._parallel_explore(payload)
@@ -60,6 +92,11 @@ class MultiAgentOrchestrator:
                 detail=explore_detail or "Explore skipped.",
                 duration_ms=int((time.perf_counter() - explore_started) * 1000),
             )
+        )
+        self._append_contract_item(
+            action_observation,
+            action="explore.context",
+            observation=explore_detail or "Explore skipped.",
         )
 
         if payload.plan_only:
@@ -81,6 +118,7 @@ class MultiAgentOrchestrator:
                 status="plan_ready",
                 plan_steps=plan_steps,
                 phases=phases,
+                action_observation=action_observation if self._openhands_contract_enabled else [],
                 report=report,
                 executor_response="",
                 session_id=payload.session_id,
@@ -90,12 +128,29 @@ class MultiAgentOrchestrator:
 
         execute_started = time.perf_counter()
         chat_result_session = payload.session_id
+        review_detail = ""
+        review_ok = False
         if CrossPlatformDevService.is_cross_platform_task(payload.input):
             executor_response, atomic_phases, chat_result_session = await self._atomic_build_phases(
                 payload,
                 explore_detail=explore_detail,
             )
             phases.extend(atomic_phases)
+            review_started = time.perf_counter()
+            review_detail, review_ok = await self._reviewer_phase(payload.input, executor_response)
+            phases.append(
+                OrchestrationPhaseResult(
+                    phase="reviewer",
+                    status="passed" if review_ok else "failed",
+                    detail=review_detail,
+                    duration_ms=int((time.perf_counter() - review_started) * 1000),
+                )
+            )
+            self._append_contract_item(
+                action_observation,
+                action="executor.atomic",
+                observation=f"Atomic build finished with review_ok={review_ok}.",
+            )
         else:
             executor_prompt = (
                 "Execute this coding objective using the approved plan and exploration context.\n"
@@ -103,44 +158,62 @@ class MultiAgentOrchestrator:
                 f"Plan: {' -> '.join(plan_steps)}\n"
                 f"Explore:\n{explore_detail or '(none)'}"
             )
-            chat_result = await self._chat.chat(
-                ChatRequest(
-                    message=executor_prompt,
-                    task_type=payload.task_type,
-                    model=payload.model,
-                    session_id=payload.session_id,
-                    use_memory=True,
-                    use_retrieval=payload.use_retrieval,
-                    retrieval_limit=payload.retrieval_limit,
-                    retrieval_path_prefix=payload.retrieval_path_prefix,
-                    repo_profile=payload.repo_profile,
-                    routing_policy=payload.routing_policy,
-                    history=[ChatMessage(role="system", content="You are the coder agent.")],
+            (
+                executor_response,
+                chat_result_session,
+                attempt_count,
+                review_detail,
+                review_ok,
+                attempt_contract,
+                tool_loop_stats,
+            ) = await self._mini_coder_loop(payload, executor_prompt)
+            action_observation.extend(attempt_contract)
+            with self._metrics_lock:
+                self._metrics["coder_attempts_total"] += float(attempt_count)
+                if attempt_count > 1:
+                    self._metrics["coder_retry_runs_total"] += 1
+                    if review_ok:
+                        self._metrics["coder_retry_success_runs_total"] += 1
+                if not review_ok:
+                    self._metrics["reviewer_reject_total"] += 1
+                self._metrics["orchestration_tool_loop_runs_total"] += float(
+                    tool_loop_stats.get("runs", 0)
                 )
-            )
-            chat_result_session = chat_result.session_id
-            executor_response = chat_result.response or ""
+                self._metrics["orchestration_tool_steps_total"] += float(
+                    tool_loop_stats.get("steps", 0)
+                )
             phases.append(
                 OrchestrationPhaseResult(
                     phase="coder",
                     status="passed" if executor_response.strip() else "failed",
-                    detail="Coder produced a model response."
+                    detail=f"Coder produced a model response in {attempt_count} attempt(s)."
                     if executor_response.strip()
-                    else "Coder returned an empty response.",
+                    else f"Coder returned an empty response after {attempt_count} attempt(s).",
                     duration_ms=int((time.perf_counter() - execute_started) * 1000),
                 )
             )
-
-        review_started = time.perf_counter()
-        review_detail, review_ok = await self._reviewer_phase(payload.input, executor_response)
-        phases.append(
-            OrchestrationPhaseResult(
-                phase="reviewer",
-                status="passed" if review_ok else "failed",
-                detail=review_detail,
-                duration_ms=int((time.perf_counter() - review_started) * 1000),
+            self._append_contract_item(
+                action_observation,
+                action="reviewer.final",
+                observation=review_detail,
             )
-        )
+            phases.append(
+                OrchestrationPhaseResult(
+                    phase="reviewer",
+                    status="passed" if review_ok else "failed",
+                    detail=review_detail,
+                    duration_ms=0,
+                )
+            )
+            if tool_loop_stats.get("steps", 0):
+                phases.append(
+                    OrchestrationPhaseResult(
+                        phase="coder_tool_loop",
+                        status="passed",
+                        detail=f"Executed {int(tool_loop_stats.get('steps', 0))} tool step(s).",
+                        duration_ms=0,
+                    )
+                )
 
         verify_started = time.perf_counter()
         verify_ok, verify_detail = await self._verifier_phase(payload, executor_response)
@@ -151,6 +224,11 @@ class MultiAgentOrchestrator:
                 detail=verify_detail,
                 duration_ms=int((time.perf_counter() - verify_started) * 1000),
             )
+        )
+        self._append_contract_item(
+            action_observation,
+            action="verifier.check",
+            observation=verify_detail,
         )
 
         task_started = time.perf_counter()
@@ -172,18 +250,57 @@ class MultiAgentOrchestrator:
                 duration_ms=int((time.perf_counter() - task_started) * 1000),
             )
         )
+        self._append_contract_item(
+            action_observation,
+            action="task_runner.lifecycle",
+            observation=f"Task ended with state={task_status.state.value}.",
+        )
+
+        if self._openhands_contract_enabled:
+            with self._metrics_lock:
+                self._metrics["openhands_contract_runs_total"] += 1
+                self._metrics["openhands_contract_actions_total"] += float(len(action_observation))
+            phases.append(
+                OrchestrationPhaseResult(
+                    phase="openhands_contract",
+                    status="passed",
+                    detail=f"Captured {len(action_observation)} action/observation pairs.",
+                    duration_ms=0,
+                )
+            )
 
         overall_ok = all(item.status in {"passed", "skipped"} for item in phases)
-        report = self._build_report(run_id, plan_steps, phases, executor_response, task_status.report or "")
+        report = self._build_report(
+            run_id,
+            plan_steps,
+            phases,
+            executor_response,
+            task_status.report or "",
+            action_observation if self._openhands_contract_enabled else [],
+        )
         return OrchestrationRunResponse(
             run_id=run_id,
             status="completed" if overall_ok else "failed",
             plan_steps=plan_steps,
             phases=phases,
+            action_observation=action_observation if self._openhands_contract_enabled else [],
             report=report,
             executor_response=executor_response,
             session_id=chat_result_session,
         )
+
+    def metrics_snapshot(self) -> dict[str, float]:
+        with self._metrics_lock:
+            snapshot = dict(self._metrics)
+        runs = max(1.0, snapshot["orchestration_runs_total"])
+        retry_runs = snapshot["coder_retry_runs_total"]
+        retry_success = snapshot["coder_retry_success_runs_total"]
+        snapshot["avg_coder_attempts"] = round(snapshot["coder_attempts_total"] / runs, 4)
+        snapshot["coder_retry_run_rate"] = round(retry_runs / runs, 4)
+        snapshot["coder_retry_success_rate"] = (
+            round(retry_success / retry_runs, 4) if retry_runs > 0 else 0.0
+        )
+        return snapshot
 
     async def _atomic_build_phases(
         self,
@@ -338,10 +455,208 @@ class MultiAgentOrchestrator:
                 )
             )
             text = result.response.strip()
-            ok = text.upper().startswith("APPROVED") or len(text) >= 24
+            normalized = text.upper()
+            if normalized.startswith("APPROVED"):
+                ok = True
+            elif any(
+                marker in normalized
+                for marker in ("ISSUE", "FAILED", "REJECT", "NOT APPROVED", "BLOCKER", "CHANGES REQUIRED")
+            ):
+                ok = False
+            else:
+                ok = len(text) >= 24
             return text[:500], ok
         except Exception as exc:  # noqa: BLE001
             return f"Reviewer error: {exc}", False
+
+    async def _mini_coder_loop(
+        self,
+        payload: OrchestrationRunRequest,
+        executor_prompt: str,
+    ) -> tuple[
+        str,
+        str | None,
+        int,
+        str,
+        bool,
+        list[OrchestrationActionObservation],
+        dict[str, int],
+    ]:
+        """mini-swe-agent style retry loop: coder -> reviewer feedback -> coder."""
+        feedback = ""
+        executor_response = ""
+        session_id = payload.session_id
+        review_detail = "Reviewer phase did not run."
+        review_ok = False
+        contract: list[OrchestrationActionObservation] = []
+        tool_loop_runs = 0
+        tool_loop_steps = 0
+
+        for attempt in range(1, self._max_coder_attempts + 1):
+            message = executor_prompt
+            if feedback:
+                message = (
+                    f"{executor_prompt}\n\nReviewer issues to fix before finalizing:\n"
+                    f"{feedback}\n\nAddress every issue explicitly."
+                )
+            try:
+                chat_result = await self._chat.chat(
+                    ChatRequest(
+                        message=message,
+                        task_type=payload.task_type,
+                        model=payload.model,
+                        session_id=session_id,
+                        use_memory=True,
+                        use_retrieval=payload.use_retrieval,
+                        retrieval_limit=payload.retrieval_limit,
+                        retrieval_path_prefix=payload.retrieval_path_prefix,
+                        repo_profile=payload.repo_profile,
+                        routing_policy=payload.routing_policy,
+                        history=[ChatMessage(role="system", content="You are the coder agent.")],
+                    )
+                )
+            except ProviderError as exc:
+                review_detail = f"Coder provider error: {exc}"
+                self._append_contract_item(
+                    contract,
+                    action=f"coder.attempt_{attempt}",
+                    observation=review_detail[:500],
+                )
+                return (
+                    "",
+                    session_id,
+                    attempt,
+                    review_detail,
+                    False,
+                    contract,
+                    {"runs": tool_loop_runs, "steps": tool_loop_steps},
+                )
+            session_id = chat_result.session_id
+            executor_response = chat_result.response or ""
+            self._append_contract_item(
+                contract,
+                action=f"coder.attempt_{attempt}",
+                observation=(executor_response or "").strip()[:500] or "empty response",
+            )
+            if self._tool_loop_execution_enabled and self._tooling is not None:
+                tool_output, executed_steps = await asyncio.to_thread(
+                    self._run_tool_actions_from_response,
+                    executor_response,
+                )
+                if executed_steps > 0:
+                    tool_loop_runs = 1
+                    tool_loop_steps += executed_steps
+                    self._append_contract_item(
+                        contract,
+                        action=f"tool_loop.attempt_{attempt}",
+                        observation=tool_output,
+                    )
+            review_detail, review_ok = await self._reviewer_phase(payload.input, executor_response)
+            self._append_contract_item(
+                contract,
+                action=f"reviewer.attempt_{attempt}",
+                observation=review_detail,
+            )
+            if review_ok:
+                return (
+                    executor_response,
+                    session_id,
+                    attempt,
+                    review_detail,
+                    True,
+                    contract,
+                    {"runs": tool_loop_runs, "steps": tool_loop_steps},
+                )
+            feedback = review_detail
+
+        return (
+            executor_response,
+            session_id,
+            self._max_coder_attempts,
+            review_detail,
+            False,
+            contract,
+            {"runs": tool_loop_runs, "steps": tool_loop_steps},
+        )
+
+    def _run_tool_actions_from_response(self, response_text: str) -> tuple[str, int]:
+        actions = self._extract_tool_actions(response_text)
+        if not actions or self._tooling is None:
+            return ("No tool actions parsed.", 0)
+        max_steps = 5
+        logs: list[str] = []
+        executed = 0
+        for action in actions[:max_steps]:
+            tool = str(action.get("tool", "")).strip()
+            try:
+                if tool == "list_files":
+                    result = self._tooling.list_files(
+                        ListFilesRequest(
+                            path=str(action.get("path", ".")),
+                            pattern=str(action.get("pattern", "*")),
+                        )
+                    )
+                    logs.append(f"list_files -> {len(result.files)} file(s)")
+                    executed += 1
+                elif tool == "read_file":
+                    result = self._tooling.read_file(
+                        ReadFileRequest(
+                            path=str(action.get("path", "")),
+                            max_bytes=int(action.get("max_bytes", 4000) or 4000),
+                        )
+                    )
+                    logs.append(
+                        f"read_file -> {result.path} ({len(result.content)} chars, truncated={result.truncated})"
+                    )
+                    executed += 1
+                elif tool == "execute_command":
+                    command = str(action.get("command", "")).strip()
+                    if not command:
+                        continue
+                    safe_prefixes = ("python", "python3", "pytest", "rg", "ls", "pwd", "echo")
+                    safe_command = command.startswith(safe_prefixes)
+                    result = self._tooling.execute_command(
+                        ExecuteCommandRequest(
+                            command=command,
+                            path=str(action.get("path", ".")),
+                            dry_run=not safe_command,
+                            confirmed=safe_command,
+                            timeout_seconds=int(action.get("timeout_seconds", 30) or 30),
+                        )
+                    )
+                    logs.append(
+                        f"execute_command -> executed={result.executed}, exit={result.exit_code}, dry_run={not safe_command}"
+                    )
+                    executed += 1
+            except Exception as exc:  # noqa: BLE001
+                logs.append(f"{tool} error: {exc}")
+        return ("; ".join(logs)[:1000], executed)
+
+    @staticmethod
+    def _extract_tool_actions(response_text: str) -> list[dict[str, object]]:
+        text = response_text.strip()
+        if not text:
+            return []
+        payload: dict[str, object] | None = None
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except json.JSONDecodeError:
+            match = re.search(r"\{[\s\S]*\}", text)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                    if isinstance(parsed, dict):
+                        payload = parsed
+                except json.JSONDecodeError:
+                    payload = None
+        if payload is None:
+            return []
+        actions = payload.get("tool_actions")
+        if not isinstance(actions, list):
+            return []
+        return [item for item in actions if isinstance(item, dict)]
 
     async def _verifier_phase(
         self,
@@ -410,6 +725,7 @@ class MultiAgentOrchestrator:
         phases: list[OrchestrationPhaseResult],
         executor_response: str,
         task_report: str,
+        action_observation: list[OrchestrationActionObservation],
     ) -> str:
         lines = [
             f"Multi-agent orchestration report ({run_id})",
@@ -429,8 +745,37 @@ class MultiAgentOrchestrator:
                 "Executor excerpt:",
                 executor_response[:1200],
                 "",
+            ]
+        )
+        if action_observation:
+            lines.extend(
+                [
+                    "OpenHands action/observation:",
+                    *[
+                        f"- {item.action} => {item.observation[:200]}"
+                        for item in action_observation
+                    ],
+                    "",
+                ]
+            )
+        lines.extend(
+            [
                 "Task runner report:",
                 task_report or "(no task report)",
             ]
         )
         return "\n".join(lines).strip()
+
+    @staticmethod
+    def _append_contract_item(
+        items: list[OrchestrationActionObservation],
+        *,
+        action: str,
+        observation: str,
+    ) -> None:
+        items.append(
+            OrchestrationActionObservation(
+                action=action[:120].strip(),
+                observation=observation[:1000].strip() or "(empty)",
+            )
+        )

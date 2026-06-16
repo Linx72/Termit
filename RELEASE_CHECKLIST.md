@@ -45,15 +45,21 @@
 - Tag release version in git (for example `v0.1.0`)
 - Capture known limitations (provider availability, local runtime assumptions)
 - Publish quick start commands for users
-- Write migration notes for the release (example: `docs/MIGRATION_NOTES_0.3.3.md`)
-- Write rollback plan with explicit smoke/health verification
+- Write migration notes for the release (example: `docs/MIGRATION_NOTES_0.3.5.md`)
+- Write rollback plan with explicit smoke/health verification (example: `docs/ROLLBACK_PLAN_0.3.5.md`)
 
 ## 6) Cursor parity release gates
 
+- Quality gate matrix (fast/deep/release):
+  - Fast gate (PR/main CI): cursor parity slice `limit=20` in `.github/workflows/ci.yml` (`Eval fast gate (PR/main)`).
+  - Deep gate (nightly): full eval suite `limit=53` in `.github/workflows/ci.yml` (`Nightly eval deep gate`).
+  - Release gate (local/manual with cloud judge): `TERMIT_EVAL_GATE_TIER=release ./scripts/release_smoke_extended.sh`
+  - Nightly extended smoke (CI): pass-rate gate only (`TERMIT_EVAL_MIN_PASS_RATE=0.95`) in `.github/workflows/ci.yml` (`Extended release smoke`); cloud judge coverage is not required on GitHub runners.
+
 - Release smoke profiles:
-  - Deterministic core (default): `TERMIT_RELEASE_SMOKE_PROFILE=core ./scripts/release_smoke.sh`
-  - Extended suite (nightly/integration): `TERMIT_RELEASE_SMOKE_PROFILE=extended ./scripts/release_smoke.sh`
-  - Nightly automation workflow: `.github/workflows/nightly-extended-smoke.yml`
+  - Deterministic core (default): `./scripts/release_smoke_core.sh`
+  - Extended suite (nightly/integration): `./scripts/release_smoke_extended.sh`
+  - Dedicated nightly workflow: `.github/workflows/nightly-extended-smoke.yml`
 
 - Parity eval gate (20 scenarios):
   - `POST /api/eval/run-suite` with payload `{"category":"cursor_parity","limit":20,"persist_report":false}`

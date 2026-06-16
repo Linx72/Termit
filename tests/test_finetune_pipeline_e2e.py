@@ -72,6 +72,26 @@ class FinetunePipelineE2ETests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("model", response.json())
 
+    def test_validate_dpo_endpoint_exists(self) -> None:
+        client = TestClient(app)
+        response = client.post(
+            "/api/finetune/datasets/validate-dpo",
+            json={"dataset_path": "/tmp/does-not-exist.jsonl", "min_text_chars": 4},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_train_dpo_endpoint_exists(self) -> None:
+        client = TestClient(app)
+        response = client.post(
+            "/api/finetune/datasets/train-dpo",
+            params={
+                "dataset_path": "/tmp/does-not-exist.jsonl",
+                "base_model": "ollama:deepseek-coder",
+            },
+            json={},
+        )
+        self.assertEqual(response.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

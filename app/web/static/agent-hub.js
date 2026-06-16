@@ -9,6 +9,7 @@ window.TermitAgentHub = (function () {
 
   let authHeadersFn = () => ({});
   let queueHistory = [];
+  let orchestrationRetryHistory = [];
   let runStream = null;
   let pollTimer = null;
   let selectedAgentId = null;
@@ -34,6 +35,7 @@ window.TermitAgentHub = (function () {
     els.stateChart = document.getElementById("chartRunStates");
     els.queueChart = document.getElementById("chartQueueHistory");
     els.workersChart = document.getElementById("chartWorkers");
+    els.orchestrationRetryChart = document.getElementById("chartOrchestrationRetry");
     els.legend = document.getElementById("chartRunStatesLegend");
     els.refreshBtn = document.getElementById("refreshAgentHubBtn");
     els.duplicateBtn = document.getElementById("duplicateAgentBtn");
@@ -77,7 +79,7 @@ window.TermitAgentHub = (function () {
       .join("");
   }
 
-  function updateCharts(metrics) {
+  function updateCharts(metrics, orchestrationTrend) {
     if (!window.TermitCharts) return;
     const byState = metrics.by_state || {};
     const segments = Object.entries(byState)
@@ -123,6 +125,29 @@ window.TermitAgentHub = (function () {
       );
     }
 
+    if (Array.isArray(orchestrationTrend) && orchestrationTrend.length) {
+      orchestrationRetryHistory = orchestrationTrend
+        .slice(-24)
+        .map((point) => ({
+          y: Number(point.retry_success_rate || 0) * 100,
+          t: point.captured_at ? new Date(point.captured_at).getTime() : Date.now(),
+        }));
+    } else {
+      orchestrationRetryHistory.push({
+        y: Number(metrics.coder_retry_success_rate || 0) * 100,
+        t: Date.now(),
+      });
+      if (orchestrationRetryHistory.length > 24) orchestrationRetryHistory.shift();
+    }
+    if (els.orchestrationRetryChart) {
+      TermitCharts.drawLine(els.orchestrationRetryChart, orchestrationRetryHistory, {
+        maxY: 100,
+        minY: 0,
+        color: "#38bdf8",
+        emptyLabel: t("agentHub.collectingRetry"),
+      });
+    }
+
     if (els.health) {
       const status = metrics.health_status || "ok";
       els.health.className = `hub-health-pill ${status}`;
@@ -146,7 +171,13 @@ window.TermitAgentHub = (function () {
             `q-max ${maxQueuedAge.toFixed(1)}s, r-max ${maxRunningAge.toFixed(1)}s, SLA ${timeoutSeconds}s`
           : `${t("agentHub.lifecycle")}: q-stale ${staleQueued}, r-stale ${staleRunning}`;
       const completion = `${t("agentHub.completionRate")}: ${completionRate}%`;
-      els.health.textContent = `${statusSummary} · ${completion} · ${lifecycle}`;
+      const retrySuccess = Math.max(
+        0,
+        Math.min(100, Math.round(Number(metrics.coder_retry_success_rate || 0) * 100))
+      );
+      const avgAttempts = Number(metrics.avg_coder_attempts || 0).toFixed(2);
+      const orchestration = `${t("agentHub.retrySuccess")}: ${retrySuccess}% · ${t("agentHub.avgAttempts")}: ${avgAttempts}`;
+      els.health.textContent = `${statusSummary} · ${completion} · ${orchestration} · ${lifecycle}`;
     }
   }
 
@@ -416,6 +447,13 @@ window.TermitAgentHub = (function () {
     return resp.json();
   }
 
+  async function fetchOrchestrationTrend() {
+    const resp = await fetch("/api/ops/orchestration/trend?limit=24", { headers: authHeadersFn() });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return data.points || [];
+  }
+
   async function fetchAgents() {
     const resp = await fetch("/api/agents", { headers: authHeadersFn() });
     if (!resp.ok) throw new Error("agents");
@@ -424,8 +462,12 @@ window.TermitAgentHub = (function () {
 
   async function refresh() {
     try {
-      const [metrics, agents] = await Promise.all([fetchMetrics(), fetchAgents()]);
-      updateCharts(metrics);
+      const [metrics, agents, trend] = await Promise.all([
+        fetchMetrics(),
+        fetchAgents(),
+        fetchOrchestrationTrend(),
+      ]);
+      updateCharts(metrics, trend);
       renderAgentCards(agents);
       if (!selectedAgentId && agents.length) selectAgent(agents[0].agent_id);
       else if (selectedAgentId) {

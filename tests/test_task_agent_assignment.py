@@ -1,5 +1,8 @@
-import unittest
+import json
+import os
+import tempfile
 import time
+import unittest
 from tempfile import TemporaryDirectory
 
 from app.domain.schemas import AgentProfileCreateRequest, TaskCreateRequest, TaskType
@@ -69,17 +72,49 @@ class TaskAgentAssignmentTests(unittest.TestCase):
         self.assertEqual(selected, "agent_preferred")
 
     def test_project_task_auto_attaches_multiple_agents(self) -> None:
-        import json as _json, tempfile as _tf, os as _os
-        _templates = [
-            {"template_id":"termit-platform-dev","name":"Termit Platform Dev","description":"","task_type":"coding","system_prompt":"You are a platform developer.","enabled_tools":[],"use_tool_loop":False,"use_retrieval":False,"allow_online":False,"skill_ids":[]},
-            {"template_id":"write-tests","name":"Write Tests","description":"","task_type":"coding","system_prompt":"You write tests.","enabled_tools":[],"use_tool_loop":False,"use_retrieval":False,"allow_online":False,"skill_ids":[]},
-            {"template_id":"fix-ci","name":"Fix CI","description":"","task_type":"coding","system_prompt":"You fix CI.","enabled_tools":[],"use_tool_loop":False,"use_retrieval":False,"allow_online":False,"skill_ids":[]},
+        templates_payload = [
+            {
+                "template_id": "termit-platform-dev",
+                "name": "Termit Platform Dev",
+                "description": "",
+                "task_type": "coding",
+                "system_prompt": "You are a platform developer.",
+                "enabled_tools": [],
+                "use_tool_loop": False,
+                "use_retrieval": False,
+                "allow_online": False,
+                "skill_ids": [],
+            },
+            {
+                "template_id": "write-tests",
+                "name": "Write Tests",
+                "description": "",
+                "task_type": "coding",
+                "system_prompt": "You write tests.",
+                "enabled_tools": [],
+                "use_tool_loop": False,
+                "use_retrieval": False,
+                "allow_online": False,
+                "skill_ids": [],
+            },
+            {
+                "template_id": "fix-ci",
+                "name": "Fix CI",
+                "description": "",
+                "task_type": "coding",
+                "system_prompt": "You fix CI.",
+                "enabled_tools": [],
+                "use_tool_loop": False,
+                "use_retrieval": False,
+                "allow_online": False,
+                "skill_ids": [],
+            },
         ]
-        _tmpf = _tf.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp_file:
+            json.dump(templates_payload, tmp_file)
+            tmp_path = tmp_file.name
         try:
-            _json.dump(_templates, _tmpf)
-            _tmpf.close()
-            templates = AgentTemplatesStore(file_path=_tmpf.name)
+            templates = AgentTemplatesStore(file_path=tmp_path)
             service = TaskService(
                 ToolingService(root_path="."),
                 InMemoryTaskStore(),
@@ -107,7 +142,7 @@ class TaskAgentAssignmentTests(unittest.TestCase):
             self.assertIn("Write Tests", agent_names)
             self.assertIn("Fix CI", agent_names)
         finally:
-            _os.unlink(_tmpf.name)
+            os.unlink(tmp_path)
 
 
 if __name__ == "__main__":

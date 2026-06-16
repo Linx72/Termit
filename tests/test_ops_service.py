@@ -109,6 +109,14 @@ class OpsApiTests(unittest.TestCase):
         self.assertEqual(status_resp.status_code, 200)
         self.assertIn("enabled", status_resp.json())
 
+        orch_trend_resp = client.get("/api/ops/orchestration/trend?limit=5")
+        self.assertEqual(orch_trend_resp.status_code, 200)
+        self.assertIn("points", orch_trend_resp.json())
+
+        orch_reports_resp = client.get("/api/ops/orchestration/reports?limit=5")
+        self.assertEqual(orch_reports_resp.status_code, 200)
+        self.assertIn("reports", orch_reports_resp.json())
+
     def test_alert_dispatch_includes_verify_payload(self) -> None:
         client = TestClient(app)
 

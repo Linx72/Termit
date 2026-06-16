@@ -294,6 +294,11 @@ class AgentServiceTests(unittest.TestCase):
             self.assertEqual(metrics["queue_capacity"], 10)
             self.assertIn("stale_queued_runs", metrics)
             self.assertIn("stale_running_runs", metrics)
+            self.assertIn("lifecycle_stale_total", metrics)
+            self.assertIn("lifecycle_terminal_runs_total", metrics)
+            self.assertIn("lifecycle_completed_runs_total", metrics)
+            self.assertIn("lifecycle_timeout_runs_total", metrics)
+            self.assertIn("lifecycle_completion_rate", metrics)
             self.assertIn("queue_stuck_timeout_seconds", metrics)
 
             agent = service.create_agent(
@@ -347,6 +352,7 @@ class AgentServiceTests(unittest.TestCase):
             metrics = service.queue_metrics()
             self.assertGreaterEqual(metrics["stale_queued_runs"], 1)
             self.assertGreaterEqual(metrics["stale_running_runs"], 1)
+            self.assertGreaterEqual(metrics["lifecycle_stale_total"], 2)
 
     def test_cleanup_stale_active_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -671,6 +677,26 @@ class AgentServiceTests(unittest.TestCase):
                     "mcp_invoke",
                     {"server_id": "allowed-server", "tool_name": "delete", "arguments": {}},
                 )
+
+
+class AgentPolicyFallbackTests(unittest.TestCase):
+    def test_apply_policy_fallback_switches_to_plan_and_strict(self) -> None:
+        payload = AgentRunRequest(
+            input="Fix flaky test",
+            policy_preset="autopilot",
+            run_mode="agent",
+            auto_confirm_risky_tools=True,
+        )
+        updated = AgentService._apply_policy_fallback(payload, "tool_error")
+        self.assertEqual(updated.run_mode, "plan")
+        self.assertEqual(updated.policy_preset, "strict")
+        self.assertFalse(updated.auto_confirm_risky_tools)
+        self.assertIn("[Policy fallback]", updated.input)
+
+    def test_apply_policy_fallback_skips_external_errors(self) -> None:
+        payload = AgentRunRequest(input="Fix bug", run_mode="agent")
+        updated = AgentService._apply_policy_fallback(payload, "run_timeout")
+        self.assertEqual(updated.model_dump(), payload.model_dump())
 
 
 if __name__ == "__main__":

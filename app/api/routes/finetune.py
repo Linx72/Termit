@@ -12,6 +12,8 @@ from app.domain.schemas import (
     FinetuneDatasetExportResponse,
     FinetuneDpoExportRequest,
     FinetuneDpoExportResponse,
+    FinetuneDpoValidateRequest,
+    FinetuneDpoValidateResponse,
     FinetuneTrajectoryExportRequest,
     FinetuneTrajectoryExportResponse,
     FinetuneJobCreateRequest,
@@ -104,6 +106,21 @@ async def export_dpo_dataset(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FinetuneDpoExportResponse(**result)
+
+
+@router.post("/datasets/validate-dpo", response_model=FinetuneDpoValidateResponse)
+async def validate_dpo_dataset(
+    payload: FinetuneDpoValidateRequest,
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneDpoValidateResponse:
+    try:
+        result = service.validate_dpo_dataset(
+            dataset_path=payload.dataset_path,
+            min_text_chars=payload.min_text_chars,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FinetuneDpoValidateResponse(**result)
 
 
 @router.get("/adapters/resolve")
@@ -486,6 +503,35 @@ async def train_job(
         detail=str(result.get("detail", "")),
         duration_ms=int(result.get("duration_ms") or 0),
         adapter=FinetuneAdapterResponse(**adapter) if adapter else None,
+    )
+
+
+@router.post("/datasets/train-dpo", response_model=FinetuneTrainResponse)
+async def train_dpo_dataset(
+    payload: FinetuneTrainRequest,
+    dataset_path: str = Query(min_length=1, max_length=500),
+    base_model: str = Query(min_length=1, max_length=200),
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneTrainResponse:
+    try:
+        result = service.train_dpo_dataset(
+            dataset_path=dataset_path,
+            base_model=base_model,
+            output_model=payload.output_model,
+            trainer_mode=payload.trainer_mode or "hf_dpo",
+            repo_profile_id=payload.repo_profile_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FinetuneTrainResponse(
+        trainer_mode=str(result.get("trainer_mode", "")),
+        status=str(result.get("status", "failed")),
+        output_model=result.get("output_model"),
+        modelfile_path=result.get("modelfile_path"),
+        adapter_path=result.get("adapter_path"),
+        command=result.get("command"),
+        detail=str(result.get("detail", "")),
+        duration_ms=int(result.get("duration_ms") or 0),
     )
 
 

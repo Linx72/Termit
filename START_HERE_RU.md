@@ -172,3 +172,11 @@ python3 -m unittest tests.test_media_studio_phase0 -q
 ## 11. AutoCheckPoint (длинные чаты Cursor)
 
 Память сессии: `.cursor/memory/ACTIVE.md`, снимки в `.cursor/memory/checkpoints/`. Порог **100 000 токенов** перед compaction — `TERMIT_CHECKPOINT_TOKEN_THRESHOLD`. Подробнее: [docs/AUTOCHECKPOINT_RU.md](docs/AUTOCHECKPOINT_RU.md). Hooks: `.cursor/hooks.json`.
+
+## 12. Nightly flaky gates (операционная дисциплина)
+
+Для nightly quality-gates есть отдельный регрессионный контроль flaky suite (`tests.test_agents_api`, `tests.test_platform_e2e`) с временными override по TTL.
+
+- Документация override: [docs/FLAKY_WATCH_OVERRIDES_RU.md](docs/FLAKY_WATCH_OVERRIDES_RU.md)
+- Runbook инцидента (первые 10 минут): [docs/NIGHTLY_FLAKY_GATE_RUNBOOK_RU.md](docs/NIGHTLY_FLAKY_GATE_RUNBOOK_RU.md)
+- Конфиг override: `data/flaky_watch_gate_overrides.json`

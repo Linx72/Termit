@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 TAG="v${VERSION}"
+CURRENT_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
 PYTHON_BIN="${ROOT}/.venv/bin/python"
 if [[ ! -x "${PYTHON_BIN}" ]]; then
   PYTHON_BIN="python3"
@@ -19,14 +20,14 @@ echo "== 1/4 Python tests =="
 
 echo "== 2/4 Deterministic release smoke =="
 if curl -s --max-time 5 -o /dev/null "http://127.0.0.1:8765/health"; then
-  TERMIT_RELEASE_SMOKE_PROFILE=core "$ROOT/scripts/release_smoke.sh"
+  "$ROOT/scripts/release_smoke_core.sh"
 else
   echo "Skip HTTP smoke — start server: uvicorn app.main:app --host 127.0.0.1 --port 8765"
 fi
 
 echo "== 3/4 Git push =="
 if git remote get-url origin >/dev/null 2>&1; then
-  git push -u origin main
+  git push -u origin "$CURRENT_BRANCH"
   git push origin "$TAG" 2>/dev/null || git push origin "$TAG"
 else
   echo "No git remote — skip push"
