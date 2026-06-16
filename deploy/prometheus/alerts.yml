@@ -37,7 +37,14 @@ groups:
           summary: "Elevated tool-loop tool errors"
           description: "Tool error rate exceeds 0.5/min over 10m window."
 
-      - alert: TermitWorkersDown
+      - alert: TermitHighChatFallbackRate
+        expr: termit_chat_fallback_rate > 0.35
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated chat model fallback rate"
+          description: "Fallback rate {{ $value | humanizePercentage }} exceeds 35%."
         expr: termit_agent_workers_alive < termit_agent_workers_configured
         for: 3m
         labels:

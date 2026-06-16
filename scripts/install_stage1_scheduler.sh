@@ -13,6 +13,7 @@ Modes:
   builtin   Print env vars to enable the built-in Termit scheduler
   launchd   Install macOS LaunchAgent (weekly Monday 03:00 local time via API call)
   cron      Install user crontab entry (weekly Monday 03:00)
+  training-loop  Install weekly training_loop_weekly.sh cron (Sunday 04:00)
   github    Print GitHub Actions setup instructions
   all       Show all options
 
@@ -55,6 +56,24 @@ install_cron() {
   local line="0 3 * * 1 ${cmd} ${marker}"
   ( { crontab -l 2>/dev/null || true; } | grep -v "${marker}" || true; echo "${line}" ) | crontab -
   echo "Installed user crontab entry:"
+  echo "  ${line}"
+}
+
+install_training_loop_cron() {
+  local env_file="${ROOT}/deploy/schedulers/stage1-weekly.env"
+  if [[ ! -f "${env_file}" ]]; then
+    cp "${ROOT}/deploy/schedulers/stage1-weekly.env.example" "${env_file}"
+    echo "Created ${env_file} from example."
+  fi
+  local marker="# termit-training-loop-weekly"
+  local log="${HOME}/Library/Logs/termit-training-loop-weekly.cron.log"
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    log="${HOME}/termit-training-loop-weekly.cron.log"
+  fi
+  local cmd="TERMIT_WEEKLY_TRAINING_LOOP=true TERMIT_EVAL_AUTO_PROMOTE_BASELINE=true ${ROOT}/scripts/training_loop_weekly.sh >> ${log} 2>&1"
+  local line="0 4 * * 0 ${cmd} ${marker}"
+  ( { crontab -l 2>/dev/null || true; } | grep -v "${marker}" || true; echo "${line}" ) | crontab -
+  echo "Installed training loop crontab entry:"
   echo "  ${line}"
 }
 
@@ -108,6 +127,9 @@ case "${MODE}" in
   cron)
     install_cron
     ;;
+  training-loop)
+    install_training_loop_cron
+    ;;
   github)
     show_github
     ;;
@@ -117,7 +139,7 @@ case "${MODE}" in
     show_github
     echo
     echo "External schedulers use: ${ROOT}/scripts/stage1_weekly.sh"
-    echo "Install with: $0 launchd   (macOS)  or  $0 cron"
+    echo "Install with: $0 launchd   (macOS)  or  $0 cron  or  $0 training-loop"
     ;;
   *)
     usage

@@ -90,6 +90,30 @@
       "targets": [{ "expr": "termit_chat_latency_p95_ms", "refId": "A" }],
       "title": "Chat latency p95",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "id": 9,
+      "targets": [
+        { "expr": "termit_chat_fallback_rate", "legendFormat": "fallback", "refId": "A" },
+        { "expr": "termit_chat_empty_response_rate", "legendFormat": "empty", "refId": "B" }
+      ],
+      "title": "Chat quality rates",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "id": 10,
+      "targets": [
+        { "expr": "termit_cost_per_successful_task_usd", "legendFormat": "cost/task", "refId": "A" },
+        { "expr": "termit_estimated_cost_total_usd", "legendFormat": "total", "refId": "B" }
+      ],
+      "title": "Cost signals",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

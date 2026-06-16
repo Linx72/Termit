@@ -51,13 +51,31 @@ curl -sf "${AUTH[@]}" -X POST "$BASE_URL/api/eval/run-suite" \
 
 echo ""
 echo "== 4/5 Regression gate vs baseline =="
+GATE_OK=0
 if [[ ! -f "$BASELINE" ]]; then
   echo "Baseline missing: $BASELINE — skip regression gate." >&2
 else
-  python3 "$ROOT/scripts/eval_regression_report.py" \
+  if ! python3 "$ROOT/scripts/eval_regression_report.py" \
     --baseline "$BASELINE" \
     --current "$CURRENT_REPORT" \
-    --max-pass-rate-drop "$MAX_DROP"
+    --max-pass-rate-drop "$MAX_DROP"; then
+    GATE_OK=1
+  fi
+fi
+
+if [[ "$GATE_OK" -eq 0 && "${TERMIT_EVAL_AUTO_PROMOTE_BASELINE:-false}" == "true" && -f "$BASELINE" ]]; then
+  echo ""
+  echo "== 4b/5 Promote baseline (gate green) =="
+  MIN_IMPROVE="${TERMIT_EVAL_MIN_IMPROVEMENT_FOR_PROMOTE:-0.0}"
+  python3 "$ROOT/scripts/eval_baseline_promote.py" \
+    --baseline "$BASELINE" \
+    --current "$CURRENT_REPORT" \
+    --max-pass-rate-drop "$MAX_DROP" \
+    --min-improvement "$MIN_IMPROVE"
+fi
+
+if [[ "$GATE_OK" -ne 0 ]]; then
+  exit 1
 fi
 
 echo ""

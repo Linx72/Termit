@@ -58,7 +58,13 @@ class TermitShellRuntimeSmokeTests(unittest.TestCase):
         script = (self.root / "scripts" / "training_loop_full.sh").read_text(encoding="utf-8")
         self.assertIn("training_loop_week2.sh", script)
         self.assertIn("eval_regression_report.py", script)
+        self.assertIn("eval_baseline_promote.py", script)
         self.assertIn("run-suite", script)
+
+    def test_training_loop_weekly_script(self) -> None:
+        script = (self.root / "scripts" / "training_loop_weekly.sh").read_text(encoding="utf-8")
+        self.assertIn("training_loop_full.sh", script)
+        self.assertIn("TERMIT_EVAL_AUTO_PROMOTE_BASELINE", script)
 
 
 if __name__ == "__main__":

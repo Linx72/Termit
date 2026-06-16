@@ -28,8 +28,24 @@ uvicorn app.main:app --host 127.0.0.1 --port 8765 &
 | `TERMIT_EVAL_CATEGORY` | `cursor_parity` | Eval category |
 | `TERMIT_EVAL_LIMIT` | `20` | Scenarios |
 | `TERMIT_EVAL_MAX_PASS_RATE_DROP` | `0.05` | Max regression |
+| `TERMIT_EVAL_AUTO_PROMOTE_BASELINE` | `false` | Promote current report when gate green |
+| `TERMIT_EVAL_MIN_IMPROVEMENT_FOR_PROMOTE` | `0.0` | Min pass_rate delta to promote (0.05 = +5%) |
 
-## Promote / shadow
+## Weekly cron
+
+```bash
+./scripts/install_stage1_scheduler.sh training-loop
+# Sunday 04:00 — training_loop_weekly.sh → full loop + baseline promote
+```
+
+## Baseline promote
+
+```bash
+python3 scripts/eval_baseline_promote.py \
+  --baseline data/eval_baseline_release.json \
+  --current /tmp/eval_current.json \
+  --min-improvement 0.05
+```
 
 Backend: `FinetuneService._finalize_training_deploy` + `evaluate_training_regression`.
 

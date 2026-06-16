@@ -6,7 +6,7 @@
 - [x] success/error rate by endpoint — `termit_http_errors_total`
 - [ ] task success rate by scenario type — eval dashboard / finetune KPI
 - [x] p50/p95 latency — `termit_http_latency_p95_ms`, chat p95 gauge
-- [ ] provider fallback rate — telemetry / executive summary
+- [x] provider fallback rate — `termit_chat_fallback_rate` + alert
 - [ ] cost per task and cost per success — routing cost-aware (optional)
 
 ## Tracing
@@ -35,6 +35,6 @@
 - [x] endpoint health dashboard — Grafana Termit SLO + `/api/metrics/http-endpoints`
 - [ ] task quality dashboard — eval KPI (partial: HealthDashboard)
 - [x] reliability dashboard — `/api/ops/readiness`, agent-runs metrics
-- [ ] cost and routing dashboard
+- [x] cost and routing dashboard — Grafana cost signals + `termit_model_usage_total`
 
 See [`docs/OBSERVABILITY_SLO_RU.md`](file:///Users/amoros/Projects/Termit/docs/OBSERVABILITY_SLO_RU.md).

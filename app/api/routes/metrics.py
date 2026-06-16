@@ -163,6 +163,21 @@ async def metrics_prometheus(
         "# HELP termit_chat_latency_p95_ms Chat latency p95 in milliseconds.",
         "# TYPE termit_chat_latency_p95_ms gauge",
         _prom_line("termit_chat_latency_p95_ms", summary.chat_latency_p95_ms),
+        "# HELP termit_chat_fallback_rate Share of successful chats that used model fallback.",
+        "# TYPE termit_chat_fallback_rate gauge",
+        _prom_line("termit_chat_fallback_rate", float(summary.chat_fallback_rate)),
+        "# HELP termit_chat_empty_response_rate Share of successful chats with empty body.",
+        "# TYPE termit_chat_empty_response_rate gauge",
+        _prom_line("termit_chat_empty_response_rate", float(summary.chat_empty_response_rate)),
+        "# HELP termit_task_success_rate Completed tasks share.",
+        "# TYPE termit_task_success_rate gauge",
+        _prom_line("termit_task_success_rate", float(summary.task_success_rate)),
+        "# HELP termit_cost_per_successful_task_usd Estimated USD per completed task.",
+        "# TYPE termit_cost_per_successful_task_usd gauge",
+        _prom_line("termit_cost_per_successful_task_usd", float(summary.cost_per_successful_task_usd)),
+        "# HELP termit_estimated_cost_total_usd Estimated total model cost USD.",
+        "# TYPE termit_estimated_cost_total_usd gauge",
+        _prom_line("termit_estimated_cost_total_usd", float(summary.estimated_cost_total_usd)),
         "# HELP termit_agent_queue_size Current agent run queue depth.",
         "# TYPE termit_agent_queue_size gauge",
         _prom_line("termit_agent_queue_size", int(queue["queue_size"])),
@@ -254,6 +269,14 @@ async def metrics_prometheus(
         lines.append(f"# HELP termit_{key} {help_text}")
         lines.append(f"# TYPE termit_{key} gauge")
         lines.append(_prom_line(f"termit_{key}", float(orchestration.get(key, 0.0))))
+    if summary.model_usage:
+        lines.append("# HELP termit_model_usage_total Chat requests by model label.")
+        lines.append("# TYPE termit_model_usage_total gauge")
+        for model, count in sorted(summary.model_usage.items()):
+            safe_model = str(model).replace('"', "")
+            lines.append(
+                _prom_line("termit_model_usage_total", int(count), labels={"model": safe_model})
+            )
     for row in telemetry.http_endpoint_metrics():
         endpoint = str(row["endpoint"]).replace('"', "")
         labels = {"endpoint": endpoint}
