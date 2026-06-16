@@ -1,0 +1,5 @@
+{
+  "pass_rate": 0.93,
+  "total": 53,
+  "note": "Release 0.3.5 baseline for nightly regression gate (pass_rate only when results empty)."
+}

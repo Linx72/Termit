@@ -679,5 +679,25 @@ class AgentServiceTests(unittest.TestCase):
                 )
 
 
+class AgentPolicyFallbackTests(unittest.TestCase):
+    def test_apply_policy_fallback_switches_to_plan_and_strict(self) -> None:
+        payload = AgentRunRequest(
+            input="Fix flaky test",
+            policy_preset="autopilot",
+            run_mode="agent",
+            auto_confirm_risky_tools=True,
+        )
+        updated = AgentService._apply_policy_fallback(payload, "tool_error")
+        self.assertEqual(updated.run_mode, "plan")
+        self.assertEqual(updated.policy_preset, "strict")
+        self.assertFalse(updated.auto_confirm_risky_tools)
+        self.assertIn("[Policy fallback]", updated.input)
+
+    def test_apply_policy_fallback_skips_external_errors(self) -> None:
+        payload = AgentRunRequest(input="Fix bug", run_mode="agent")
+        updated = AgentService._apply_policy_fallback(payload, "run_timeout")
+        self.assertEqual(updated.model_dump(), payload.model_dump())
+
+
 if __name__ == "__main__":
     unittest.main()

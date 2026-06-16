@@ -111,6 +111,19 @@ _ASK_BLOCKED_TOOLS = frozenset(
         "mcp_invoke",
     }
 )
+_POLICY_FALLBACK_FAILURE_CLASSES = frozenset(
+    {
+        "tool_error",
+        "parse_error",
+        "verification_error",
+        "step_limit",
+        "loop_error",
+    }
+)
+_POLICY_FALLBACK_HINT = (
+    "\n\n[Policy fallback] Previous attempt degraded; continue read-only with a concise plan "
+    "and safe steps (dry-run commands only)."
+)
 _active_ssh_config: ContextVar[SshWorkspaceConfig | None] = ContextVar(
     "active_ssh_config", default=None
 )
@@ -1713,6 +1726,7 @@ class AgentService:
         #    provider/model metadata, response, and error when available.
         # This ordering guarantees deterministic observable state transitions and prevents
         # stale in-memory snapshots from overwriting newer cancellation decisions.
+        active_payload = payload
         for attempt in range(1, self._run_max_attempts + 1):
             with self._lock:
                 current = self._run_store.get_run(run_id)
@@ -1739,7 +1753,7 @@ class AgentService:
                 profile = self.get_agent(agent_id)
                 result = asyncio.run(
                     asyncio.wait_for(
-                        self._run_with_profile(profile, payload, run_id=run_id, attempt=attempt),
+                        self._run_with_profile(profile, active_payload, run_id=run_id, attempt=attempt),
                         timeout=self._run_timeout_seconds,
                     )
                 )
@@ -1868,6 +1882,20 @@ class AgentService:
                         message=f"Attempt {attempt} failed ({failure_class}). Scheduling retry.",
                         attempt=attempt,
                     )
+                    fallback_payload = self._apply_policy_fallback(active_payload, failure_class)
+                    if fallback_payload.model_dump() != active_payload.model_dump():
+                        active_payload = fallback_payload
+                        self._append_event(
+                            run_id=run_id,
+                            event_type="policy_fallback_applied",
+                            state=AgentRunState.running,
+                            message=(
+                                "Applied constrained plan + safe-exec fallback "
+                                f"(run_mode={active_payload.run_mode}, "
+                                f"policy_preset={active_payload.policy_preset or 'default'})."
+                            ),
+                            attempt=attempt + 1,
+                        )
                 if self._run_retry_backoff_ms > 0:
                     time.sleep((self._run_retry_backoff_ms * (2 ** (attempt - 1))) / 1000.0)
                 continue
@@ -1966,6 +1994,23 @@ class AgentService:
                     )
                 if self._run_retry_backoff_ms > 0:
                     time.sleep((self._run_retry_backoff_ms * (2 ** (attempt - 1))) / 1000.0)
+
+    @staticmethod
+    def _apply_policy_fallback(payload: AgentRunRequest, failure_class: str) -> AgentRunRequest:
+        """Switch degraded retries to constrained plan + safe tool policy."""
+        if failure_class not in _POLICY_FALLBACK_FAILURE_CLASSES:
+            return payload
+        updates: dict[str, object] = {
+            "auto_confirm_risky_tools": False,
+        }
+        if (payload.run_mode or "agent").strip().lower() == "agent":
+            updates["run_mode"] = "plan"
+        preset = (payload.policy_preset or "").strip()
+        if preset in {"", "autopilot", "team"}:
+            updates["policy_preset"] = "strict"
+        if _POLICY_FALLBACK_HINT not in payload.input:
+            updates["input"] = payload.input + _POLICY_FALLBACK_HINT
+        return payload.model_copy(update=updates)
 
     @staticmethod
     def _classify_failure(exc: Exception) -> str:

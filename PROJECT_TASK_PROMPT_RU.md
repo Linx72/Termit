@@ -247,7 +247,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Трек 2 — Agent autonomy vNext (недели 2–4)
 
 - [x] Усилить stop-conditions и recovery path в tool loop при деградации — typed `failure_class` на AgentLoopError
-- [ ] Добавить policy-level fallback (constrained-plan + safe-exec)
+- [x] Добавить policy-level fallback (constrained-plan + safe-exec)
 - [x] Ввести явные outcome classes: success / partial / blocked-external / blocked-policy
 
 **DoD:** рост completion-rate и снижение repeat/empty-final кейсов на типовых coding run.

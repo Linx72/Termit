@@ -1,6 +1,8 @@
-import unittest
+import json
+import os
+import tempfile
 import time
-from pathlib import Path
+import unittest
 from tempfile import TemporaryDirectory
 
 from app.domain.schemas import AgentProfileCreateRequest, TaskCreateRequest, TaskType
@@ -70,34 +72,77 @@ class TaskAgentAssignmentTests(unittest.TestCase):
         self.assertEqual(selected, "agent_preferred")
 
     def test_project_task_auto_attaches_multiple_agents(self) -> None:
-        repo_root = Path(__file__).resolve().parents[1]
-        templates = AgentTemplatesStore(file_path=str(repo_root / "data/agent_templates.json"))
-        service = TaskService(
-            ToolingService(root_path="."),
-            InMemoryTaskStore(),
-            agent_runner=lambda input_text, task_type, session_id, project_id: "ok",
-            use_agent_for_auto=True,
-            agent_registry=self.registry,
-            agent_templates=templates,
-        )
-        created = service.create_task(
-            TaskCreateRequest(
-                input="Need CI fix and tests for project pipeline",
-                task_type=TaskType.coding,
-                project_id="demo-project",
+        templates_payload = [
+            {
+                "template_id": "termit-platform-dev",
+                "name": "Termit Platform Dev",
+                "description": "",
+                "task_type": "coding",
+                "system_prompt": "You are a platform developer.",
+                "enabled_tools": [],
+                "use_tool_loop": False,
+                "use_retrieval": False,
+                "allow_online": False,
+                "skill_ids": [],
+            },
+            {
+                "template_id": "write-tests",
+                "name": "Write Tests",
+                "description": "",
+                "task_type": "coding",
+                "system_prompt": "You write tests.",
+                "enabled_tools": [],
+                "use_tool_loop": False,
+                "use_retrieval": False,
+                "allow_online": False,
+                "skill_ids": [],
+            },
+            {
+                "template_id": "fix-ci",
+                "name": "Fix CI",
+                "description": "",
+                "task_type": "coding",
+                "system_prompt": "You fix CI.",
+                "enabled_tools": [],
+                "use_tool_loop": False,
+                "use_retrieval": False,
+                "allow_online": False,
+                "skill_ids": [],
+            },
+        ]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp_file:
+            json.dump(templates_payload, tmp_file)
+            tmp_path = tmp_file.name
+        try:
+            templates = AgentTemplatesStore(file_path=tmp_path)
+            service = TaskService(
+                ToolingService(root_path="."),
+                InMemoryTaskStore(),
+                agent_runner=lambda input_text, task_type, session_id, project_id: "ok",
+                use_agent_for_auto=True,
+                agent_registry=self.registry,
+                agent_templates=templates,
             )
-        )
-        deadline = time.time() + 2.0
-        task = service.get_task(created.task_id)
-        while task.state.value in {"queued", "running"} and time.time() < deadline:
-            time.sleep(0.05)
+            created = service.create_task(
+                TaskCreateRequest(
+                    input="Need CI fix and tests for project pipeline",
+                    task_type=TaskType.coding,
+                    project_id="demo-project",
+                )
+            )
+            deadline = time.time() + 2.0
             task = service.get_task(created.task_id)
-        event_types = [event.event_type for event in task.events]
-        self.assertIn("project_agents_attached", event_types)
-        agent_names = {agent.name for agent in self.registry.list_agents()}
-        self.assertIn("Termit Platform Dev", agent_names)
-        self.assertIn("Write Tests", agent_names)
-        self.assertIn("Fix CI", agent_names)
+            while task.state.value in {"queued", "running"} and time.time() < deadline:
+                time.sleep(0.05)
+                task = service.get_task(created.task_id)
+            event_types = [event.event_type for event in task.events]
+            self.assertIn("project_agents_attached", event_types)
+            agent_names = {agent.name for agent in self.registry.list_agents()}
+            self.assertIn("Termit Platform Dev", agent_names)
+            self.assertIn("Write Tests", agent_names)
+            self.assertIn("Fix CI", agent_names)
+        finally:
+            os.unlink(tmp_path)
 
 
 if __name__ == "__main__":

@@ -151,7 +151,14 @@ jobs:
           curl -sf -X POST http://127.0.0.1:8765/api/eval/run-suite \
             -H 'Content-Type: application/json' \
             -d '{"limit":53,"persist_report":false}' \
+            | tee /tmp/eval_current_nightly.json \
             | python3 scripts/eval_ci_gate.py
+      - name: Nightly eval regression gate
+        run: |
+          python3 scripts/eval_regression_report.py \
+            --baseline data/eval_baseline_release.json \
+            --current /tmp/eval_current_nightly.json \
+            --max-pass-rate-drop 0.05
       - name: Nightly flaky-watch report
         run: |
           python3 scripts/flaky_watch_report.py \
