@@ -187,10 +187,12 @@ class DesktopAcceleratorService:
 
     def _append_jsonl(self, path: Path, record: dict[str, object]) -> None:
         with self._lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=True) + "\n")
 
     def _write_jsonl(self, path: Path, rows: list[dict[str, object]]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as handle:
             for row in rows:
                 handle.write(json.dumps(row, ensure_ascii=True) + "\n")
