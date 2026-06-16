@@ -98,7 +98,7 @@ async def _app_lifespan(_app: FastAPI):
     agent_schedule_service.stop()
     daily_improvement_scheduler.stop()
     stage1_scheduler.stop()
-    agent_service.stop()
+    agent_service.stop(grace_seconds=float(settings.agent_shutdown_grace_seconds))
 
 
 app = FastAPI(

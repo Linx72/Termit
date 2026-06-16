@@ -19,6 +19,12 @@ class PlatformParityTests(unittest.TestCase):
         result = guard.check_prompt("api_key=supersecretvalue123456")
         self.assertFalse(result.allowed)
 
+    def test_guardrail_blocks_secret_patch(self) -> None:
+        guard = GuardrailService()
+        result = guard.check_patch_content("password=supersecretvalue123456")
+        self.assertFalse(result.allowed)
+        self.assertIn("secrets", result.reason.lower())
+
     def test_skill_store_lists_bundled_skills(self) -> None:
         root = Path(__file__).resolve().parents[1] / "data" / "skills"
         store = SkillStore(str(root))

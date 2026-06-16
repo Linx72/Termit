@@ -48,4 +48,11 @@ class GuardrailService:
                 reason=f"Patch exceeds max size ({self.max_patch_chars} chars).",
                 severity="block",
             )
+        for pattern in SECRET_PATTERNS:
+            if pattern.search(content):
+                return GuardrailResult(
+                    allowed=False,
+                    reason="Patch appears to contain secrets or credentials.",
+                    severity="block",
+                )
         return GuardrailResult(allowed=True)

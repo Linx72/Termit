@@ -4,19 +4,17 @@
 
 ## Сводка
 
-- **0.3.6** — SLO/Grafana, DLQ UI, Prometheus metrics, release pack готов.
-- **Track 3–5** — desktop UX, release discipline, SLO dashboards закрыты.
-- **Track 1** — unstable e2e только nightly (`TERMIT_RUN_UNSTABLE_INTEGRATION=1`).
+- **0.3.6** — SLO/Grafana, DLQ UI, OpsSecurityPanel (quota + audit export), graceful shutdown, patch secret scan.
+- **Фаза 5** — почти закрыта; осталось: signed desktop builds.
 
-## Ключевые файлы (0.3.6)
+## Ключевые файлы
 
-- `app/api/routes/metrics.py` — SLO prometheus gauges
-- `deploy/prometheus/`, `deploy/grafana/`, `docker-compose.monitoring.yml`
-- `clients/termit-desktop/src/AgentObservabilityPanel.tsx` — DLQ replay
-- `clients/termit-client/src/client.ts` — DLQ API
-- `docs/OBSERVABILITY_SLO_RU.md`, `VERSION` → 0.3.6
+- `app/services/agent_service.py` — graceful stop + draining
+- `clients/termit-desktop/src/OpsSecurityPanel.tsx`
+- `app/services/guardrail_service.py` — patch secret scan
+- `GET /api/ops/runtime-policy`
 
 ## Открытые задачи
 
-- [ ] Фаза 5: API keys UI, graceful shutdown, signed desktop builds
-- [ ] Tag `v0.3.6` + `./scripts/release_all.sh` при готовности к stable
+- [ ] Tag `v0.3.6` + GitHub release
+- [ ] Signed desktop builds

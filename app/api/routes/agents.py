@@ -37,6 +37,7 @@ from app.services.agent_service import (
     AgentNotFoundError,
     AgentPermissionError,
     AgentQueueFullError,
+    AgentDrainingError,
     AgentRunNotFoundError,
     AgentService,
     GuardrailBlockedError,
@@ -116,6 +117,8 @@ async def create_agent_run(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AgentQueueFullError as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except AgentDrainingError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except GuardrailBlockedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

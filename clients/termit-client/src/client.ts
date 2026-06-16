@@ -531,6 +531,18 @@ export class TermitClient {
     return this.request("/api/ops/agent-runs/metrics");
   }
 
+  getQuotaSummary(): Promise<import("./types").QuotaSummaryResponse> {
+    return this.request("/api/ops/quota-summary");
+  }
+
+  getToolAudit(limit = 100): Promise<import("./types").ToolAuditEvent[]> {
+    return this.request(`/api/tools/audit?limit=${encodeURIComponent(String(limit))}`);
+  }
+
+  getRuntimePolicy(): Promise<import("./types").AgentRuntimePolicy> {
+    return this.request("/api/ops/runtime-policy");
+  }
+
   getFinetuneTrainingDashboard(limit = 10): Promise<import("./types").FinetuneTrainingDashboard> {
     return this.request(`/api/finetune/training/dashboard?limit=${encodeURIComponent(String(limit))}`);
   }

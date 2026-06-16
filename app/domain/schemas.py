@@ -492,6 +492,14 @@ class QuotaResetResponse(BaseModel):
     message: str
 
 
+class AgentRuntimePolicyResponse(BaseModel):
+    run_max_attempts: int
+    run_retry_backoff_ms: int
+    shutdown_grace_seconds: int
+    queue_stuck_timeout_seconds: int
+    draining: bool = False
+
+
 class AgentAlertThresholds(BaseModel):
     queue_utilization_percent: float = 80.0
     dead_letter_rate: float = 0.15

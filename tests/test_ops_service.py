@@ -143,6 +143,15 @@ class OpsApiTests(unittest.TestCase):
         self.assertIn("tool_loop_verify_pass_rate", payload)
         self.assertIn("min_verify_pass_rate", payload)
 
+    def test_runtime_policy_endpoint(self) -> None:
+        client = TestClient(app)
+        resp = client.get("/api/ops/runtime-policy")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIn("run_max_attempts", body)
+        self.assertIn("shutdown_grace_seconds", body)
+        self.assertIn("draining", body)
+
 
 if __name__ == "__main__":
     unittest.main()

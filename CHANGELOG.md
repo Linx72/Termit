@@ -11,6 +11,12 @@
 ### Changed
 - Eval parity scenarios marked complete (74 scenarios in `data/eval_scenarios.json`)
 - Unstable e2e integration tests gated behind `TERMIT_RUN_UNSTABLE_INTEGRATION=1` (nightly only)
+- Graceful agent worker shutdown with configurable grace period
+- Secret/credential patterns blocked in patch content via guardrails
+
+### Security
+- Tool audit export from desktop settings (admin role)
+- API key quota summary panel for admin keys
 
 
 ## [0.3.4] - 2026-06-04

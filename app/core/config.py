@@ -114,6 +114,7 @@ class Settings:
     agent_run_retry_backoff_ms: int = 250
     agent_run_timeout_seconds: int = 180
     agent_queue_stuck_timeout_seconds: int = 120
+    agent_shutdown_grace_seconds: int = 30
     agent_run_max_events_per_run: int = 500
     agent_run_max_response_chars: int = 12000
     agent_run_retention_days: int = 14
@@ -346,6 +347,10 @@ def get_settings() -> Settings:
         agent_queue_stuck_timeout_seconds=max(
             10,
             int(os.getenv("TERMIT_AGENT_QUEUE_STUCK_TIMEOUT_SECONDS", "120")),
+        ),
+        agent_shutdown_grace_seconds=max(
+            0,
+            int(os.getenv("TERMIT_AGENT_SHUTDOWN_GRACE_SECONDS", "30")),
         ),
         agent_run_max_events_per_run=int(os.getenv("TERMIT_AGENT_RUN_MAX_EVENTS_PER_RUN", "500")),
         agent_run_max_response_chars=int(os.getenv("TERMIT_AGENT_RUN_MAX_RESPONSE_CHARS", "12000")),

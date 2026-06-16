@@ -215,11 +215,11 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ## Фаза 5 — Production & scale (4+ недель)
 
 - [x] Docker compose prod, systemd/LaunchAgent polish, backup SQLite — `docker-compose.prod.yml`, `scripts/backup_sqlite.sh`
-- [ ] UI для API keys, team quotas, audit export (RBAC уже есть)
-- [x] Grafana dashboard из Prometheus; alert на failed runs spike — `docker-compose.monitoring.yml`, `deploy/grafana/`
-- [ ] Graceful shutdown workers, run retry policies
+- [x] UI для API keys, team quotas, audit export (RBAC уже есть) — `OpsSecurityPanel` в desktop
+- [x] Graceful shutdown workers, run retry policies — `TERMIT_AGENT_SHUTDOWN_GRACE_SECONDS`, `/api/ops/runtime-policy`
 - [x] Dead-letter queue UI — DLQ list/replay в desktop `AgentObservabilityPanel`
-- [ ] Secret scan in patches, sandbox hardening, signed desktop builds
+- [x] Secret scan in patches — `GuardrailService.check_patch_content`
+- [ ] Signed desktop builds, sandbox hardening (extended)
 
 ### KPI targets
 

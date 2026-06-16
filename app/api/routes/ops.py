@@ -16,6 +16,7 @@ from app.domain.schemas import (
     OpsReadinessResponse,
     QuotaResetRequest,
     QuotaResetResponse,
+    AgentRuntimePolicyResponse,
     QuotaSummaryResponse,
     QuotaEntrySummary,
     OrchestrationEvalReportListResponse,
@@ -142,6 +143,20 @@ async def reset_quota(
         api_key=OpsService.mask_api_key(payload.api_key),
         reset=reset,
         message="Quota reset for today." if reset else "No usage records found for today.",
+    )
+
+
+@router.get("/runtime-policy", response_model=AgentRuntimePolicyResponse)
+async def runtime_policy(
+    settings: Settings = Depends(get_settings),
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRuntimePolicyResponse:
+    return AgentRuntimePolicyResponse(
+        run_max_attempts=settings.agent_run_max_attempts,
+        run_retry_backoff_ms=settings.agent_run_retry_backoff_ms,
+        shutdown_grace_seconds=settings.agent_shutdown_grace_seconds,
+        queue_stuck_timeout_seconds=settings.agent_queue_stuck_timeout_seconds,
+        draining=service.is_draining(),
     )
 
 

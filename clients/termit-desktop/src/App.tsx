@@ -24,6 +24,7 @@ import {
 import { FirstRunWizard } from "./FirstRunWizard";
 import { HealthDashboard } from "./HealthDashboard";
 import { AgentObservabilityPanel } from "./AgentObservabilityPanel";
+import { OpsSecurityPanel } from "./OpsSecurityPanel";
 import { RuntimeStatusBar } from "./RuntimeStatusBar";
 import {
   attachmentPaths,
@@ -2351,6 +2352,7 @@ export function App() {
         <RuntimeStatusBar client={client} connected={connected} locale={locale} />
         <HealthDashboard client={client} connected={connected} locale={locale} />
         <AgentObservabilityPanel client={client} connected={connected} locale={locale} />
+        <OpsSecurityPanel client={client} connected={connected} locale={locale} />
 
         <div className="field">
           <label htmlFor="workspace">{t(locale, "workspaceFolder")}</label>

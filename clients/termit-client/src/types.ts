@@ -303,6 +303,40 @@ export interface AgentRunsMetrics {
   by_outcome_class?: Record<string, number>;
 }
 
+export interface QuotaEntrySummary {
+  key_hint: string;
+  role: string;
+  team: string;
+  used: number;
+  limit: number;
+  remaining: number;
+  usage_percent: number;
+}
+
+export interface QuotaSummaryResponse {
+  auth_enabled: boolean;
+  entries: QuotaEntrySummary[];
+}
+
+export interface ToolAuditEvent {
+  timestamp: string;
+  tool_name: string;
+  action: string;
+  risk_level: string;
+  allowed: boolean;
+  reason: string;
+  command?: string | null;
+  path?: string | null;
+}
+
+export interface AgentRuntimePolicy {
+  run_max_attempts: number;
+  run_retry_backoff_ms: number;
+  shutdown_grace_seconds: number;
+  queue_stuck_timeout_seconds: number;
+  draining: boolean;
+}
+
 export interface EvalReportSummary {
   run_id?: string;
   timestamp?: number | string;

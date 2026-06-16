@@ -84,6 +84,10 @@ class AgentQueueFullError(Exception):
     pass
 
 
+class AgentDrainingError(Exception):
+    pass
+
+
 class AgentPermissionError(Exception):
     pass
 
@@ -213,9 +217,11 @@ class AgentService:
         self._lock = Lock()
         self._workers: list[Thread] = []
         self._stop = Event()
+        self._draining = False
         self.start()
 
     def start(self) -> None:
+        self._draining = False
         if self._stop.is_set():
             self._stop.clear()
         with self._lock:
@@ -232,11 +238,34 @@ class AgentService:
                 worker.start()
                 self._workers.append(worker)
 
-    def stop(self) -> None:
+    def stop(self, grace_seconds: float = 30.0) -> dict[str, object]:
+        """Stop workers; wait up to grace_seconds for in-flight runs to finish."""
+        self._draining = True
         self._stop.set()
+        deadline = time.monotonic() + max(0.0, grace_seconds)
+        while time.monotonic() < deadline:
+            with self._lock:
+                by_state = self._run_store.count_runs_by_state()
+            running = int(by_state.get(AgentRunState.running.value, 0))
+            if running == 0 and self._run_queue.qsize() == 0:
+                break
+            time.sleep(0.25)
         for worker in list(self._workers):
-            worker.join(timeout=2)
+            remaining = max(0.05, deadline - time.monotonic())
+            worker.join(timeout=remaining)
         self._workers = []
+        with self._lock:
+            running_left = int(
+                self._run_store.count_runs_by_state().get(AgentRunState.running.value, 0)
+            )
+        return {
+            "draining": self._draining,
+            "running_left": running_left,
+            "queue_size": self._run_queue.qsize(),
+        }
+
+    def is_draining(self) -> bool:
+        return self._draining
 
     def create_agent(self, payload: AgentProfileCreateRequest) -> AgentProfileResponse:
         return self._registry.create_agent(payload)
@@ -251,6 +280,8 @@ class AgentService:
         return profile
 
     def create_run(self, agent_id: str, payload: AgentRunRequest) -> AgentRunCreateResponse:
+        if self._draining:
+            raise AgentDrainingError("Agent service is shutting down; new runs are not accepted.")
         profile = self.get_agent(agent_id)
         if self._guardrails_enabled and self._guardrails is not None:
             check = self._guardrails.check_prompt(payload.input)

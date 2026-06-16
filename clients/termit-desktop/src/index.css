@@ -1060,6 +1060,35 @@ button.compact {
   color: #58a6ff;
 }
 
+.ops-security-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+}
+
+.quota-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.quota-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+}
+
+.quota-key {
+  font-family: ui-monospace, monospace;
+  color: #c9d1d9;
+}
+
 .workflow-hub,
 .kpi-gate-panel {
   margin-top: 10px;

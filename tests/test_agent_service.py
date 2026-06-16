@@ -22,6 +22,7 @@ from app.services.agent_run_store import InMemoryAgentRunStore
 from app.services.agent_service import (
     AgentNotFoundError,
     AgentPermissionError,
+    AgentDrainingError,
     AgentRunNotFoundError,
     AgentService,
 )
@@ -503,9 +504,26 @@ class AgentServiceTests(unittest.TestCase):
             service.stop()
             stopped = service.queue_metrics()
             self.assertEqual(stopped["alive_workers"], 0)
+            self.assertTrue(service.is_draining())
             service.start()
             restarted = service.queue_metrics()
             self.assertGreaterEqual(restarted["alive_workers"], 1)
+            self.assertFalse(service.is_draining())
+
+    def test_draining_rejects_new_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = self._build_service(tmp)
+            agent = service.create_agent(
+                AgentProfileCreateRequest(
+                    name="Drain",
+                    description="",
+                    system_prompt="test",
+                    task_type=TaskType.coding,
+                )
+            )
+            service._draining = True
+            with self.assertRaises(AgentDrainingError):
+                service.create_run(agent.agent_id, AgentRunRequest(input="hello"))
 
     def test_invoke_loop_tool_auto_confirms_apply_patch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
