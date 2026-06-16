@@ -140,7 +140,8 @@ jobs:
       - name: Extended release smoke
         env:
           TERMIT_SMOKE_REQUIRE_SERVER: "1"
-          TERMIT_EVAL_GATE_TIER: "release"
+          # Pass-rate only on CI (no cloud judge/API keys). Full release tier
+          # (quality + cloud_judge_coverage) is for local/manual pre-release.
           TERMIT_EVAL_MIN_PASS_RATE: "0.95"
         run: ./scripts/release_smoke_extended.sh
       - name: Nightly eval deep gate

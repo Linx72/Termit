@@ -53,7 +53,8 @@
 - Quality gate matrix (fast/deep/release):
   - Fast gate (PR/main CI): cursor parity slice `limit=20` in `.github/workflows/ci.yml` (`Eval fast gate (PR/main)`).
   - Deep gate (nightly): full eval suite `limit=53` in `.github/workflows/ci.yml` (`Nightly eval deep gate`).
-  - Release gate (nightly release profile): `TERMIT_EVAL_GATE_TIER=release` + `./scripts/release_smoke_extended.sh` in `.github/workflows/ci.yml` (`Extended release smoke`).
+  - Release gate (local/manual with cloud judge): `TERMIT_EVAL_GATE_TIER=release ./scripts/release_smoke_extended.sh`
+  - Nightly extended smoke (CI): pass-rate gate only (`TERMIT_EVAL_MIN_PASS_RATE=0.95`) in `.github/workflows/ci.yml` (`Extended release smoke`); cloud judge coverage is not required on GitHub runners.
 
 - Release smoke profiles:
   - Deterministic core (default): `./scripts/release_smoke_core.sh`
