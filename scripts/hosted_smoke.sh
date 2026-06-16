@@ -79,6 +79,7 @@ expect_code /api/ops/readiness 200
 expect_code /api/eval/dashboard 200
 expect_code /api/desktop/kpi-gates 200
 expect_code /api/ops/beta-metrics 200
+expect_code /api/platform/mcp/servers 200
 
 if [[ -n "$API_KEY" ]]; then
   expect_code /api/ops/agent-runs/metrics 200

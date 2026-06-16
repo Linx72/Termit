@@ -371,6 +371,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** beta growth виден в web ops и HealthDashboard; KPI export bundle включает beta cohort.
 
+### Следующий этап (0.4.7): Browser MCP preset (Playwright bridge)
+
+- [x] `scripts/mcp_termit_browser.py` — MCP stdio server (navigate/snapshot/click)
+- [x] Preset `termit-browser` в `data/mcp_servers.json` (disabled by default)
+- [x] `docs/MCP_BROWSER_RU.md` + skill online-project
+- [x] Tests `test_mcp_browser_server.py`; hosted smoke `/api/platform/mcp/servers`
+
+**DoD:** агент может вызывать браузер через `mcp_invoke` + audit; preset документирован.
+
 ---
 
 ## Порядок выполнения

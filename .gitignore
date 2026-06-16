@@ -45,6 +45,7 @@ data/eval_fixtures/*
 !data/eval_fixtures/patch_sample.txt
 !data/desktop_north_star.json
 !data/desktop_policy_presets.json
+!data/mcp_servers.json
 !data/eval_baseline_release.json
 
 # Cursor rules — keep

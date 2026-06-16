@@ -152,7 +152,7 @@ Learning: training_signals → curator → finetune → regression gate
 | Invoke MCP tool через loop + audit | `tooling_service.py` or new service | |
 | RBAC: MCP tools per agent profile | `agent_registry_store.py` | |
 | Desktop Settings: MCP config UI | `clients/termit-desktop/` | |
-| Browser MCP (CDP) opt-in | document + preset server | замена HTTP fetch |
+| Browser MCP (CDP) opt-in | `scripts/mcp_termit_browser.py`, `docs/MCP_BROWSER_RU.md` | ✅ preset `termit-browser` |
 
 ### C.3 Scheduled agent runs
 

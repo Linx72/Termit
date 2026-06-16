@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.7] - 2026-06-17
+
+### Added
+- Browser MCP preset `termit-browser` (Playwright stdio bridge)
+- `scripts/mcp_termit_browser.py` — navigate/snapshot/click via `mcp_invoke`
+- `docs/MCP_BROWSER_RU.md`; hosted smoke `/api/platform/mcp/servers`
+
 ## [0.4.6] - 2026-06-17
 
 ### Added
