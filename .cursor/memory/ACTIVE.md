@@ -4,22 +4,18 @@
 
 ## Сводка
 
-- **0.3.7 finetune loop closure** — KPI gate (+5%), promote wiring, release pack.
-- **0.3.6** на `main`: SLO/Grafana, signed desktop, post-parity roadmap закрыт.
+- **0.3.8** — Desktop North Star UX + eval observability.
+- **0.3.7** — finetune loop closure, KPI gate +5%, tag `v0.3.7`.
 
 ## Файлы сессии
 
-- `scripts/finetune_eval_kpi_gate.py`
-- `scripts/post_stage1_train.py`
-- `scripts/stage1_full_loop.sh`
-- `scripts/training_loop_full.sh`
-- `tests/test_finetune_eval_kpi_gate.py`
-- `deploy/schedulers/stage1-weekly.env.example`
-- `docs/FINETUNE_LOOP_RU.md`
-- `VERSION` → 0.3.7
-- `docs/MIGRATION_NOTES_0.3.7.md`, `docs/ROLLBACK_PLAN_0.3.7.md`
+- `clients/termit-desktop/src/App.tsx` — WorkflowHubPanel + KpiGatePanel
+- `app/services/eval_service.py` — `pass_rate_by_category`
+- `app/api/routes/metrics.py` — Prometheus eval metrics
+- `deploy/prometheus/alerts.yml` — WorkersDown + ProviderFailureBurst fix
+- `VERSION` → 0.3.8
 
 ## Открытые задачи
 
-- [ ] Tag/push `v0.3.7` и GitHub Release (после commit)
-- [ ] Следующий этап roadmap — см. `PROJECT_TASK_PROMPT_RU.md` после 0.3.7
+- [ ] Tag/push `v0.3.8` после commit
+- [ ] Следующий этап: media studio human-approve gate, structured JSON logs (OBSERVABILITY_CHECKLIST)

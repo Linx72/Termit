@@ -45,6 +45,8 @@ groups:
         annotations:
           summary: "Elevated chat model fallback rate"
           description: "Fallback rate {{ $value | humanizePercentage }} exceeds 35%."
+
+      - alert: TermitWorkersDown
         expr: termit_agent_workers_alive < termit_agent_workers_configured
         for: 3m
         labels:
@@ -52,3 +54,16 @@ groups:
         annotations:
           summary: "Agent workers not fully alive"
           description: "Alive {{ $value }} < configured workers."
+
+      - alert: TermitProviderFailureBurst
+        expr: |
+          rate(termit_chat_requests_total[5m]) > 0.05
+          and (
+            rate(termit_chat_requests_total[5m]) - rate(termit_chat_success_total[5m])
+          ) / rate(termit_chat_requests_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Chat provider failure burst"
+          description: "Chat error share above 50% over 5m (requests/min elevated)."

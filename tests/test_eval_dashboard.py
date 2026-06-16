@@ -6,10 +6,22 @@ from app.services.eval_service import EvalService
 
 
 class EvalDashboardTests(unittest.TestCase):
+    def test_pass_rate_by_category(self) -> None:
+        rates = EvalService.pass_rate_by_category(
+            [
+                {"category": "cursor_parity", "status": "passed"},
+                {"category": "cursor_parity", "status": "failed"},
+                {"category": "coding", "status": "passed"},
+            ]
+        )
+        self.assertAlmostEqual(rates["cursor_parity"], 0.5)
+        self.assertAlmostEqual(rates["coding"], 1.0)
+
     def test_build_dashboard_includes_kpi_fields(self) -> None:
         service = EvalService(scenarios_path="data/eval_scenarios.json")
         dashboard = service.build_dashboard(report_limit=3)
         self.assertIn("pass_rate", dashboard)
+        self.assertIn("pass_rate_by_category", dashboard)
         self.assertIn("latency_p95_ms", dashboard)
         self.assertIn("estimated_cost_usd", dashboard)
         self.assertIn("scenario_count", dashboard)

@@ -307,6 +307,20 @@ class EvalService:
             return []
         return self._report_store.list_recent(limit=limit)
 
+    @staticmethod
+    def pass_rate_by_category(results: list[dict[str, object]]) -> dict[str, float]:
+        """Aggregate pass rate per eval scenario category from suite results."""
+        totals: dict[str, list[bool]] = {}
+        for item in results:
+            category = str(item.get("category") or "unknown")
+            passed = str(item.get("status", "")) == "passed"
+            totals.setdefault(category, []).append(passed)
+        return {
+            category: round(sum(1 for ok in rows if ok) / len(rows), 4)
+            for category, rows in sorted(totals.items())
+            if rows
+        }
+
     def build_dashboard(self, *, report_limit: int = 10) -> dict[str, object]:
         reports = self.list_reports(limit=report_limit)
         latest = reports[0] if reports else None
@@ -317,8 +331,11 @@ class EvalService:
         suite_p95_ms = int(latest.get("latency_p95_ms", 0)) if latest else 0
         pass_rate = float(latest.get("pass_rate", 0.0)) if latest else 0.0
         cost_usd = float(latest.get("estimated_cost_usd", 0.0)) if latest else 0.0
+        latest_results = list(latest.get("results") or []) if latest else []
+        pass_by_category = self.pass_rate_by_category(latest_results)
         return {
             "pass_rate": pass_rate,
+            "pass_rate_by_category": pass_by_category,
             "latency_p95_ms": suite_p95_ms or chat_p95_ms or 0,
             "chat_latency_p95_ms": chat_p95_ms,
             "estimated_cost_usd": cost_usd,

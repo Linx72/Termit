@@ -20,9 +20,11 @@ from app.services.alert_health_service import build_alert_thresholds_response, e
 from app.services.metrics_snapshot_store import MetricsSnapshotStore
 from app.services.telemetry_store import TelemetryStore
 from app.services.agent_service import AgentService
+from app.services.eval_service import EvalService
 from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
 from app.state import (
     get_agent_service,
+    get_eval_service,
     get_metrics_snapshot_store,
     get_multi_agent_orchestrator,
     get_telemetry_store,
@@ -141,6 +143,7 @@ async def metrics_prometheus(
     telemetry: TelemetryStore = Depends(get_telemetry_store),
     agent_service: AgentService = Depends(get_agent_service),
     orchestrator: MultiAgentOrchestrator = Depends(get_multi_agent_orchestrator),
+    eval_service: EvalService = Depends(get_eval_service),
     settings: Settings = Depends(get_settings),
 ) -> PlainTextResponse:
     summary = telemetry.snapshot()
@@ -276,6 +279,21 @@ async def metrics_prometheus(
             safe_model = str(model).replace('"', "")
             lines.append(
                 _prom_line("termit_model_usage_total", int(count), labels={"model": safe_model})
+            )
+    eval_dashboard = eval_service.build_dashboard(report_limit=1)
+    pass_by_category = eval_dashboard.get("pass_rate_by_category") or {}
+    if isinstance(pass_by_category, dict) and pass_by_category:
+        lines.append("# HELP termit_eval_pass_rate Eval pass rate from latest suite report.")
+        lines.append("# TYPE termit_eval_pass_rate gauge")
+        lines.append(
+            _prom_line("termit_eval_pass_rate", float(eval_dashboard.get("pass_rate", 0.0)), labels={"scope": "overall"})
+        )
+        lines.append("# HELP termit_eval_pass_rate_by_category Pass rate by eval scenario category.")
+        lines.append("# TYPE termit_eval_pass_rate_by_category gauge")
+        for category, rate in sorted(pass_by_category.items()):
+            safe_cat = str(category).replace('"', "")
+            lines.append(
+                _prom_line("termit_eval_pass_rate_by_category", float(rate), labels={"category": safe_cat})
             )
     for row in telemetry.http_endpoint_metrics():
         endpoint = str(row["endpoint"]).replace('"', "")

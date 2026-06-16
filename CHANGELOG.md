@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.8] - 2026-06-16
+
+### Added
+- **Desktop:** `WorkflowHubPanel` + `KpiGatePanel` wired in settings (North Star journeys, KPI gates)
+- **Observability:** `pass_rate_by_category` in eval dashboard; Prometheus `termit_eval_pass_rate_by_category`
+- **Alerts:** fix `TermitWorkersDown`; add `TermitProviderFailureBurst`
+
+### Changed
+- Roadmap 0.3.8 closed in `PROJECT_TASK_PROMPT_RU.md`; `OBSERVABILITY_CHECKLIST` items updated
+
+
 ## [0.3.7] - 2026-06-16
 
 ### Added

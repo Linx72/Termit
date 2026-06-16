@@ -295,6 +295,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** один командный прогон `./scripts/training_loop_full.sh` закрывает цикл без ручных шагов; promote/shadow по regression gate.
 
+### Следующий этап (0.3.8): Desktop North Star + observability polish
+
+- [x] Подключить `WorkflowHubPanel` + `KpiGatePanel` в desktop settings (North Star journeys + KPI gates)
+- [x] Eval pass rate by scenario category в dashboard + Prometheus (`termit_eval_pass_rate_by_category`)
+- [x] Исправить Prometheus alerts (WorkersDown + provider failure burst)
+
+**DoD:** в настройках desktop видны journeys и KPI gates; `/api/metrics/prometheus` экспортирует eval по категориям.
+
 ---
 
 ## Порядок выполнения

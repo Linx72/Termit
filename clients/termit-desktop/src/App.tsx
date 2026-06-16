@@ -23,6 +23,8 @@ import {
 } from "@termit/client";
 import { FirstRunWizard } from "./FirstRunWizard";
 import { HealthDashboard } from "./HealthDashboard";
+import { KpiGatePanel } from "./KpiGatePanel";
+import { WorkflowHubPanel } from "./WorkflowHubPanel";
 import { AgentObservabilityPanel } from "./AgentObservabilityPanel";
 import { OpsSecurityPanel } from "./OpsSecurityPanel";
 import { RuntimeStatusBar } from "./RuntimeStatusBar";
@@ -61,7 +63,7 @@ import {
   type SafeApplySummary,
 } from "./composerSafeApply";
 import { suggestContextFiles, type ContextSuggestion } from "./contextSuggestions";
-import { journeyDescription, journeyTitle, parseCheckpointSummary } from "./northStar";
+import { journeyDescription, journeyTitle, parseCheckpointSummary, tabForJourney, type WorkflowTab } from "./northStar";
 import { trackWorkflowEvent } from "./workflowTelemetry";
 import {
   buildPresetDraft,
@@ -2076,6 +2078,17 @@ export function App() {
     })();
   };
 
+  const openWorkflowTab = (tab: WorkflowTab) => {
+    setSettingsOpen(false);
+    const modeMap: Partial<Record<WorkflowTab, StoredSettings["chatInteractionMode"]>> = {
+      plan: "plan",
+      agents: "agent",
+      terminal: "terminal",
+      chat: "ask",
+    };
+    updateSettings({ chatInteractionMode: modeMap[tab] ?? "agent" });
+  };
+
   const runJourneyWithAgent = async (journey: DesktopJourney) => {
     if (!connected) {
       return;
@@ -2351,6 +2364,25 @@ export function App() {
 
         <RuntimeStatusBar client={client} connected={connected} locale={locale} />
         <HealthDashboard client={client} connected={connected} locale={locale} />
+        <KpiGatePanel client={client} connected={connected} locale={locale} />
+        {northStarJourneys.length > 0 ? (
+          <WorkflowHubPanel
+            journeys={northStarJourneys}
+            activeJourneyId={settings.activeJourneyId}
+            locale={locale}
+            connected={connected}
+            autoExecuteWithAgent={settings.autoExecuteWithAgent}
+            onSelectJourney={(journeyId) => {
+              updateSettings({ activeJourneyId: journeyId });
+              const journey = northStarJourneys.find((item) => item.journey_id === journeyId);
+              if (journey) {
+                openWorkflowTab(tabForJourney(journey));
+              }
+            }}
+            onOpenTab={openWorkflowTab}
+            onRunWithAgent={(journey) => void runJourneyWithAgent(journey)}
+          />
+        ) : null}
         <AgentObservabilityPanel client={client} connected={connected} locale={locale} />
         <OpsSecurityPanel client={client} connected={connected} locale={locale} />
 

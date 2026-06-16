@@ -38,7 +38,7 @@ description: >-
 | [`AUTOMATION_TASK_PROMPT_RU.md`](../../../AUTOMATION_TASK_PROMPT_RU.md) | do_all_automatic, toggles, `/api/ops/automation` |
 | [`termit-automation`](../termit-automation/SKILL.md) | Skill: server automation + Desktop panel |
 
-**Текущий вектор:** parity **0.3.6 stable** закрыт (post-parity Tracks 1–5 + Фаза 5). Фокус: **finetune loop closure** (`docs/FINETUNE_LOOP_RU.md`), +5% eval после stage1, media studio polish. Finetune — усилитель платформы.
+**Текущий вектор:** **0.3.7 finetune loop** закрыт. Фокус **0.3.8**: Desktop North Star UX (WorkflowHub + KPI gates), eval metrics by category, observability polish.
 
 ### Post-parity focus (закрыто в 0.3.6)
 
@@ -48,11 +48,11 @@ description: >-
 4. ~~Eval/quality 2.0~~ — 74 scenarios, regression report, tiered gates
 5. ~~Release discipline~~ — RELEASE_FLOW, release_pack, signed TermitShell.app
 
-### Текущий фокус (0.3.7+)
+### Текущий фокус (0.3.8)
 
-1. Finetune loop: `./scripts/training_loop_full.sh` → promote/shadow gate
-2. Baseline refresh после green eval cycle
-3. Provider/cost observability (optional)
+1. Desktop North Star: WorkflowHub + KpiGatePanel в settings
+2. Eval observability: pass_rate_by_category в dashboard/Prometheus
+3. Prometheus alert hygiene (WorkersDown, provider burst)
 
 Подробная карта: [reference.md](reference.md). Архив старых milestones: [archive/](archive/).
 
