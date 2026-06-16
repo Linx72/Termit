@@ -16,7 +16,7 @@ from app.domain.schemas import (
     MetricsSummaryResponse,
     MetricsTrendResponse,
 )
-from app.services.alert_health_service import build_alert_thresholds_response, evaluate_chat_health
+from app.services.alert_health_service import build_alert_thresholds_response, evaluate_agent_health, evaluate_chat_health
 from app.services.metrics_snapshot_store import MetricsSnapshotStore
 from app.services.telemetry_store import TelemetryStore
 from app.services.agent_service import AgentService
@@ -141,10 +141,18 @@ async def metrics_prometheus(
     telemetry: TelemetryStore = Depends(get_telemetry_store),
     agent_service: AgentService = Depends(get_agent_service),
     orchestrator: MultiAgentOrchestrator = Depends(get_multi_agent_orchestrator),
+    settings: Settings = Depends(get_settings),
 ) -> PlainTextResponse:
     summary = telemetry.snapshot()
     queue = agent_service.queue_metrics()
     orchestration = orchestrator.metrics_snapshot()
+    thresholds = AgentAlertThresholds(
+        queue_utilization_percent=settings.agent_alert_queue_utilization_percent,
+        dead_letter_rate=settings.agent_alert_dead_letter_rate,
+        min_worker_alive_ratio=settings.agent_alert_min_worker_alive_ratio,
+        min_verify_pass_rate=settings.agent_alert_min_verify_pass_rate,
+    )
+    _health_status, _health_reasons, dead_letter_rate = evaluate_agent_health(queue, thresholds)
     lines = [
         "# HELP termit_chat_requests_total Total chat requests.",
         "# TYPE termit_chat_requests_total counter",
@@ -177,6 +185,36 @@ async def metrics_prometheus(
         lines.append("# TYPE termit_agent_runs_total gauge")
         for state, count in sorted(by_state.items()):
             lines.append(_prom_line("termit_agent_runs_total", int(count), labels={"state": str(state)}))
+    lines.extend(
+        [
+            "# HELP termit_agent_active_runs Currently running agent runs.",
+            "# TYPE termit_agent_active_runs gauge",
+            _prom_line("termit_agent_active_runs", float(queue.get("active_runs", 0))),
+            "# HELP termit_agent_stale_queued_runs Queued runs older than stuck timeout.",
+            "# TYPE termit_agent_stale_queued_runs gauge",
+            _prom_line("termit_agent_stale_queued_runs", float(queue.get("stale_queued_runs", 0))),
+            "# HELP termit_agent_stale_running_runs Running runs older than stuck timeout.",
+            "# TYPE termit_agent_stale_running_runs gauge",
+            _prom_line("termit_agent_stale_running_runs", float(queue.get("stale_running_runs", 0))),
+            "# HELP termit_agent_lifecycle_completion_rate Share of terminal runs completed successfully.",
+            "# TYPE termit_agent_lifecycle_completion_rate gauge",
+            _prom_line(
+                "termit_agent_lifecycle_completion_rate",
+                float(queue.get("lifecycle_completion_rate", 0.0)),
+            ),
+            "# HELP termit_agent_dead_letter_rate Failed runs share among terminal runs.",
+            "# TYPE termit_agent_dead_letter_rate gauge",
+            _prom_line("termit_agent_dead_letter_rate", float(dead_letter_rate)),
+        ]
+    )
+    by_outcome = queue.get("by_outcome_class", {})
+    if isinstance(by_outcome, dict) and by_outcome:
+        lines.append("# HELP termit_agent_outcome_class_total Runs by outcome class.")
+        lines.append("# TYPE termit_agent_outcome_class_total gauge")
+        for outcome, count in sorted(by_outcome.items()):
+            lines.append(
+                _prom_line("termit_agent_outcome_class_total", int(count), labels={"outcome": str(outcome)})
+            )
     for key, help_text in (
         ("tool_loop_runs", "Agent runs with tool-loop events."),
         ("tool_loop_tool_steps", "Successful tool-loop tool steps."),

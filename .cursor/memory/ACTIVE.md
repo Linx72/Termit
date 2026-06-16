@@ -4,22 +4,19 @@
 
 ## Сводка
 
-- **Track 3 (Desktop UX)** — RuntimeStatusBar, Quick Start wizard, HealthDashboard activeRuns/by_outcome_class, repo→workspace auto-fill.
-- **Track 2–4** — merged в main (PR #11): outcome classes, eval regression, policy fallback, CI orch gates.
-- **Track 4** — 74 eval-сценария в `data/eval_scenarios.json` (≥40+ DoD закрыт).
+- **0.3.6** — SLO/Grafana, DLQ UI, Prometheus metrics, release pack готов.
+- **Track 3–5** — desktop UX, release discipline, SLO dashboards закрыты.
+- **Track 1** — unstable e2e только nightly (`TERMIT_RUN_UNSTABLE_INTEGRATION=1`).
 
-## Файлы сессии (Track 3)
+## Ключевые файлы (0.3.6)
 
-- `clients/termit-desktop/src/RuntimeStatusBar.tsx` (новый)
-- `clients/termit-desktop/src/App.tsx`, `FirstRunWizard.tsx`, `HealthDashboard.tsx`
-- `clients/termit-desktop/src/i18n.ts`, `index.css`
-- `clients/termit-client/src/types.ts` — `by_outcome_class`
+- `app/api/routes/metrics.py` — SLO prometheus gauges
+- `deploy/prometheus/`, `deploy/grafana/`, `docker-compose.monitoring.yml`
+- `clients/termit-desktop/src/AgentObservabilityPanel.tsx` — DLQ replay
+- `clients/termit-client/src/client.ts` — DLQ API
+- `docs/OBSERVABILITY_SLO_RU.md`, `VERSION` → 0.3.6
 
 ## Открытые задачи
 
-- [x] Push Track 3 на main + CI green (run 27639779818)
-- [x] Track 5: `docs/RELEASE_FLOW.md`, `scripts/release_pack.sh`
-- [ ] Track 1: e2e flake tail (unstable → nightly only; PR deterministic)
-- [ ] Track 5: SLO/SLA dashboards и алерты
-- [ ] Фаза 5: Grafana/SLO dashboards, API keys UI, dead-letter queue UI
-- [x] Фаза 5: docker prod overlay + SQLite backup script
+- [ ] Фаза 5: API keys UI, graceful shutdown, signed desktop builds
+- [ ] Tag `v0.3.6` + `./scripts/release_all.sh` при готовности к stable

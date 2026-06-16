@@ -374,6 +374,9 @@ class MetricsApiTests(unittest.TestCase):
         self.assertIn("termit_openhands_contract_actions_total", resp.text)
         self.assertIn("termit_orchestration_tool_loop_runs_total", resp.text)
         self.assertIn("termit_orchestration_tool_steps_total", resp.text)
+        self.assertIn("termit_agent_dead_letter_rate", resp.text)
+        self.assertIn("termit_agent_stale_queued_runs", resp.text)
+        self.assertIn("termit_agent_lifecycle_completion_rate", resp.text)
 
 
 if __name__ == "__main__":

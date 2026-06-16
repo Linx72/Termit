@@ -151,6 +151,11 @@ export interface AgentRunListResponse {
   total: number;
 }
 
+export interface AgentRunDlqReplayResponse {
+  replayed: AgentRunCreateResponse[];
+  count: number;
+}
+
 export interface AgentRunEvent {
   event_type: string;
   state: string;

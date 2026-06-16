@@ -1,0 +1,47 @@
+groups:
+  - name: termit_slo
+    rules:
+      - alert: TermitHighDeadLetterRate
+        expr: termit_agent_dead_letter_rate > 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Termit dead-letter rate above SLO"
+          description: "Dead-letter rate is {{ $value | humanizePercentage }} (threshold 15%)."
+
+      - alert: TermitFailedRunsSpike
+        expr: increase(termit_agent_runs_total{state="failed"}[15m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spike in failed agent runs"
+          description: "More than 5 failed runs in the last 15 minutes."
+
+      - alert: TermitQueueStuck
+        expr: (termit_agent_stale_queued_runs + termit_agent_stale_running_runs) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent queue has stuck runs"
+          description: "Stale queued={{ $labels.stale_queued }} running={{ $labels.stale_running }}."
+
+      - alert: TermitHighToolLoopErrors
+        expr: rate(termit_tool_loop_tool_errors[10m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated tool-loop tool errors"
+          description: "Tool error rate exceeds 0.5/min over 10m window."
+
+      - alert: TermitWorkersDown
+        expr: termit_agent_workers_alive < termit_agent_workers_configured
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Agent workers not fully alive"
+          description: "Alive {{ $value }} < configured workers."

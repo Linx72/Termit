@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.6] - 2026-06-16
+
+### Added
+- **Desktop:** `RuntimeStatusBar` (active runs, queue, workers, outcome classes); Quick Start wizard; DLQ list/replay in `AgentObservabilityPanel`
+- **Observability:** Prometheus SLO metrics (`termit_agent_dead_letter_rate`, stale runs, completion rate); Grafana dashboard + alert rules; `docker-compose.monitoring.yml`
+- **Release ops:** `scripts/release_pack.sh`, `docs/RELEASE_FLOW.md`, `scripts/backup_sqlite.sh`, `docker-compose.prod.yml`
+- **SDK:** `listDlqRuns`, `replayDlqRuns`, `replayAgentRun` in `@termit/client`
+
+### Changed
+- Eval parity scenarios marked complete (74 scenarios in `data/eval_scenarios.json`)
+- Unstable e2e integration tests gated behind `TERMIT_RUN_UNSTABLE_INTEGRATION=1` (nightly only)
+
+
 ## [0.3.4] - 2026-06-04
 
 ### Fixed

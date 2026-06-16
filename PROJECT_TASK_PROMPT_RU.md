@@ -216,8 +216,9 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 - [x] Docker compose prod, systemd/LaunchAgent polish, backup SQLite — `docker-compose.prod.yml`, `scripts/backup_sqlite.sh`
 - [ ] UI для API keys, team quotas, audit export (RBAC уже есть)
-- [ ] Grafana dashboard из Prometheus; alert на failed runs spike
-- [ ] Graceful shutdown workers, dead-letter queue UI, run retry policies
+- [x] Grafana dashboard из Prometheus; alert на failed runs spike — `docker-compose.monitoring.yml`, `deploy/grafana/`
+- [ ] Graceful shutdown workers, run retry policies
+- [x] Dead-letter queue UI — DLQ list/replay в desktop `AgentObservabilityPanel`
 - [ ] Secret scan in patches, sandbox hardening, signed desktop builds
 
 ### KPI targets
@@ -239,7 +240,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Трек 1 — Stability hardening (недели 1–2)
 
 - [x] Закрыть источники `ResourceWarning` (unclosed sqlite connections) в runtime и тестах
-- [ ] Дожать флейки e2e для фоновых run (`running -> completed`) — unstable suites в nightly, SSE fallback в PR
+- [x] Дожать флейки e2e для фоновых run (`running -> completed`) — unstable suites в nightly, SSE fallback в PR
 - [x] Разделить unstable integration тесты в nightly-контур
 
 **DoD:** 20 последовательных прогонов smoke/release smoke без критичных флейков.
@@ -272,7 +273,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 - [x] Формализовать поток `rc -> stable -> hotfix` — `docs/RELEASE_FLOW.md`
 - [x] Автоматизировать пакет `changelog + migration notes + rollback` — `scripts/release_pack.sh`
-- [ ] Закрыть операционные SLO/SLA-дашборды и алерты
+- [x] Закрыть операционные SLO/SLA-дашборды и алерты — Prometheus rules + Grafana Termit SLO
 
 **DoD:** релиз выполняется одной командой без ручных патчей скриптов.
 

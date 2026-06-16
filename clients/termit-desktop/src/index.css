@@ -1033,6 +1033,33 @@ button.compact {
   background: #0d1117;
 }
 
+.dlq-panel {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #21262d;
+}
+
+.dlq-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dlq-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.dlq-run-id {
+  font-family: ui-monospace, monospace;
+  color: #58a6ff;
+}
+
 .workflow-hub,
 .kpi-gate-panel {
   margin-top: 10px;

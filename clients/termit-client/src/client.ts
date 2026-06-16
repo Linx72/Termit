@@ -160,6 +160,26 @@ export class TermitClient {
     );
   }
 
+  listDlqRuns(limit = 20): Promise<AgentRunListResponse> {
+    return this.request<AgentRunListResponse>(
+      `/api/agents/runs/dlq?limit=${encodeURIComponent(String(limit))}`
+    );
+  }
+
+  replayDlqRuns(limit = 5): Promise<import("./types").AgentRunDlqReplayResponse> {
+    return this.request<import("./types").AgentRunDlqReplayResponse>(
+      `/api/agents/runs/dlq/replay?limit=${encodeURIComponent(String(limit))}`,
+      { method: "POST" }
+    );
+  }
+
+  replayAgentRun(runId: string): Promise<AgentRunCreateResponse> {
+    return this.request<AgentRunCreateResponse>(
+      `/api/agents/runs/${encodeURIComponent(runId)}/replay`,
+      { method: "POST" }
+    );
+  }
+
   getAgentRunEvents(runId: string): Promise<AgentRunEvent[]> {
     return this.request<AgentRunEvent[]>(
       `/api/agents/runs/${encodeURIComponent(runId)}/events`
