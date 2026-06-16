@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full continuous-learning loop: enqueue Stage1 -> wait -> train -> optional eval.
+# Full continuous-learning loop: enqueue Stage1 -> wait -> train -> optional eval -> KPI gate.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,4 +25,23 @@ if [[ "${TERMIT_STAGE1_RUN_POST_EVAL:-true}" == "true" ]]; then
   POST_ARGS+=(--run-post-eval)
 fi
 
-exec "${ROOT}/scripts/post_stage1_train.sh" "${RUN_ID}" "${POST_ARGS[@]}"
+"${ROOT}/scripts/post_stage1_train.sh" "${RUN_ID}" "${POST_ARGS[@]}"
+POST_RC=$?
+if [[ "$POST_RC" -ne 0 ]]; then
+  exit "$POST_RC"
+fi
+
+EVAL_REPORT="${ROOT}/data/reports/stage1_post_eval_${RUN_ID}.json"
+BASELINE="${TERMIT_EVAL_BASELINE:-${ROOT}/data/eval_baseline_release.json}"
+MIN_IMPROVE="${TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT:-0.05}"
+
+if [[ -f "${EVAL_REPORT}" && -f "${BASELINE}" ]]; then
+  echo "[stage1_full_loop] eval KPI gate (min improvement ${MIN_IMPROVE})..."
+  KPI_ARGS=(--baseline "${BASELINE}" --current "${EVAL_REPORT}" --min-improvement "${MIN_IMPROVE}")
+  if [[ "${TERMIT_FINETUNE_KPI_STRICT:-false}" == "true" ]]; then
+    KPI_ARGS+=(--strict)
+  fi
+  "${ROOT}/.venv/bin/python" "${ROOT}/scripts/finetune_eval_kpi_gate.py" "${KPI_ARGS[@]}" || exit $?
+fi
+
+echo "[stage1_full_loop] complete run_id=${RUN_ID}"

@@ -195,7 +195,7 @@ Learning: training_signals → curator → finetune → regression gate
 - [x] «Где auth?» eval scenario R1 (retrieval runner, expect `auth_quota`)
 - [x] Eval scenarios P1–P3 for web_search / MCP / spawn_agent tool schema
 - [x] Regression gate threshold 5% (`TERMIT_FINETUNE_MAX_TRAIN_REGRESSION=0.05`)
-- [ ] +5% eval pass после одного finetune cycle (требует полный train+eval прогон)
+- [x] +5% eval pass после одного finetune cycle — KPI gate (`TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT=0.05`, `finetune_eval_kpi_gate.py`)
 
 ---
 

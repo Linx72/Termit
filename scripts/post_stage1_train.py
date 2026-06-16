@@ -4,13 +4,27 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_kpi_gate():
+    path = ROOT / "scripts" / "finetune_eval_kpi_gate.py"
+    spec = importlib.util.spec_from_file_location("finetune_eval_kpi_gate", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def api_request(
@@ -131,16 +145,54 @@ def main() -> int:
         )
         print(json.dumps(train_result, indent=2, ensure_ascii=True))
 
+        eval_result: dict[str, object] | None = None
         if args.run_post_eval and str(train_result.get("status")) == "completed":
             eval_result = api_request(
                 method="POST",
                 base_url=args.base_url,
                 path="/api/eval/run-suite",
                 api_key=args.api_key,
-                body={"limit": args.eval_limit},
+                body={"limit": args.eval_limit, "persist_report": True},
                 timeout=max(args.timeout_seconds, 120.0),
             )
             print(json.dumps(eval_result, indent=2, ensure_ascii=True))
+
+            reports_dir = ROOT / "data" / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            eval_path = reports_dir / f"stage1_post_eval_{run_id}.json"
+            eval_path.write_text(json.dumps(eval_result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+            baseline_path = Path(os.getenv("TERMIT_EVAL_BASELINE", str(ROOT / "data" / "eval_baseline_release.json")))
+            min_improve = float(os.getenv("TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT", "0.05"))
+            kpi_mod = _load_kpi_gate()
+            baseline_rate = kpi_mod.load_baseline_rate(baseline_path)
+            current_rate = kpi_mod._pass_rate_from_report(eval_result)
+            kpi_summary = kpi_mod.evaluate_improvement_kpi(
+                baseline_pass_rate=baseline_rate,
+                current_pass_rate=current_rate,
+                min_improvement=min_improve,
+            )
+            print(json.dumps({"eval_kpi": kpi_summary}, indent=2, ensure_ascii=True))
+
+            if os.getenv("TERMIT_EVAL_AUTO_PROMOTE_BASELINE", "false").lower() == "true" and baseline_path.is_file():
+                promote_path = ROOT / "scripts" / "eval_baseline_promote.py"
+                promote_spec = importlib.util.spec_from_file_location("eval_baseline_promote", promote_path)
+                if promote_spec and promote_spec.loader:
+                    promote_mod = importlib.util.module_from_spec(promote_spec)
+                    promote_spec.loader.exec_module(promote_mod)
+                    max_drop = float(os.getenv("TERMIT_EVAL_MAX_PASS_RATE_DROP", "0.05"))
+                    min_promote = float(os.getenv("TERMIT_EVAL_MIN_IMPROVEMENT_FOR_PROMOTE", str(min_improve)))
+                    _, promote_summary = promote_mod.promote_baseline(
+                        baseline_path=baseline_path,
+                        current_path=eval_path,
+                        max_pass_rate_drop=max_drop,
+                        min_improvement=min_promote,
+                        dry_run=False,
+                    )
+                    print(json.dumps({"baseline_promote": promote_summary}, indent=2, ensure_ascii=False))
+
+            if os.getenv("TERMIT_FINETUNE_KPI_STRICT", "false").lower() == "true" and not kpi_summary.get("kpi_passed"):
+                return 3
     except HTTPError as exc:
         print(exc.read().decode("utf-8", errors="replace"), file=sys.stderr)
         return 1

@@ -9,7 +9,8 @@
 | [`scripts/finetune_continuous_learning.sh`](file:///Users/amoros/Projects/Termit/scripts/finetune_continuous_learning.sh) | Ежедневный export + DPO + tuning report |
 | [`scripts/training_loop_week2.sh`](file:///Users/amoros/Projects/Termit/scripts/training_loop_week2.sh) | Signals → dataset → finetune job |
 | [`scripts/training_loop_full.sh`](file:///Users/amoros/Projects/Termit/scripts/training_loop_full.sh) | Week2 + eval suite + regression vs baseline |
-| [`scripts/stage1_full_loop.sh`](file:///Users/amoros/Projects/Termit/scripts/stage1_full_loop.sh) | Stage1 train + post-eval + promote |
+| [`scripts/stage1_full_loop.sh`](file:///Users/amoros/Projects/Termit/scripts/stage1_full_loop.sh) | Stage1 train + post-eval + KPI gate (+5%) + promote |
+| [`scripts/finetune_eval_kpi_gate.py`](file:///Users/amoros/Projects/Termit/scripts/finetune_eval_kpi_gate.py) | KPI: post-train pass_rate delta ≥ target (default +5%) |
 | [`scripts/eval_regression_report.py`](file:///Users/amoros/Projects/Termit/scripts/eval_regression_report.py) | Gate: pass-rate delta vs baseline |
 
 ## Быстрый прогон (локально)
@@ -29,7 +30,9 @@ uvicorn app.main:app --host 127.0.0.1 --port 8765 &
 | `TERMIT_EVAL_LIMIT` | `20` | Scenarios |
 | `TERMIT_EVAL_MAX_PASS_RATE_DROP` | `0.05` | Max regression |
 | `TERMIT_EVAL_AUTO_PROMOTE_BASELINE` | `false` | Promote current report when gate green |
-| `TERMIT_EVAL_MIN_IMPROVEMENT_FOR_PROMOTE` | `0.0` | Min pass_rate delta to promote (0.05 = +5%) |
+| `TERMIT_EVAL_MIN_IMPROVEMENT_FOR_PROMOTE` | `0.05` | Min pass_rate delta to promote (0.05 = +5%) |
+| `TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT` | `0.05` | KPI target: min improvement after train cycle |
+| `TERMIT_FINETUNE_KPI_STRICT` | `false` | Exit non-zero when KPI not met |
 
 ## Weekly cron
 

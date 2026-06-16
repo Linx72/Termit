@@ -74,6 +74,17 @@ if [[ "$GATE_OK" -eq 0 && "${TERMIT_EVAL_AUTO_PROMOTE_BASELINE:-false}" == "true
     --min-improvement "$MIN_IMPROVE"
 fi
 
+if [[ "$GATE_OK" -eq 0 && -f "$BASELINE" ]]; then
+  echo ""
+  echo "== 4c/5 Eval improvement KPI (+5% target) =="
+  KPI_MIN="${TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT:-0.05}"
+  KPI_ARGS=(--baseline "$BASELINE" --current "$CURRENT_REPORT" --min-improvement "$KPI_MIN")
+  if [[ "${TERMIT_FINETUNE_KPI_STRICT:-false}" == "true" ]]; then
+    KPI_ARGS+=(--strict)
+  fi
+  python3 "$ROOT/scripts/finetune_eval_kpi_gate.py" "${KPI_ARGS[@]}"
+fi
+
 if [[ "$GATE_OK" -ne 0 ]]; then
   exit 1
 fi

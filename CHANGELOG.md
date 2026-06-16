@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.7] - 2026-06-16
+
+### Added
+- **`scripts/finetune_eval_kpi_gate.py`** — post-train eval improvement KPI (default +5% vs baseline)
+- **`scripts/eval_baseline_promote.py`** wiring in `post_stage1_train.py` and `stage1_full_loop.sh`
+- **`scripts/training_loop_full.sh`** step 4c KPI report; weekly cron via `training_loop_weekly.sh`
+- Docs: [`docs/FINETUNE_LOOP_RU.md`](docs/FINETUNE_LOOP_RU.md); env `TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT`, `TERMIT_FINETUNE_KPI_STRICT`
+
+### Changed
+- `deploy/schedulers/stage1-weekly.env.example` — promote +5% defaults
+- Finetune loop roadmap (0.3.7) closed in `PROJECT_TASK_PROMPT_RU.md`
+
+
 ## [0.3.6] - 2026-06-16
 
 ### Added

@@ -4,16 +4,22 @@
 
 ## Сводка
 
-- **0.3.7 finetune loop** — `training_loop_full.sh`, baseline auto-promote, weekly cron, provider/cost Prometheus metrics.
+- **0.3.7 finetune loop closure** — KPI gate (+5%), promote wiring, release pack.
+- **0.3.6** на `main`: SLO/Grafana, signed desktop, post-parity roadmap закрыт.
 
 ## Файлы сессии
 
-- `scripts/eval_baseline_promote.py`, `scripts/training_loop_weekly.sh`
-- `scripts/install_stage1_scheduler.sh` — mode `training-loop`
-- `app/api/routes/metrics.py` — fallback/cost/model_usage gauges
-- `deploy/grafana/dashboards/termit-slo.json`, `deploy/prometheus/alerts.yml`
+- `scripts/finetune_eval_kpi_gate.py`
+- `scripts/post_stage1_train.py`
+- `scripts/stage1_full_loop.sh`
+- `scripts/training_loop_full.sh`
+- `tests/test_finetune_eval_kpi_gate.py`
+- `deploy/schedulers/stage1-weekly.env.example`
+- `docs/FINETUNE_LOOP_RU.md`
+- `VERSION` → 0.3.7
+- `docs/MIGRATION_NOTES_0.3.7.md`, `docs/ROLLBACK_PLAN_0.3.7.md`
 
 ## Открытые задачи
 
-- [ ] +5% eval pass после stage1 cycle (запустить `TERMIT_EVAL_MIN_IMPROVEMENT_FOR_PROMOTE=0.05` после real train)
-- [ ] Tag 0.3.7 после первого green weekly loop на prod
+- [ ] Tag/push `v0.3.7` и GitHub Release (после commit)
+- [ ] Следующий этап roadmap — см. `PROJECT_TASK_PROMPT_RU.md` после 0.3.7

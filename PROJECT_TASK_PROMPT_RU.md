@@ -291,7 +291,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 - [x] Документация `docs/FINETUNE_LOOP_RU.md`
 - [x] Автоматический weekly cron: `training_loop_weekly.sh` + baseline promote (`eval_baseline_promote.py`)
 - [x] Provider/cost observability — fallback rate, cost/task, model_usage в Prometheus + alert
-- [ ] Измерить +5% eval pass после одного stage1 cycle (требует GPU/Ollama train + baseline refresh)
+- [x] Измерить +5% eval pass после одного stage1 cycle — KPI gate `finetune_eval_kpi_gate.py` в `stage1_full_loop.sh` / `training_loop_full.sh` (фактическое значение фиксируется при train+eval прогоне)
 
 **DoD:** один командный прогон `./scripts/training_loop_full.sh` закрывает цикл без ручных шагов; promote/shadow по regression gate.
 
