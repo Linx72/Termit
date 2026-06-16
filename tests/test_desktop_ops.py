@@ -64,7 +64,7 @@ class DesktopOpsTests(unittest.TestCase):
         self.assertGreaterEqual(int(payload["passed_count"]), 1)
 
     def test_accelerator_share_and_heavy_job(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             service = DesktopAcceleratorService(
                 tmp,
                 run_lookup=lambda run_id: {"run_id": run_id, "state": "completed"},
