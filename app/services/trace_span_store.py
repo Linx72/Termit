@@ -6,7 +6,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Optional
+from typing import Iterator, Optional
 from uuid import uuid4
 
 
@@ -79,3 +79,35 @@ class TraceSpanStore:
 
     def export_json(self, run_id: str) -> str:
         return json.dumps(self.list_for_run(run_id), ensure_ascii=True)
+
+    def export_otel_json(self, run_id: str, *, limit: int = 100) -> list[dict[str, object]]:
+        """Export run spans in OTLP/OTEL-friendly JSON (for collectors and debug)."""
+        rows = list(reversed(self.list_for_run(run_id, limit=limit)))
+        trace_id = run_id.replace("-", "").replace("_", "")[:32].ljust(32, "0")
+        payload: list[dict[str, object]] = []
+        for row in rows:
+            created = datetime.fromisoformat(str(row["created_at"]))
+            start_ns = int(created.timestamp() * 1_000_000_000)
+            duration_ms = int(row.get("duration_ms") or 0)
+            end_ns = start_ns + duration_ms * 1_000_000
+            span_id = str(row["span_id"]).replace("span_", "")[:16].ljust(16, "0")
+            status = str(row.get("status") or "ok")
+            payload.append(
+                {
+                    "traceId": trace_id,
+                    "spanId": span_id,
+                    "name": str(row.get("name") or "span"),
+                    "kind": "SPAN_KIND_INTERNAL",
+                    "startTimeUnixNano": str(start_ns),
+                    "endTimeUnixNano": str(end_ns),
+                    "status": {
+                        "code": "STATUS_CODE_OK" if status == "ok" else "STATUS_CODE_ERROR",
+                    },
+                    "attributes": [
+                        {"key": "termit.status", "value": {"stringValue": status}},
+                        {"key": "termit.detail", "value": {"stringValue": str(row.get("detail") or "")[:500]}},
+                        {"key": "termit.run_id", "value": {"stringValue": run_id}},
+                    ],
+                }
+            )
+        return payload

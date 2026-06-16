@@ -38,7 +38,7 @@ description: >-
 | [`AUTOMATION_TASK_PROMPT_RU.md`](../../../AUTOMATION_TASK_PROMPT_RU.md) | do_all_automatic, toggles, `/api/ops/automation` |
 | [`termit-automation`](../termit-automation/SKILL.md) | Skill: server automation + Desktop panel |
 
-**Текущий вектор:** **0.3.8 North Star UX** закрыт. Фокус **0.3.9+**: structured logging, trace spans (provider/verify), media human-approve.
+**Текущий вектор:** **0.4.0** — OTEL span export, media trace spans, team online (`OnlineAcceleratorPanel`).
 
 ### Post-parity focus (закрыто в 0.3.6)
 
@@ -48,11 +48,11 @@ description: >-
 4. ~~Eval/quality 2.0~~ — 74 scenarios, regression report, tiered gates
 5. ~~Release discipline~~ — RELEASE_FLOW, release_pack, signed TermitShell.app
 
-### Текущий фокус (0.3.9+)
+### Текущий фокус (0.4.0+)
 
-1. Structured JSON logs + redaction (`TERMIT_LOG_JSON`)
-2. Trace spans: provider + verification stages
-3. Media Studio paid ops confirm in Desktop
+1. OTEL span export (`/api/platform/runs/{id}/spans/otel`)
+2. Media trace spans in TraceSpanStore
+3. Team shared runs + heavy jobs in Desktop settings
 
 Подробная карта: [reference.md](reference.md). Архив старых milestones: [archive/](archive/).
 

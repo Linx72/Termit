@@ -56,6 +56,7 @@ import {
 } from "./settings";
 import { PolicyPresetSelector } from "./PolicyPresetSelector";
 import { MediaStudioPanel } from "./MediaStudioPanel";
+import { OnlineAcceleratorPanel } from "./OnlineAcceleratorPanel";
 import {
   dryRunAllPatches,
   formatSafeApplyHint,
@@ -2864,6 +2865,15 @@ export function App() {
         />
 
         <MediaStudioPanel client={client} connected={connected} locale={locale} />
+
+        <OnlineAcceleratorPanel
+          client={client}
+          connected={connected}
+          locale={locale}
+          watchedRunId={watchedRunId}
+          team={settings.teamName}
+          onTeamChange={(team) => updateSettings({ teamName: team })}
+        />
 
         <div className="field">
           <label htmlFor="model">{t(locale, "model")}</label>

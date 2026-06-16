@@ -312,6 +312,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** JSON logs без секретов; agent run spans покрывают provider+verify; paid media требует confirm в UI.
 
+### Следующий этап (0.4.0): Team online + OTEL spans
+
+- [x] OTEL export spans: `GET /api/platform/runs/{run_id}/spans/otel`
+- [x] Media tool trace spans (`media.generate_image`, `media.run_storyboard`) в TraceSpanStore
+- [x] Desktop `OnlineAcceleratorPanel` — shared runs + heavy eval jobs в settings
+
+**DoD:** spans экспортируются в OTEL JSON; media ops пишут spans при `run_id`; team share доступен из desktop.
+
 ---
 
 ## Порядок выполнения

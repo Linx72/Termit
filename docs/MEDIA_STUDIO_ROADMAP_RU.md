@@ -46,6 +46,6 @@ python3 -m unittest discover -s tests -p 'test_eval*.py' -q  # includes MS scena
 ## Future (optional)
 
 - Fal I2V with public image URL upload
-- OTEL spans per media tool
 - Lottie export path
 - ~~Human approve gate in Desktop before cloud spend~~ — Desktop confirm UI on HTTP 428 (0.3.9)
+- ~~OTEL spans per media tool~~ — `media.*` spans + `/api/platform/runs/{id}/spans/otel` (0.4.0)

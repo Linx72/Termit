@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 from uuid import uuid4
+
+import time
 
 from app.services.media_brand_kit_store import BrandKitRecord, BrandKitStore
 from app.services.media_gif_service import MediaGifService
@@ -23,6 +26,7 @@ from app.services.media_provider_openai import MediaProviderError, OpenAIImagePr
 from app.services.media_provider_transcribe import MediaTranscribeError, OpenAITranscribeProvider
 from app.services.media_provider_tts import MediaTtsError, OpenAITtsProvider
 from app.services.media_provider_video import FalVideoProvider, MediaVideoError, StubVideoProvider
+from app.services.trace_span_store import TraceSpanStore
 
 
 class MediaStudioError(Exception):
@@ -131,8 +135,10 @@ class MediaGenerationService:
         i2v_cost_usd: float = 0.50,
         brand_kits_dir: str = "./data/media/brand_kits",
         run_cost_ledger: Optional[dict[str, float]] = None,
+        trace_span_store: Optional[TraceSpanStore] = None,
     ) -> None:
         self._store = asset_store
+        self._trace_spans = trace_span_store
         self._enabled = enabled
         self._max_cost = max(0.0, max_cost_usd)
         self._confirm_threshold = max(0.0, confirm_cost_usd)
@@ -172,6 +178,49 @@ class MediaGenerationService:
         if not self._enabled:
             raise MediaStudioError("Media Studio is disabled (TERMIT_MEDIA_ENABLED=false).")
 
+    def _record_media_span(
+        self,
+        *,
+        run_id: Optional[str],
+        name: str,
+        status: str,
+        detail: str = "",
+        duration_ms: int = 0,
+    ) -> None:
+        if self._trace_spans is None or not run_id:
+            return
+        self._trace_spans.record(
+            run_id=run_id,
+            name=name,
+            status=status,
+            detail=detail[:500],
+            duration_ms=max(0, duration_ms),
+        )
+
+    @contextmanager
+    def _media_trace(self, *, run_id: Optional[str], name: str) -> Iterator[dict[str, str]]:
+        started = time.perf_counter()
+        meta: dict[str, str] = {"detail": ""}
+        try:
+            yield meta
+        except Exception as exc:
+            self._record_media_span(
+                run_id=run_id,
+                name=name,
+                status="error",
+                detail=str(exc)[:500],
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+            raise
+        else:
+            self._record_media_span(
+                run_id=run_id,
+                name=name,
+                status="ok",
+                detail=meta.get("detail", ""),
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+
     def _ledger_add(self, run_id: Optional[str], cost: float) -> float:
         if not run_id:
             return cost
@@ -210,59 +259,61 @@ class MediaGenerationService:
         output_name: Optional[str] = None,
     ) -> GenerateImageResult:
         self._ensure_enabled()
-        clean_prompt = prompt.strip()
-        if not clean_prompt:
-            raise MediaStudioError("generate_image requires non-empty prompt.")
-        chosen = (provider or self._image_provider_name).strip().lower()
-        est_cost = self._image_cost_usd if chosen == "openai" else 0.0
-        if est_cost >= self._confirm_threshold and not confirmed:
-            raise MediaConfirmationRequired(
-                f"Image generation est. ${est_cost:.2f} requires confirmed=true "
-                f"(threshold ${self._confirm_threshold:.2f})."
+        with self._media_trace(run_id=run_id, name="media.generate_image") as meta:
+            clean_prompt = prompt.strip()
+            if not clean_prompt:
+                raise MediaStudioError("generate_image requires non-empty prompt.")
+            chosen = (provider or self._image_provider_name).strip().lower()
+            est_cost = self._image_cost_usd if chosen == "openai" else 0.0
+            if est_cost >= self._confirm_threshold and not confirmed:
+                raise MediaConfirmationRequired(
+                    f"Image generation est. ${est_cost:.2f} requires confirmed=true "
+                    f"(threshold ${self._confirm_threshold:.2f})."
+                )
+            assets_dir = self._store.project_dir(project_id)
+            filename = output_name or f"{scene_id or 'img'}_{uuid4().hex[:8]}.png"
+            if not filename.endswith(".png"):
+                filename += ".png"
+            target = assets_dir / filename
+
+            revised: Optional[str] = None
+            if chosen == "openai" and self._openai.available:
+                try:
+                    gen = self._openai.generate(prompt=clean_prompt, width=width, height=height)
+                except MediaProviderError as exc:
+                    raise MediaStudioError(str(exc)) from exc
+                target.write_bytes(gen.bytes_data)
+                provider_used = gen.provider
+                cost = gen.cost_usd
+                revised = gen.revised_prompt
+            else:
+                write_solid_png(target, width, height, (30, 64, 175))
+                provider_used = "stub"
+                cost = 0.0
+
+            self._ledger_add(run_id, cost)
+            record = self._store.register_file(
+                project_id=project_id,
+                file_path=target,
+                mime="image/png",
+                provider=provider_used,
+                cost_usd=cost,
+                prompt=clean_prompt,
+                run_id=run_id,
+                scene_id=scene_id,
             )
-        assets_dir = self._store.project_dir(project_id)
-        filename = output_name or f"{scene_id or 'img'}_{uuid4().hex[:8]}.png"
-        if not filename.endswith(".png"):
-            filename += ".png"
-        target = assets_dir / filename
-
-        revised: Optional[str] = None
-        if chosen == "openai" and self._openai.available:
-            try:
-                gen = self._openai.generate(prompt=clean_prompt, width=width, height=height)
-            except MediaProviderError as exc:
-                raise MediaStudioError(str(exc)) from exc
-            target.write_bytes(gen.bytes_data)
-            provider_used = gen.provider
-            cost = gen.cost_usd
-            revised = gen.revised_prompt
-        else:
-            write_solid_png(target, width, height, (30, 64, 175))
-            provider_used = "stub"
-            cost = 0.0
-
-        self._ledger_add(run_id, cost)
-        record = self._store.register_file(
-            project_id=project_id,
-            file_path=target,
-            mime="image/png",
-            provider=provider_used,
-            cost_usd=cost,
-            prompt=clean_prompt,
-            run_id=run_id,
-            scene_id=scene_id,
-        )
-        self._store.append_audit(
-            {
-                "action": "generate_image",
-                "asset_id": record.asset_id,
-                "provider": provider_used,
-                "cost_usd": cost,
-                "run_id": run_id,
-                "project_id": project_id,
-            }
-        )
-        return GenerateImageResult(asset=record, revised_prompt=revised)
+            self._store.append_audit(
+                {
+                    "action": "generate_image",
+                    "asset_id": record.asset_id,
+                    "provider": provider_used,
+                    "cost_usd": cost,
+                    "run_id": run_id,
+                    "project_id": project_id,
+                }
+            )
+            meta["detail"] = f"provider={provider_used}, asset={record.asset_id}, cost={cost:.4f}"
+            return GenerateImageResult(asset=record, revised_prompt=revised)
 
     def list_assets(
         self,
@@ -702,77 +753,80 @@ class MediaGenerationService:
     ) -> ComposeMediaResult:
         """Studio-pack helper: images → optional I2V → compose master MP4."""
         self._ensure_enabled()
-        if storyboard is None:
-            if not storyboard_path:
-                raise MediaStudioError("run_storyboard requires storyboard or path.")
-            storyboard = json.loads(Path(storyboard_path).read_text(encoding="utf-8"))
-            if not isinstance(storyboard, dict):
-                raise MediaStudioError("Storyboard must be a JSON object.")
-        style_suffix = ""
-        if brand_kit_id:
-            kit = self.get_brand_kit(brand_kit_id)
-            style_suffix = kit.style_prompt_suffix
-        scenes = storyboard.get("scenes", [])
-        if not isinstance(scenes, list):
-            raise MediaStudioError("storyboard.scenes invalid")
-        clips: list[dict[str, object]] = []
-        vo_chunks: list[str] = []
-        for raw in scenes[: max(1, max_scenes)]:
-            if not isinstance(raw, dict):
-                continue
-            scene_id = str(raw.get("scene_id", "scene"))
-            visual = str(raw.get("visual_prompt", ""))
-            if style_suffix:
-                visual = f"{visual}. {style_suffix}"
-            mode = str(raw.get("render_mode", "image_to_video"))
-            duration = float(raw.get("duration_sec", 3))
-            img = self.generate_image(
-                prompt=visual,
-                project_id=project_id,
-                run_id=run_id,
-                scene_id=scene_id,
-                provider="stub",
-                confirmed=confirmed,
-            )
-            vo = str(raw.get("voiceover", "")).strip()
-            if vo:
-                vo_chunks.append(vo)
-            if mode == "image_to_video":
-                job = self.render_video(
+        with self._media_trace(run_id=run_id, name="media.run_storyboard") as meta:
+            if storyboard is None:
+                if not storyboard_path:
+                    raise MediaStudioError("run_storyboard requires storyboard or path.")
+                storyboard = json.loads(Path(storyboard_path).read_text(encoding="utf-8"))
+                if not isinstance(storyboard, dict):
+                    raise MediaStudioError("Storyboard must be a JSON object.")
+            style_suffix = ""
+            if brand_kit_id:
+                kit = self.get_brand_kit(brand_kit_id)
+                style_suffix = kit.style_prompt_suffix
+            scenes = storyboard.get("scenes", [])
+            if not isinstance(scenes, list):
+                raise MediaStudioError("storyboard.scenes invalid")
+            clips: list[dict[str, object]] = []
+            vo_chunks: list[str] = []
+            for raw in scenes[: max(1, max_scenes)]:
+                if not isinstance(raw, dict):
+                    continue
+                scene_id = str(raw.get("scene_id", "scene"))
+                visual = str(raw.get("visual_prompt", ""))
+                if style_suffix:
+                    visual = f"{visual}. {style_suffix}"
+                mode = str(raw.get("render_mode", "image_to_video"))
+                duration = float(raw.get("duration_sec", 3))
+                img = self.generate_image(
                     prompt=visual,
                     project_id=project_id,
                     run_id=run_id,
                     scene_id=scene_id,
-                    source_asset_id=img.asset.asset_id,
-                    duration_sec=min(duration, 8.0),
+                    provider="stub",
                     confirmed=confirmed,
                 )
-                if job.result_asset_id:
-                    clips.append({"asset_id": job.result_asset_id, "duration_sec": duration})
-                continue
-            clips.append({"asset_id": img.asset.asset_id, "duration_sec": duration})
-        audio_id: Optional[str] = None
-        if vo_chunks:
-            vo = self.tts_generate(
-                text=" ".join(vo_chunks),
+                vo = str(raw.get("voiceover", "")).strip()
+                if vo:
+                    vo_chunks.append(vo)
+                if mode == "image_to_video":
+                    job = self.render_video(
+                        prompt=visual,
+                        project_id=project_id,
+                        run_id=run_id,
+                        scene_id=scene_id,
+                        source_asset_id=img.asset.asset_id,
+                        duration_sec=min(duration, 8.0),
+                        confirmed=confirmed,
+                    )
+                    if job.result_asset_id:
+                        clips.append({"asset_id": job.result_asset_id, "duration_sec": duration})
+                    continue
+                clips.append({"asset_id": img.asset.asset_id, "duration_sec": duration})
+            audio_id: Optional[str] = None
+            if vo_chunks:
+                vo = self.tts_generate(
+                    text=" ".join(vo_chunks),
+                    project_id=project_id,
+                    run_id=run_id,
+                    confirmed=confirmed,
+                )
+                audio_id = vo.asset.asset_id
+            preset = str(storyboard.get("aspect_ratio", "16:9"))
+            preset_map = {"16:9": "youtube_16x9", "9:16": "reels_9x16", "1:1": "telegram_1x1"}
+            result = self.compose_media(
                 project_id=project_id,
                 run_id=run_id,
-                confirmed=confirmed,
+                timeline={
+                    "preset": preset_map.get(preset, "youtube_16x9"),
+                    "crossfade_sec": 0,
+                    "clips": clips,
+                    "audio_asset_id": audio_id,
+                    "output_name": "storyboard_master.mp4",
+                },
             )
-            audio_id = vo.asset.asset_id
-        preset = str(storyboard.get("aspect_ratio", "16:9"))
-        preset_map = {"16:9": "youtube_16x9", "9:16": "reels_9x16", "1:1": "telegram_1x1"}
-        return self.compose_media(
-            project_id=project_id,
-            run_id=run_id,
-            timeline={
-                "preset": preset_map.get(preset, "youtube_16x9"),
-                "crossfade_sec": 0,
-                "clips": clips,
-                "audio_asset_id": audio_id,
-                "output_name": "storyboard_master.mp4",
-            },
-        )
+            meta["detail"] = f"scenes={len(clips)}, asset={result.asset.asset_id}"
+            return result
 
 
 def _project_slug(value: str) -> str:

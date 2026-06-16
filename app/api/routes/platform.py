@@ -153,6 +153,28 @@ async def list_run_spans(
     )
 
 
+@router.get("/runs/{run_id}/spans/otel")
+async def export_run_spans_otel(
+    run_id: str,
+    limit: int = 100,
+    spans: TraceSpanStore = Depends(get_trace_span_store),
+) -> dict[str, object]:
+    return {
+        "run_id": run_id,
+        "resourceSpans": [
+            {
+                "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "termit"}}]},
+                "scopeSpans": [
+                    {
+                        "scope": {"name": "termit.trace"},
+                        "spans": spans.export_otel_json(run_id, limit=limit),
+                    }
+                ],
+            }
+        ],
+    }
+
+
 @router.get("/mcp/servers", response_model=McpServerListResponse)
 async def list_mcp_servers(
     registry: McpRegistryService = Depends(get_mcp_registry_service),

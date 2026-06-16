@@ -4,18 +4,18 @@
 
 ## Сводка
 
-- **0.3.9** — JSON logs, provider/verify spans, Media Studio confirm UI.
-- **0.3.8** — North Star UX + eval by category.
+- **0.4.0** — OTEL span export, media trace spans, OnlineAcceleratorPanel.
+- **0.3.9** — JSON logs, provider/verify spans, media confirm UI.
 
 ## Файлы сессии
 
-- `app/core/structured_logging.py`
-- `app/services/agent_service.py` — trace spans
-- `clients/termit-client/src/mediaOps.ts`
-- `clients/termit-desktop/src/MediaStudioPanel.tsx`
-- `VERSION` → 0.3.9
+- `app/services/trace_span_store.py` — `export_otel_json`
+- `app/api/routes/platform.py` — `/spans/otel`
+- `app/services/media_generation_service.py` — `_media_trace`
+- `clients/termit-desktop/src/App.tsx` — OnlineAcceleratorPanel
+- `VERSION` → 0.4.0
 
 ## Открытые задачи
 
-- [ ] OTEL export for media tools (optional)
-- [ ] Следующий roadmap блок после observability closure
+- [ ] Hosted beta hardening (TLS prod checklist smoke)
+- [ ] Fal I2V / Lottie export (media studio optional)

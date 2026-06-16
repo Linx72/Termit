@@ -132,6 +132,22 @@ class PlatformParityTests(unittest.TestCase):
             self.assertIn("provider.ollama", names)
             self.assertIn("verify.stage", names)
 
+    def test_trace_span_export_otel(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = TraceSpanStore(str(Path(tmp) / "spans.db"))
+            store.record(
+                run_id="run_otel",
+                name="media.generate_image",
+                status="ok",
+                detail="provider=stub",
+                duration_ms=12,
+            )
+            otel = store.export_otel_json("run_otel")
+            self.assertEqual(len(otel), 1)
+            self.assertEqual(otel[0]["name"], "media.generate_image")
+            self.assertIn("traceId", otel[0])
+            self.assertIn("startTimeUnixNano", otel[0])
+
     def test_mcp_registry_loads_wrapped_servers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "mcp.json"

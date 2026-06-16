@@ -1161,6 +1161,7 @@ def _build_media_generation_service():
     return MediaGenerationService(
         asset_store=_build_media_asset_store(),
         enabled=settings.media_enabled,
+        trace_span_store=_build_trace_span_store(),
         max_cost_usd=settings.media_max_cost_usd,
         confirm_cost_usd=settings.media_confirm_cost_usd,
         image_provider_name=settings.media_image_provider,

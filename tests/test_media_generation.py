@@ -53,6 +53,31 @@ class MediaGenerationServiceTests(unittest.TestCase):
         path = self.store.resolve_path(result.asset)
         self.assertTrue(path.is_file())
 
+    def test_generate_image_records_trace_span(self) -> None:
+        from app.services.trace_span_store import TraceSpanStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            span_store = TraceSpanStore(str(Path(tmp) / "spans.db"))
+            svc = MediaGenerationService(
+                asset_store=self.store,
+                enabled=True,
+                confirm_cost_usd=0.5,
+                image_provider_name="stub",
+                openai_api_key="",
+                trace_span_store=span_store,
+            )
+            svc.generate_image(
+                prompt="trace test",
+                width=64,
+                height=64,
+                project_id="trace-proj",
+                run_id="media_run_test",
+                provider="stub",
+            )
+            spans = span_store.list_for_run("media_run_test")
+            self.assertGreaterEqual(len(spans), 1)
+            self.assertEqual(spans[0]["name"], "media.generate_image")
+
     def test_generate_requires_confirm_for_openai_tariff(self) -> None:
         svc = MediaGenerationService(
             asset_store=self.store,

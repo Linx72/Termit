@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0] - 2026-06-16
+
+### Added
+- **OTEL export:** `GET /api/platform/runs/{run_id}/spans/otel` — OTLP-friendly JSON
+- **Media spans:** `media.generate_image`, `media.run_storyboard` in TraceSpanStore (when `run_id` set)
+- **Desktop:** `OnlineAcceleratorPanel` in settings — shared runs, heavy eval jobs, team name
+
+### Changed
+- `MediaGenerationService` wired to global TraceSpanStore via `state.py`
+- North Star docs updated for team shared runs journey
+
 ## [0.3.9] - 2026-06-16
 
 ### Added

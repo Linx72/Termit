@@ -31,7 +31,8 @@
 - `GET /api/desktop/journeys` — journeys + KPI targets
 - `GET /api/desktop/kpi-gates` — статус gate по KPI
 - `GET /api/desktop/policy-presets` — solo / team / strict
-- `GET|POST /api/desktop/shared-runs` — командная доска run'ов
+- `GET /api/platform/runs/{run_id}/spans/otel` — OTEL JSON export for collectors
+- `GET|POST /api/desktop/shared-runs` — командная доска run'ов (Desktop: `OnlineAcceleratorPanel`)
 - `GET|POST /api/desktop/heavy-jobs` — фоновые eval/orchestration jobs
 
 ## Policy presets
