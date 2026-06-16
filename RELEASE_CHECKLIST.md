@@ -45,8 +45,8 @@
 - Tag release version in git (for example `v0.1.0`)
 - Capture known limitations (provider availability, local runtime assumptions)
 - Publish quick start commands for users
-- Write migration notes for the release (example: `docs/MIGRATION_NOTES_0.3.3.md`)
-- Write rollback plan with explicit smoke/health verification
+- Write migration notes for the release (example: `docs/MIGRATION_NOTES_0.3.5.md`)
+- Write rollback plan with explicit smoke/health verification (example: `docs/ROLLBACK_PLAN_0.3.5.md`)
 
 ## 6) Cursor parity release gates
 
