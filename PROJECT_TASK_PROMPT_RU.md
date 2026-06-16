@@ -278,10 +278,10 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ### Следующий спринт (5–7 дней, immediate)
 
-1. [ ] Убрать unclosed sqlite warnings
-2. [ ] Стабилизировать `test_platform_e2e`/`test_agents_api` без тайминговых флейков
-3. [ ] Разделить release smoke на deterministic core и extended suite
-4. [ ] Добавить lifecycle summary в UI (completion/timeout/stale)
+1. [x] Убрать unclosed sqlite warnings
+2. [x] Стабилизировать `test_platform_e2e`/`test_agents_api` без тайминговых флейков
+3. [x] Разделить release smoke на deterministic core и extended suite
+4. [x] Добавить lifecycle summary в UI (completion/timeout/stale)
 5. [ ] Подготовить и выпустить `0.3.5` как stability release
 
 ---

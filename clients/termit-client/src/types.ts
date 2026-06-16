@@ -281,6 +281,11 @@ export interface AgentRunsMetrics {
   tool_loop_parse_errors?: number;
   tool_loop_tool_success_rate?: number;
   tool_loop_completion_rate?: number;
+  lifecycle_terminal_runs_total?: number;
+  lifecycle_completed_runs_total?: number;
+  lifecycle_timeout_runs_total?: number;
+  lifecycle_stale_total?: number;
+  lifecycle_completion_rate?: number;
   stale_queued_runs?: number;
   stale_running_runs?: number;
   max_queued_age_seconds?: number;

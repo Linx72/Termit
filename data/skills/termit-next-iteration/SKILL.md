@@ -22,6 +22,34 @@ Use this skill when continuing long-running roadmap work in the Termit repositor
 - Do not stop on intermediate summaries while open tasks remain in `ACTIVE.md`; continue to the next actionable item in the same run.
 - Escalate to the user only for true blockers (missing secrets/access, irreversible action approval, or forced product choice).
 
+## Nonstop execution contract (mandatory)
+
+Run a continuous cycle until explicit stop:
+
+1. Pick **next actionable item** from `ACTIVE.md -> ## Открытые задачи`.
+2. Implement minimal complete change for that item.
+3. Verify (targeted tests, broader checks if scope expands, smoke when runtime is affected).
+4. Update `.cursor/memory/ACTIVE.md` (`## Сводка`, `## Файлы сессии`, `## Открытые задачи`).
+5. Immediately continue with the next actionable item in the same run.
+
+Stop conditions are strict:
+
+- User explicitly says `STOP` or `PAUSE` (case-insensitive).
+- Hard blocker only: missing secrets/access, irreversible action needing approval, or unresolved product decision with equal options.
+
+Forbidden pauses:
+
+- No "done" pause between items while actionable work remains.
+- No waiting for intermediate confirmation to continue.
+
+Fallback when ACTIVE is empty:
+
+- Pull the next item from the master plan in this order:
+  1. `PROJECT_TASK_PROMPT_RU.md` (section `Следующий спринт (5–7 дней, immediate)`),
+  2. then nearest unchecked item in `Трек 1..5`,
+  3. then unchecked item in `Фаза 5`.
+- Write the selected item into `ACTIVE.md -> ## Открытые задачи` and continue the cycle.
+
 ## Project memory (mandatory for new sessions)
 
 - Treat `.cursor/memory/ACTIVE.md` as the canonical long-lived project memory for this template.

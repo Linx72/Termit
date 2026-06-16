@@ -144,11 +144,10 @@ jobs:
           done
       - name: Extended release smoke
         env:
-          TERMIT_RELEASE_SMOKE_PROFILE: "extended"
           TERMIT_SMOKE_REQUIRE_SERVER: "1"
           TERMIT_EVAL_GATE_TIER: "release"
           TERMIT_EVAL_MIN_PASS_RATE: "0.95"
-        run: ./scripts/release_smoke.sh
+        run: ./scripts/release_smoke_extended.sh
       - name: Nightly flaky-watch report
         run: |
           python3 scripts/flaky_watch_report.py \

@@ -51,8 +51,8 @@
 ## 6) Cursor parity release gates
 
 - Release smoke profiles:
-  - Deterministic core (default): `TERMIT_RELEASE_SMOKE_PROFILE=core ./scripts/release_smoke.sh`
-  - Extended suite (nightly/integration): `TERMIT_RELEASE_SMOKE_PROFILE=extended ./scripts/release_smoke.sh`
+  - Deterministic core (default): `./scripts/release_smoke_core.sh`
+  - Extended suite (nightly/integration): `./scripts/release_smoke_extended.sh`
   - Nightly automation workflow: `.github/workflows/nightly-extended-smoke.yml`
 
 - Parity eval gate (20 scenarios):

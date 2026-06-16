@@ -22,7 +22,6 @@ jobs:
 
       - name: Run extended smoke with live server
         env:
-          TERMIT_RELEASE_SMOKE_PROFILE: "extended"
           TERMIT_SMOKE_REQUIRE_SERVER: "1"
           TERMIT_EVAL_MIN_PASS_RATE: "0.95"
         run: |
@@ -31,4 +30,4 @@ jobs:
             curl -sf http://127.0.0.1:8765/health && break
             sleep 1
           done
-          ./scripts/release_smoke.sh
+          ./scripts/release_smoke_extended.sh

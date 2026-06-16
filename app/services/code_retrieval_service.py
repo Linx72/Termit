@@ -26,6 +26,8 @@ class CodeChunk:
 
 
 class CodeRetrievalService:
+    _SEMANTIC_MAX_CANDIDATES = 48
+    _SEMANTIC_MAX_EMBED_FAILURES = 3
     _SKIP_DIRS = {
         ".git",
         ".venv",
@@ -92,8 +94,6 @@ class CodeRetrievalService:
         with self._lock:
             self._chunks = chunks
             self._indexed_files = indexed_files
-        if self.mode == "semantic":
-            self._warm_semantic_cache(chunks)
         return indexed_files, len(chunks)
 
     def reindex_path(self, rel_path: str) -> int:
@@ -110,8 +110,6 @@ class CodeRetrievalService:
         with self._lock:
             self._chunks = [chunk for chunk in self._chunks if chunk.path != normalized]
             self._chunks.extend(new_chunks)
-        if self.mode == "semantic":
-            self._warm_semantic_cache(new_chunks)
         return len(new_chunks)
 
     def _resolve_in_root(self, rel_path: str) -> Path:
@@ -128,9 +126,9 @@ class CodeRetrievalService:
         path_prefix: str = "",
     ) -> list[CodeChunk]:
         safe_limit = max(1, min(limit, 20))
+        if not self._chunks:
+            self.reindex()
         with self._lock:
-            if not self._chunks:
-                self.reindex()
             candidates = list(self._chunks)
 
         if self.mode == "semantic":
@@ -191,17 +189,40 @@ class CodeRetrievalService:
         safe_limit: int,
         path_prefix: str,
     ) -> list[CodeChunk]:
+        prefix = path_prefix.strip().replace("\\", "/")
+        filtered = [
+            chunk for chunk in candidates if not prefix or chunk.path.startswith(prefix)
+        ]
+        if not filtered:
+            return []
+        if len(filtered) > self._SEMANTIC_MAX_CANDIDATES:
+            tokens = self._tokenize(query)
+            ranked = sorted(
+                (
+                    (self._score_chunk(tokens, chunk), chunk)
+                    for chunk in filtered
+                ),
+                key=lambda item: item[0],
+                reverse=True,
+            )
+            shortlisted = [chunk for score, chunk in ranked if score > 0]
+            filtered = (shortlisted or [chunk for _, chunk in ranked])[
+                : self._SEMANTIC_MAX_CANDIDATES
+            ]
+
         query_vec = self._embed_text(query)
         if query_vec is None:
             return []
 
-        prefix = path_prefix.strip().replace("\\", "/")
         scored: list[CodeChunk] = []
-        for chunk in candidates:
-            if prefix and not chunk.path.startswith(prefix):
-                continue
+        embed_failures = 0
+        for chunk in filtered:
             chunk_vec = self._chunk_embedding(chunk)
             if chunk_vec is None:
+                embed_failures += 1
+                if embed_failures >= self._SEMANTIC_MAX_EMBED_FAILURES:
+                    self._semantic_available = False
+                    return []
                 continue
             score = self._cosine_similarity(query_vec, chunk_vec)
             if score <= 0:

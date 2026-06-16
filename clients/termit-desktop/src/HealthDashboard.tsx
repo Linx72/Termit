@@ -28,6 +28,11 @@ interface HealthSnapshot {
   maxQueuedAgeSeconds: number;
   maxRunningAgeSeconds: number;
   queueStuckTimeoutSeconds: number;
+  lifecycleTerminalRunsTotal: number;
+  lifecycleCompletedRunsTotal: number;
+  lifecycleTimeoutRunsTotal: number;
+  lifecycleStaleTotal: number;
+  lifecycleCompletionRate: number | null;
   trainingSignals: number | null;
   latestDataset: string | null;
   tuningHint: string | null;
@@ -36,6 +41,10 @@ interface HealthSnapshot {
 interface LifecycleSummary {
   level: "ok" | "degraded" | "critical";
   staleTotal: number;
+  completionRate: number | null;
+  completedRunsTotal: number;
+  terminalRunsTotal: number;
+  timeoutRunsTotal: number;
   maxAgeSeconds: number;
   timeoutSeconds: number;
 }
@@ -48,13 +57,26 @@ function formatRate(value: number | null | undefined): string {
 }
 
 function buildLifecycleSummary(snapshot: HealthSnapshot): LifecycleSummary {
-  const staleTotal = snapshot.staleQueuedRuns + snapshot.staleRunningRuns;
+  const staleTotal = Math.max(snapshot.lifecycleStaleTotal, snapshot.staleQueuedRuns + snapshot.staleRunningRuns);
   const maxAgeSeconds = Math.max(snapshot.maxQueuedAgeSeconds, snapshot.maxRunningAgeSeconds);
   const timeoutSeconds = Math.max(1, snapshot.queueStuckTimeoutSeconds);
   const nearTimeout = maxAgeSeconds >= timeoutSeconds * 0.8;
   const level: LifecycleSummary["level"] =
     staleTotal > 0 ? "critical" : nearTimeout ? "degraded" : "ok";
-  return { level, staleTotal, maxAgeSeconds, timeoutSeconds };
+  return {
+    level,
+    staleTotal,
+    completionRate:
+      snapshot.lifecycleCompletionRate ??
+      (snapshot.lifecycleTerminalRunsTotal > 0
+        ? snapshot.lifecycleCompletedRunsTotal / snapshot.lifecycleTerminalRunsTotal
+        : snapshot.toolLoopCompletionRate),
+    completedRunsTotal: snapshot.lifecycleCompletedRunsTotal,
+    terminalRunsTotal: snapshot.lifecycleTerminalRunsTotal,
+    timeoutRunsTotal: snapshot.lifecycleTimeoutRunsTotal,
+    maxAgeSeconds,
+    timeoutSeconds,
+  };
 }
 
 function lifecycleLabel(locale: Locale, level: LifecycleSummary["level"]): string {
@@ -110,6 +132,11 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
         maxQueuedAgeSeconds: metrics.max_queued_age_seconds ?? 0,
         maxRunningAgeSeconds: metrics.max_running_age_seconds ?? 0,
         queueStuckTimeoutSeconds: metrics.queue_stuck_timeout_seconds ?? 120,
+        lifecycleTerminalRunsTotal: metrics.lifecycle_terminal_runs_total ?? 0,
+        lifecycleCompletedRunsTotal: metrics.lifecycle_completed_runs_total ?? 0,
+        lifecycleTimeoutRunsTotal: metrics.lifecycle_timeout_runs_total ?? 0,
+        lifecycleStaleTotal: metrics.lifecycle_stale_total ?? 0,
+        lifecycleCompletionRate: metrics.lifecycle_completion_rate ?? null,
         trainingSignals: training.training_signals_count,
         latestDataset: training.latest_dataset ?? null,
         tuningHint,
@@ -169,9 +196,15 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
                   {formatRate(snapshot.toolLoopCompletionRate)}
                 </li>
                 <li>
+                  {t(locale, "kpiLifecycleSummary")}:{" "}
+                  {t(locale, "kpiCompletion")} {formatRate(lifecycle.completionRate)} (
+                  {lifecycle.completedRunsTotal}/{lifecycle.terminalRunsTotal}) ·{" "}
+                  {t(locale, "kpiLifecycleTimeoutRuns")} {lifecycle.timeoutRunsTotal} ·{" "}
+                  {t(locale, "kpiLifecycleStale")} {lifecycle.staleTotal}
+                </li>
+                <li>
                   {t(locale, "kpiLifecycle")}:{" "}
                   <span className={`health-tag ${lifecycle.level}`}>{lifecycleLabel(locale, lifecycle.level)}</span> ·{" "}
-                  {t(locale, "kpiCompletion")} {formatRate(snapshot.toolLoopCompletionRate)} ·{" "}
                   {t(locale, "kpiLifecycleStale")} q:{snapshot.staleQueuedRuns} r:{snapshot.staleRunningRuns} · max age{" "}
                   {lifecycle.maxAgeSeconds.toFixed(0)}s / {t(locale, "kpiLifecycleTimeout")} {lifecycle.timeoutSeconds}
                   s
