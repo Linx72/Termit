@@ -40,6 +40,15 @@ class AgentOutcomeServiceTests(unittest.TestCase):
         )
         self.assertEqual(outcome, OUTCOME_PARTIAL)
 
+    def test_step_limit_partial(self) -> None:
+        outcome = classify_agent_outcome(
+            state="failed",
+            failure_class="step_limit",
+            response="",
+            error="max steps",
+        )
+        self.assertEqual(outcome, OUTCOME_PARTIAL)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -246,15 +246,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ### Трек 2 — Agent autonomy vNext (недели 2–4)
 
-- [ ] Усилить stop-conditions и recovery path в tool loop при деградации
+- [x] Усилить stop-conditions и recovery path в tool loop при деградации — typed `failure_class` на AgentLoopError
 - [ ] Добавить policy-level fallback (constrained-plan + safe-exec)
-- [ ] Ввести явные outcome classes: success / partial / blocked-external / blocked-policy
+- [x] Ввести явные outcome classes: success / partial / blocked-external / blocked-policy
 
 **DoD:** рост completion-rate и снижение repeat/empty-final кейсов на типовых coding run.
 
 ### Трек 3 — Desktop product UX (недели 3–5)
 
-- [ ] Улучшить post-run follow-up в стиле next best action
+- [x] Улучшить post-run follow-up в стиле next best action — outcome-aware suggestions в desktop
 - [ ] Довести onboarding до first-run за < 2 минут
 - [ ] Вывести runtime status в UI (SLA, retries, active runs)
 
@@ -264,7 +264,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 - [ ] Расширить parity-сценарии до 40+ (сложные multi-file/multi-step кейсы)
 - [x] Развести quality gates: fast (PR), deep (nightly), release (local/manual с cloud judge)
-- [ ] Автоматизировать отчёт деградаций относительно предыдущего релиза
+- [x] Автоматизировать отчёт деградаций относительно предыдущего релиза — `scripts/eval_regression_report.py`
 
 **DoD:** каждый релиз проходит release gate; каждая регрессия имеет сценарий воспроизведения.
 

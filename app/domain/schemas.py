@@ -555,6 +555,7 @@ class AgentRunsMetricsResponse(BaseModel):
     max_queued_age_seconds: float = 0.0
     max_running_age_seconds: float = 0.0
     queue_stuck_timeout_seconds: int = 120
+    by_outcome_class: dict[str, int] = Field(default_factory=dict)
 
 
 class AgentRunsCleanupRequest(BaseModel):

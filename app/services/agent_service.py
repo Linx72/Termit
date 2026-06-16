@@ -364,11 +364,19 @@ class AgentService:
         timeout_runs_total = 0
         completed_runs_total = 0
         terminal_runs_total = 0
+        by_outcome_class: dict[str, int] = {}
         for run in runs:
             if run.failure_class == "run_timeout":
                 timeout_runs_total += 1
             if run.state in {AgentRunState.completed, AgentRunState.failed, AgentRunState.cancelled}:
                 terminal_runs_total += 1
+                outcome = run.outcome_class or classify_agent_outcome(
+                    state=run.state.value,
+                    failure_class=run.failure_class,
+                    response=run.response or "",
+                    error=run.error,
+                )
+                by_outcome_class[outcome] = by_outcome_class.get(outcome, 0) + 1
             if run.state == AgentRunState.completed:
                 completed_runs_total += 1
             if run.state not in {AgentRunState.queued, AgentRunState.running}:
@@ -407,6 +415,7 @@ class AgentService:
             "max_queued_age_seconds": round(max_queued_age, 2),
             "max_running_age_seconds": round(max_running_age, 2),
             "queue_stuck_timeout_seconds": self._queue_stuck_timeout_seconds,
+            "by_outcome_class": by_outcome_class,
         }
         metrics.update(self._run_store.tool_loop_event_metrics())
         return metrics
@@ -1961,7 +1970,7 @@ class AgentService:
     @staticmethod
     def _classify_failure(exc: Exception) -> str:
         if isinstance(exc, AgentLoopError):
-            return "loop_error"
+            return exc.failure_class or "loop_error"
         if isinstance(exc, AgentOnlineError):
             return "online_error"
         if isinstance(exc, AgentPermissionError):

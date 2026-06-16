@@ -140,6 +140,8 @@ export interface AgentRunRecord {
   model?: string;
   response?: string;
   error?: string;
+  failure_class?: string | null;
+  outcome_class?: string | null;
   checkpoint_json?: string | null;
   parent_run_id?: string | null;
 }

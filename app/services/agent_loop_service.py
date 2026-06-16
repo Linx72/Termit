@@ -171,14 +171,25 @@ class AgentLoopResult:
 
 
 class AgentLoopError(Exception):
-    def __init__(self, message: str, checkpoint: dict[str, object] | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        checkpoint: dict[str, object] | None = None,
+        *,
+        failure_class: str = "loop_error",
+    ) -> None:
         self.checkpoint = checkpoint
+        self.failure_class = failure_class
         super().__init__(message)
 
 
 class AgentAwaitingConfirmation(AgentLoopError):
     def __init__(self, checkpoint: dict[str, object]) -> None:
-        super().__init__("Awaiting user confirmation for risky tool.", checkpoint)
+        super().__init__(
+            "Awaiting user confirmation for risky tool.",
+            checkpoint,
+            failure_class="safety_block",
+        )
 
 
 def _tool_fingerprint(tool_name: str, arguments: dict[str, object]) -> str:
@@ -445,7 +456,11 @@ class AgentLoopService:
                     if on_step:
                         on_step(retry_step)
                     if verify_retries_used > safe_verify_retries:
-                        raise AgentLoopError("Verify retries exhausted before final answer.", _checkpoint(step))
+                        raise AgentLoopError(
+                            "Verify retries exhausted before final answer.",
+                            _checkpoint(step),
+                            failure_class="verification_error",
+                        )
                     history.append(ChatMessage(role="assistant", content=answer))
                     history.append(
                         ChatMessage(
@@ -523,6 +538,7 @@ class AgentLoopService:
                     raise AgentLoopError(
                         f"Tool error streak reached {tool_error_streak}; stopping run.",
                         checkpoint=_checkpoint(step),
+                        failure_class="tool_error",
                     )
                 if tool_error_streak >= 2:
                     repeat_blocks += 1
@@ -680,6 +696,7 @@ class AgentLoopService:
                     raise AgentLoopError(
                         f"Too many parse errors ({parse_errors}); stopping run.",
                         checkpoint=_checkpoint(step),
+                        failure_class="parse_error",
                     )
                 observation = f"Tool parse error: {exc}"
                 step_result = LoopStepResult(step=step, action="parse_error", tool=None, observation=observation)
@@ -713,6 +730,7 @@ class AgentLoopService:
         raise AgentLoopError(
             f"Tool loop exceeded max steps ({safe_steps}).",
             checkpoint=_checkpoint(safe_steps),
+            failure_class="step_limit",
         )
 
 
