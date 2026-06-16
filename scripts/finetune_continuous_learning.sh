@@ -48,4 +48,9 @@ if [[ "${TERMIT_FINETUNE_TRAINER:-modelfile}" == "ollama" ]]; then
   "${ROOT}/scripts/stage1_weekly.sh" || true
 fi
 
+if [[ "${TERMIT_WEEKLY_TRAINING_LOOP:-false}" == "true" ]]; then
+  echo "[finetune_continuous_learning] full training loop with eval regression..."
+  exec "${ROOT}/scripts/training_loop_full.sh"
+fi
+
 echo "[finetune_continuous_learning] done."

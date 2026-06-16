@@ -285,6 +285,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 4. [x] Добавить lifecycle summary в UI (completion/timeout/stale)
 5. [x] Подготовить и выпустить `0.3.5` как stability release
 
+### Следующий этап (0.3.7): Finetune loop closure
+
+- [x] Единый скрипт `training_loop_full.sh` (signals → train → eval → regression)
+- [x] Документация `docs/FINETUNE_LOOP_RU.md`
+- [ ] Измерить +5% eval pass после одного stage1 cycle (требует GPU/Ollama train + baseline refresh)
+- [ ] Автоматический weekly cron: `training_loop_full.sh` + обновление baseline при green gate
+
+**DoD:** один командный прогон `./scripts/training_loop_full.sh` закрывает цикл без ручных шагов; promote/shadow по regression gate.
+
 ---
 
 ## Порядок выполнения

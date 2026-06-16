@@ -2,17 +2,17 @@
 
 ## Metrics
 
-- [ ] request count by endpoint
-- [ ] success/error rate by endpoint
-- [ ] task success rate by scenario type
-- [ ] p50/p95 latency
-- [ ] provider fallback rate
-- [ ] cost per task and cost per success
+- [x] request count by endpoint — `GET /api/metrics/prometheus` (`termit_http_requests_total`)
+- [x] success/error rate by endpoint — `termit_http_errors_total`
+- [ ] task success rate by scenario type — eval dashboard / finetune KPI
+- [x] p50/p95 latency — `termit_http_latency_p95_ms`, chat p95 gauge
+- [ ] provider fallback rate — telemetry / executive summary
+- [ ] cost per task and cost per success — routing cost-aware (optional)
 
 ## Tracing
 
-- [ ] request trace id propagation
-- [ ] tool invocation spans
+- [x] request trace id propagation — trace middleware
+- [x] tool invocation spans — `TraceSpanStore`, platform spans API
 - [ ] model provider spans
 - [ ] verification stage spans
 
@@ -20,19 +20,21 @@
 
 - [ ] structured logs (JSON preferred)
 - [ ] error logs with stable error classes
-- [ ] audit logs for risky tool actions
+- [x] audit logs for risky tool actions — `GET /api/tools/audit`
 - [ ] redaction policy for sensitive data
 
 ## Alerting
 
-- [ ] high error-rate alert
-- [ ] latency SLO breach alert
+- [x] high error-rate alert — Prometheus `TermitHighToolLoopErrors`, webhook dispatch
+- [x] latency SLO breach alert — Grafana Termit SLO dashboard
 - [ ] provider failure burst alert
-- [ ] safety policy violation alert
+- [x] safety policy violation alert — guardrails block + audit
 
 ## Dashboards
 
-- [ ] endpoint health dashboard
-- [ ] task quality dashboard
-- [ ] reliability dashboard
+- [x] endpoint health dashboard — Grafana Termit SLO + `/api/metrics/http-endpoints`
+- [ ] task quality dashboard — eval KPI (partial: HealthDashboard)
+- [x] reliability dashboard — `/api/ops/readiness`, agent-runs metrics
 - [ ] cost and routing dashboard
+
+See [`docs/OBSERVABILITY_SLO_RU.md`](file:///Users/amoros/Projects/Termit/docs/OBSERVABILITY_SLO_RU.md).

@@ -65,19 +65,19 @@ Backend: `data/desktop_policy_presets.json`, `AgentPolicyPresetService.apply_to_
 
 ### UI / перевод
 
-- [ ] Все строки через `t(locale, key)` — ключи в **ru и en**
-- [ ] SectionGuide на каждой вкладке + sidebar
-- [ ] Режимы `Ask/Plan/Agent/Terminal` отображаются в toolbar/badges и соответствуют backend `run_mode`
-- [ ] Cursor-like поток `termit-prompts`: `Plan` в селекторе чата -> `Build -> Composer` / `Build -> Composer -> Verify` без ручного `window.prompt`
-- [ ] `npm run build` в `clients/termit-desktop`
-- [ ] `./scripts/package_desktop.sh`
+- [x] Все строки через `t(locale, key)` — ключи в **ru и en**
+- [x] SectionGuide на каждой вкладке + sidebar
+- [x] Режимы `Ask/Plan/Agent/Terminal` отображаются в toolbar/badges и соответствуют backend `run_mode`
+- [x] Cursor-like поток `termit-prompts`: `Plan` в селекторе чата -> `Build -> Composer` / `Build -> Composer -> Verify` без ручного `window.prompt`
+- [x] `npm run build` в `clients/termit-desktop`
+- [x] `./scripts/package_desktop.sh`
 
 ### Новый промпт / skill
 
-- [ ] `data/prompts/<name>.md`
-- [ ] `data/skills/<id>/SKILL.md` (frontmatter name + description)
-- [ ] Запись в `data/agent_templates.json` с `skill_ids`
-- [ ] `python3 -m unittest tests.test_platform_parity -q`
+- [x] `data/prompts/<name>.md` (desktop-guided, desktop-autopilot, …)
+- [x] `data/skills/<id>/SKILL.md` (frontmatter name + description)
+- [x] Запись в `data/agent_templates.json` с `skill_ids`
+- [x] `python3 -m unittest tests.test_platform_parity -q`
 
 ---
 

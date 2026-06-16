@@ -38,15 +38,21 @@ description: >-
 | [`AUTOMATION_TASK_PROMPT_RU.md`](../../../AUTOMATION_TASK_PROMPT_RU.md) | do_all_automatic, toggles, `/api/ops/automation` |
 | [`termit-automation`](../termit-automation/SKILL.md) | Skill: server automation + Desktop panel |
 
-**Текущий вектор:** parity `0.3.4` закрыт; текущий operational фокус — post-parity этап (4–8 недель): stability hardening, autonomy vNext, desktop product UX, eval/quality 2.0, release discipline. Finetune — усилитель, не замена платформе.
+**Текущий вектор:** parity **0.3.6 stable** закрыт (post-parity Tracks 1–5 + Фаза 5). Фокус: **finetune loop closure** (`docs/FINETUNE_LOOP_RU.md`), +5% eval после stage1, media studio polish. Finetune — усилитель платформы.
 
-### Post-parity focus (обязательно учитывать)
+### Post-parity focus (закрыто в 0.3.6)
 
-1. Stability hardening: убрать unclosed sqlite warnings, флейки background-run, nightly для unstable integration.
-2. Agent autonomy vNext: stop-conditions/recovery/fallback и outcome classes.
-3. Desktop UX: next best action после run, быстрый onboarding, runtime status прозрачность.
-4. Eval/quality 2.0: 40+ parity сценариев, fast/deep/release gates, auto degradation report.
-5. Release discipline: `rc -> stable -> hotfix`, автоматизация migration+rollback пакета, SLO/SLA dashboards.
+1. ~~Stability hardening~~ — unstable e2e nightly, SSE fallback
+2. ~~Agent autonomy vNext~~ — outcome classes, policy fallback
+3. ~~Desktop UX~~ — RuntimeStatusBar, Quick Start, DLQ, OpsSecurityPanel
+4. ~~Eval/quality 2.0~~ — 74 scenarios, regression report, tiered gates
+5. ~~Release discipline~~ — RELEASE_FLOW, release_pack, signed TermitShell.app
+
+### Текущий фокус (0.3.7+)
+
+1. Finetune loop: `./scripts/training_loop_full.sh` → promote/shadow gate
+2. Baseline refresh после green eval cycle
+3. Provider/cost observability (optional)
 
 Подробная карта: [reference.md](reference.md). Архив старых milestones: [archive/](archive/).
 

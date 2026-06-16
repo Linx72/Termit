@@ -54,6 +54,12 @@ class TermitShellRuntimeSmokeTests(unittest.TestCase):
         self.assertIn("codesign --verify", verify_script)
         self.assertIn("spctl -a", verify_script)
 
+    def test_training_loop_full_script(self) -> None:
+        script = (self.root / "scripts" / "training_loop_full.sh").read_text(encoding="utf-8")
+        self.assertIn("training_loop_week2.sh", script)
+        self.assertIn("eval_regression_report.py", script)
+        self.assertIn("run-suite", script)
+
 
 if __name__ == "__main__":
     unittest.main()

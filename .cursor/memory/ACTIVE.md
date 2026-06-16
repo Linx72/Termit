@@ -4,18 +4,19 @@
 
 ## Сводка
 
-- **0.3.6 stable** — tagged, GitHub release, CI green.
-- **Фаза 5 закрыта** — signed desktop: `package_desktop.sh` → `TermitShell.app`, release workflow + checksums.
-- Post-parity roadmap (Track 1–5, Фаза 5) — **complete**.
+- **Post-parity roadmap (0.3.6)** — полностью закрыт.
+- **Следующий этап 0.3.7** — finetune loop closure: `training_loop_full.sh`, `docs/FINETUNE_LOOP_RU.md`.
 
-## Ключевые файлы (signed desktop)
+## Файлы сессии
 
-- `scripts/package_desktop.sh` — wrapper для shell bundle
-- `scripts/package_termit_shell.sh` — codesign + notary
-- `scripts/verify_desktop_signature.sh`
-- `docs/DESKTOP_SIGNING_RU.md`
-- `.github/workflows/release.yml`
+- `scripts/training_loop_full.sh`
+- `docs/FINETUNE_LOOP_RU.md`
+- `PROJECT_TASK_PROMPT_RU.md` — секция 0.3.7
+- `OBSERVABILITY_CHECKLIST.md`, `DESKTOP_UX_TASK_PROMPT_RU.md` — актуализированы
+- `.cursor/skills/termit-agent/SKILL.md` — новый вектор
 
 ## Открытые задачи
 
-- (none) — следующий этап: новые фичи по запросу или MS8/MS9 infra
+- [ ] +5% eval pass после stage1 cycle (GPU/train + baseline refresh)
+- [ ] Weekly cron: `training_loop_full.sh` + auto baseline update on green gate
+- [ ] Provider/cost observability dashboards
