@@ -148,6 +148,14 @@ class DesktopOpsTests(unittest.TestCase):
         self.assertEqual(gates.status_code, 200)
         self.assertIn("gates", gates.json())
 
+        beta = client.get("/api/ops/beta-metrics")
+        self.assertEqual(beta.status_code, 200)
+        self.assertIn("target_d30_retention", beta.json())
+
+        summary = client.get("/api/feedback/summary")
+        self.assertEqual(summary.status_code, 200)
+        self.assertIn("total", summary.json())
+
         shared = client.post(
             "/api/desktop/shared-runs",
             json={"run_id": "arun_demo001", "team": "default", "note": "test"},

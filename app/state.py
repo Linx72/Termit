@@ -566,6 +566,39 @@ def get_feedback_store() -> FeedbackStore:
 
 
 @lru_cache
+def _build_beta_cohort_service():
+    from app.services.beta_cohort_service import BetaCohortService
+
+    settings = get_settings()
+    feedback = _build_feedback_store()
+    agent_service = _build_agent_service()
+
+    def task_activity() -> list[tuple[str, str]]:
+        store = SQLiteTaskStore(db_path=settings.task_sqlite_path)
+        return [
+            (task.session_id or task.task_id, task.created_at)
+            for task in store.list_tasks(limit=5000)
+        ]
+
+    def run_activity() -> list[tuple[str, str]]:
+        return [
+            (run.session_id or run.run_id, run.created_at)
+            for run in agent_service._run_store.list_runs(limit=5000)
+        ]
+
+    return BetaCohortService(
+        feedback_entries_provider=lambda: feedback.list_entries(limit=5000),
+        task_activity_provider=task_activity,
+        run_activity_provider=run_activity,
+        target_d30_retention=0.35,
+    )
+
+
+def get_beta_cohort_service():
+    return _build_beta_cohort_service()
+
+
+@lru_cache
 def _build_eval_service() -> EvalService:
     settings = get_settings()
     from app.core.model_roles import resolve_cloud_teacher_model
@@ -1136,12 +1169,18 @@ def _build_desktop_kpi_gate_service():
     def metrics_summary_provider() -> dict[str, object]:
         return _build_telemetry_store().snapshot().model_dump()
 
+    def beta_metrics_provider() -> dict[str, object]:
+        metrics = _build_beta_cohort_service().build_metrics()
+        metrics["feedback_total"] = _build_feedback_store().summarize().get("total", 0)
+        return metrics
+
     return DesktopKpiGateService(
         settings.desktop_north_star_path,
         eval_dashboard_provider=eval_dashboard_provider,
         agent_metrics_provider=agent_metrics_provider,
         telemetry_summary_provider=telemetry_summary_provider,
         metrics_summary_provider=metrics_summary_provider,
+        beta_metrics_provider=beta_metrics_provider,
     )
 
 

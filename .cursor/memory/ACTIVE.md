@@ -4,15 +4,16 @@
 
 ## Сводка
 
-**0.4.4** — Product KPI targets (Phase 5).
+**0.4.5** — Beta growth: D30 retention + feedback.
 
-### North Star KPI gates
-- `task_success_rate_min` 75%, `automation_rate_min` 60%, `chat_p95_ttft_ms_max` 3000
-- `DesktopKpiGateService` + telemetry metrics provider
-- Prometheus: `termit_automation_rate`, `termit_desktop_kpi_gates_passed`, task counters
-- Alerts: `TermitDesktopKpiGatesFailing`, `TermitLowTaskSuccessRate`
-- `KpiGatePanel` — формат ms/s для latency gates
+- `BetaCohortService` — D7/D30 из feedback + tasks + agent runs
+- `GET /api/ops/beta-metrics`, `GET /api/feedback/summary`
+- Desktop `BetaFeedbackPanel`, `feedbackOps.ts`
+- KPI gate `d30_retention_min` 35% (cohort ≥5)
+- Prometheus: `termit_beta_d30_retention_rate`
+
+**Тесты:** 529 OK
 
 ## Открытые задачи
 
-- Мастер-план закрыт через 0.4.4; следующий «do all» — growth/KPI measurement или новый product track
+- Roadmap 0.3.7–0.4.5 закрыт; следующий track — product growth experiments или platform parity extensions

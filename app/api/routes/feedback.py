@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.domain.schemas import FeedbackRequest, FeedbackResponse
+from app.domain.schemas import FeedbackRequest, FeedbackResponse, FeedbackSummaryResponse
 from app.services.feedback_store import FeedbackStore
 from app.state import get_feedback_store
 
@@ -29,3 +29,11 @@ async def submit_feedback(
         instruction=payload.instruction,
     )
     return FeedbackResponse(status="accepted", timestamp=timestamp)
+
+
+@router.get("/feedback/summary", response_model=FeedbackSummaryResponse)
+async def feedback_summary(
+    store: FeedbackStore = Depends(get_feedback_store),
+) -> FeedbackSummaryResponse:
+    payload = store.summarize()
+    return FeedbackSummaryResponse(**payload)

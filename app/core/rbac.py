@@ -8,6 +8,8 @@ ROLE_RANK = {
 def required_role(method: str, path: str) -> str:
     if path.startswith("/api/feedback"):
         return "viewer"
+    if path.startswith("/api/ops/beta-metrics") and method == "GET":
+        return "viewer"
     if path.startswith("/api/eval"):
         return "operator"
     if path.startswith("/api/retrieval") and method == "POST":

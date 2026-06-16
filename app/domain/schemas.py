@@ -705,6 +705,26 @@ class FeedbackResponse(BaseModel):
     timestamp: str
 
 
+class FeedbackSummaryResponse(BaseModel):
+    total: int
+    recent_7d: int
+    avg_rating: Optional[float] = None
+    rating_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class BetaMetricsResponse(BaseModel):
+    d30_retention_rate: Optional[float] = None
+    cohort_size_d30: int = 0
+    retained_d30: int = 0
+    d7_retention_rate: Optional[float] = None
+    cohort_size_d7: int = 0
+    retained_d7: int = 0
+    active_users_7d: int = 0
+    tracked_actors: int = 0
+    feedback_total: int = 0
+    target_d30_retention: float = 0.35
+
+
 class EvalScenarioResponse(BaseModel):
     id: str
     category: str

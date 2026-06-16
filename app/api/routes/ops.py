@@ -14,6 +14,7 @@ from app.domain.schemas import (
     AutomationToggleItem,
     OpsIncidentDrillResponse,
     OpsReadinessResponse,
+    BetaMetricsResponse,
     QuotaResetRequest,
     QuotaResetResponse,
     AgentRuntimePolicyResponse,
@@ -31,6 +32,7 @@ from app.services.daily_improvement_scheduler_service import DailyImprovementSch
 from app.services.quota_store import QuotaStore
 from app.services.automation_control_service import AutomationControlService
 from app.services.orchestration_eval_report_store import OrchestrationEvalReportStore
+from app.services.feedback_store import FeedbackStore
 from app.state import (
     get_agent_maintenance_scheduler_service,
     get_agent_service,
@@ -41,6 +43,8 @@ from app.state import (
     get_orchestration_eval_report_store,
     get_ops_service,
     get_quota_store,
+    get_beta_cohort_service,
+    get_feedback_store,
 )
 
 router = APIRouter(prefix="/api/ops", tags=["ops"])
@@ -82,6 +86,16 @@ async def readiness(
         providers_status_cb=chat.providers_status,
         agent_metrics_cb=service.queue_metrics,
     )
+
+
+@router.get("/beta-metrics", response_model=BetaMetricsResponse)
+async def beta_metrics(
+    service=Depends(get_beta_cohort_service),
+    feedback_store: FeedbackStore = Depends(get_feedback_store),
+) -> BetaMetricsResponse:
+    payload = service.build_metrics()
+    payload["feedback_total"] = feedback_store.summarize().get("total", 0)
+    return BetaMetricsResponse(**payload)
 
 
 @router.post("/incident-drill", response_model=OpsIncidentDrillResponse)

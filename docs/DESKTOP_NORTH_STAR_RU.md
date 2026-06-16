@@ -28,6 +28,7 @@
 | Task success rate | ≥ 75% | TelemetryStore → `/api/desktop/kpi-gates` |
 | Automation rate | ≥ 60% | TelemetryStore → `/api/desktop/kpi-gates` |
 | Chat p95 TTFT | < 3000 ms | TelemetryStore → `/api/metrics/prometheus` |
+| D30 retention (beta) | ≥ 35% | `/api/ops/beta-metrics` → KPI gate |
 
 ## API
 

@@ -16,12 +16,14 @@ class DesktopKpiGateService:
         agent_metrics_provider: Callable[[], dict[str, object]],
         telemetry_summary_provider: Callable[[], dict[str, object]] | None = None,
         metrics_summary_provider: Callable[[], dict[str, object]] | None = None,
+        beta_metrics_provider: Callable[[], dict[str, object]] | None = None,
     ) -> None:
         self._path = Path(north_star_path)
         self._eval_dashboard_provider = eval_dashboard_provider
         self._agent_metrics_provider = agent_metrics_provider
         self._telemetry_summary_provider = telemetry_summary_provider
         self._metrics_summary_provider = metrics_summary_provider
+        self._beta_metrics_provider = beta_metrics_provider
 
     def _load_targets(self) -> dict[str, float]:
         if not self._path.is_file():
@@ -114,6 +116,18 @@ class DesktopKpiGateService:
                     float(metrics_summary.get("chat_latency_p95_ms", 0.0)),
                     targets.get("chat_p95_ttft_ms_max", 3000.0),
                     higher_is_better=False,
+                )
+
+        if self._beta_metrics_provider is not None:
+            beta = self._beta_metrics_provider()
+            cohort_d30 = int(beta.get("cohort_size_d30", 0) or 0)
+            d30_rate = beta.get("d30_retention_rate")
+            if cohort_d30 >= 5 and isinstance(d30_rate, (int, float)):
+                add_gate(
+                    "d30_retention",
+                    "D30 retention (beta)",
+                    float(d30_rate),
+                    targets.get("d30_retention_min", 0.35),
                 )
 
         telemetry: dict[str, object] = {}

@@ -640,4 +640,9 @@ export class TermitClient {
   requestMedia<T>(path: string, init?: RequestInit): Promise<T> {
     return this.request<T>(path, init);
   }
+
+  /** Feedback APIs (`/api/feedback/*`). */
+  requestFeedback<T>(path: string, init?: RequestInit): Promise<T> {
+    return this.request<T>(path, init);
+  }
 }

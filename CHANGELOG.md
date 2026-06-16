@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.5] - 2026-06-17
+
+### Added
+- Beta D30 retention metrics + Desktop feedback panel
+
+
 ## [0.4.4] - 2026-06-17
 
 ### Added

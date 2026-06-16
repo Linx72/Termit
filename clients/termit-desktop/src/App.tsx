@@ -24,6 +24,7 @@ import {
 import { FirstRunWizard } from "./FirstRunWizard";
 import { HealthDashboard } from "./HealthDashboard";
 import { KpiGatePanel } from "./KpiGatePanel";
+import { BetaFeedbackPanel } from "./BetaFeedbackPanel";
 import { WorkflowHubPanel } from "./WorkflowHubPanel";
 import { AgentObservabilityPanel } from "./AgentObservabilityPanel";
 import { OpsSecurityPanel } from "./OpsSecurityPanel";
@@ -2366,6 +2367,7 @@ export function App() {
         <RuntimeStatusBar client={client} connected={connected} locale={locale} />
         <HealthDashboard client={client} connected={connected} locale={locale} />
         <KpiGatePanel client={client} connected={connected} locale={locale} />
+        <BetaFeedbackPanel client={client} connected={connected} locale={locale} />
         {northStarJourneys.length > 0 ? (
           <WorkflowHubPanel
             journeys={northStarJourneys}

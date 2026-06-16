@@ -29,6 +29,7 @@ from app.state import (
     get_metrics_snapshot_store,
     get_multi_agent_orchestrator,
     get_telemetry_store,
+    get_beta_cohort_service,
 )
 
 router = APIRouter(prefix="/api", tags=["metrics"])
@@ -312,6 +313,7 @@ async def metrics_prometheus(
         lines.append(_prom_line("termit_http_errors_total", int(row["errors_total"]), labels=labels))
         lines.append(_prom_line("termit_http_latency_p95_ms", float(row["latency_p95_ms"]), labels=labels))
     kpi_gates = get_desktop_kpi_gate_service().evaluate_gates()
+    beta_metrics = get_beta_cohort_service().build_metrics()
     lines.extend(
         [
             "# HELP termit_desktop_kpi_gates_passed 1 if all north-star KPI gates pass.",
@@ -322,4 +324,16 @@ async def metrics_prometheus(
             _prom_line("termit_desktop_kpi_gates_total", int(kpi_gates.get("total_gates", 0))),
         ]
     )
+    d30_rate = beta_metrics.get("d30_retention_rate")
+    if isinstance(d30_rate, (int, float)):
+        lines.extend(
+            [
+                "# HELP termit_beta_d30_retention_rate Beta cohort D30 retention rate.",
+                "# TYPE termit_beta_d30_retention_rate gauge",
+                _prom_line("termit_beta_d30_retention_rate", float(d30_rate)),
+                "# HELP termit_beta_cohort_size_d30 Beta cohort size eligible for D30 retention.",
+                "# TYPE termit_beta_cohort_size_d30 gauge",
+                _prom_line("termit_beta_cohort_size_d30", int(beta_metrics.get("cohort_size_d30", 0))),
+            ]
+        )
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")

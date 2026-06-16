@@ -354,6 +354,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** `/api/desktop/kpi-gates` включает product KPI при наличии telemetry; Prometheus экспортирует automation + KPI gate status.
 
+### Следующий этап (0.4.5): Beta growth — D30 retention + feedback
+
+- [x] `BetaCohortService` — D7/D30 retention из feedback + tasks + agent runs
+- [x] `GET /api/ops/beta-metrics`, `GET /api/feedback/summary`
+- [x] Desktop `BetaFeedbackPanel` + `feedbackOps.ts`
+- [x] KPI gate `d30_retention_min` (≥35%, cohort ≥5)
+
+**DoD:** beta metrics доступны из API; feedback из desktop; Prometheus `termit_beta_d30_retention_rate`.
+
 ---
 
 ## Порядок выполнения
