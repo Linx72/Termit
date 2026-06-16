@@ -38,7 +38,7 @@ description: >-
 | [`AUTOMATION_TASK_PROMPT_RU.md`](../../../AUTOMATION_TASK_PROMPT_RU.md) | do_all_automatic, toggles, `/api/ops/automation` |
 | [`termit-automation`](../termit-automation/SKILL.md) | Skill: server automation + Desktop panel |
 
-**Текущий вектор:** **0.4.0** — OTEL span export, media trace spans, team online (`OnlineAcceleratorPanel`).
+**Текущий вектор:** **0.4.1** — hosted beta smoke (`hosted_smoke.sh`), prod docker profile.
 
 ### Post-parity focus (закрыто в 0.3.6)
 
@@ -48,11 +48,11 @@ description: >-
 4. ~~Eval/quality 2.0~~ — 74 scenarios, regression report, tiered gates
 5. ~~Release discipline~~ — RELEASE_FLOW, release_pack, signed TermitShell.app
 
-### Текущий фокус (0.4.0+)
+### Текущий фокус (0.4.1+)
 
-1. OTEL span export (`/api/platform/runs/{id}/spans/otel`)
-2. Media trace spans in TraceSpanStore
-3. Team shared runs + heavy jobs in Desktop settings
+1. Hosted beta: `./scripts/hosted_smoke.sh` через Caddy :8080
+2. Prod docker profile (`docker-compose.prod.yml`, `deploy/docker.env.example`)
+3. Media optional: Fal I2V / Lottie
 
 Подробная карта: [reference.md](reference.md). Архив старых milestones: [archive/](archive/).
 

@@ -51,6 +51,32 @@ Caddy obtains certificates automatically for `TERMIT_PUBLIC_DOMAIN`. Local-only 
 - KPI snapshots: `POST /api/metrics/snapshot`
 - Incident drill: `POST /api/ops/incident-drill` (admin key)
 
+## Hosted beta smoke (post-deploy)
+
+After `docker compose up --build -d`:
+
+```bash
+chmod +x ./scripts/hosted_smoke.sh
+./scripts/hosted_smoke.sh
+```
+
+With production auth profile (`deploy/docker.env.example` copied into `.env`):
+
+```bash
+TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.sh
+```
+
+Checks: proxy reachability, health/readiness/metrics, `X-Trace-Id` header, optional auth 401 without key.
+
+Production overlay:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+TERMIT_HOSTED_BASE_URL=http://127.0.0.1:8080 ./scripts/hosted_smoke.sh
+```
+
+Recommended prod env extras: `TERMIT_LOG_JSON=true`, SQLite backup cron (`scripts/backup_sqlite.sh`).
+
 ## Upgrade flow
 
 1. `docker compose pull && docker compose up --build -d`

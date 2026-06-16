@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.1] - 2026-06-16
+
+### Added
+- **`scripts/hosted_smoke.sh`** — post-deploy smoke via Caddy :8080 (health, readiness, trace header, optional auth gate)
+
+### Changed
+- `HOSTED_DEPLOYMENT.md`, `BETA_ONBOARDING.md` — hosted smoke workflow
+- `deploy/docker.env.example` — `TERMIT_LOG_JSON`, `TERMIT_LOG_LEVEL` for prod
+- `release_all.sh` — documents hosted smoke step
+
 ## [0.4.0] - 2026-06-16
 
 ### Added

@@ -33,9 +33,11 @@ See [`clients/CLIENT_UX.md`](clients/CLIENT_UX.md). With auth enabled, set `term
 ## Hosted beta (Docker)
 
 ```bash
-cp .env.example .env
+cp deploy/docker.env.example .env   # or cp .env.example .env
 docker compose up --build -d
-curl -s http://localhost:8080/api/ops/readiness
+./scripts/hosted_smoke.sh
+# With auth profile:
+TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.sh
 ```
 
 See [`HOSTED_DEPLOYMENT.md`](HOSTED_DEPLOYMENT.md).

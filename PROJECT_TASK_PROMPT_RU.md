@@ -320,6 +320,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** spans экспортируются в OTEL JSON; media ops пишут spans при `run_id`; team share доступен из desktop.
 
+### Следующий этап (0.4.1): Hosted beta hardening
+
+- [x] `scripts/hosted_smoke.sh` — smoke через Caddy :8080 + trace header + optional auth gate
+- [x] Документация: `HOSTED_DEPLOYMENT.md`, `deploy/docker.env.example`, `BETA_ONBOARDING.md`
+- [x] `release_all.sh` — ссылка на hosted smoke
+
+**DoD:** после `docker compose up` один прогон `./scripts/hosted_smoke.sh` зелёный; auth profile проверяется с `TERMIT_HOSTED_AUTH_EXPECT=true`.
+
 ---
 
 ## Порядок выполнения

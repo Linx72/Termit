@@ -66,6 +66,13 @@ class TermitShellRuntimeSmokeTests(unittest.TestCase):
         self.assertIn("training_loop_full.sh", script)
         self.assertIn("TERMIT_EVAL_AUTO_PROMOTE_BASELINE", script)
 
+    def test_hosted_smoke_script(self) -> None:
+        script = (self.root / "scripts" / "hosted_smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("TERMIT_HOSTED_BASE_URL", script)
+        self.assertIn("TERMIT_HOSTED_AUTH_EXPECT", script)
+        self.assertIn("X-Trace-Id", script)
+        self.assertIn("/api/ops/readiness", script)
+
 
 if __name__ == "__main__":
     unittest.main()
