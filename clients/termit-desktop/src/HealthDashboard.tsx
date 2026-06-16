@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TermitClient } from "@termit/client";
+import { getBetaMetrics } from "@termit/client";
 import { t, type Locale } from "./i18n";
 
 interface HealthDashboardProps {
@@ -38,6 +39,11 @@ interface HealthSnapshot {
   trainingSignals: number | null;
   latestDataset: string | null;
   tuningHint: string | null;
+  betaD30Rate: number | null;
+  betaD30Cohort: number;
+  betaD7Rate: number | null;
+  betaActiveUsers7d: number;
+  betaFeedbackTotal: number;
 }
 
 interface LifecycleSummary {
@@ -101,12 +107,13 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
     }
     setError("");
     try {
-      const [metrics, stats, readiness, training, evalDash] = await Promise.all([
+      const [metrics, stats, readiness, training, evalDash, beta] = await Promise.all([
         client.getAgentRunsMetrics(),
         client.getRetrievalStats(),
         client.getOpsReadiness(),
         client.getFinetuneTrainingDashboard(5),
         client.getEvalDashboard(1),
+        getBetaMetrics(client),
       ]);
       const passRate = evalDash.pass_rate ?? null;
       const recommendations = training.tuning_report?.recommendations;
@@ -145,6 +152,11 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
         trainingSignals: training.training_signals_count,
         latestDataset: training.latest_dataset ?? null,
         tuningHint,
+        betaD30Rate: beta.d30_retention_rate,
+        betaD30Cohort: beta.cohort_size_d30,
+        betaD7Rate: beta.d7_retention_rate,
+        betaActiveUsers7d: beta.active_users_7d,
+        betaFeedbackTotal: beta.feedback_total,
       });
     } catch (err) {
       const text = err instanceof Error ? err.message : String(err);
@@ -199,6 +211,15 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
                 <li>
                   {t(locale, "kpiToolLoop")}: {formatRate(snapshot.toolLoopSuccessRate)} · {t(locale, "kpiCompletion")}{" "}
                   {formatRate(snapshot.toolLoopCompletionRate)}
+                </li>
+                <li>
+                  {t(locale, "kpiBetaGrowth")}: {t(locale, "kpiBetaD30")}{" "}
+                  {snapshot.betaD30Rate != null
+                    ? `${formatRate(snapshot.betaD30Rate)} (${snapshot.betaD30Cohort})`
+                    : "—"}{" "}
+                  · {t(locale, "kpiBetaD7")}{" "}
+                  {snapshot.betaD7Rate != null ? formatRate(snapshot.betaD7Rate) : "—"} · {t(locale, "kpiBetaActive")}{" "}
+                  {snapshot.betaActiveUsers7d} · {t(locale, "kpiBetaFeedback")} {snapshot.betaFeedbackTotal}
                 </li>
                 <li>
                   {t(locale, "runtimeActiveRuns")}: {snapshot.activeRuns} · {t(locale, "queue")}:{" "}

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6] - 2026-06-17
+
+### Added
+- Beta growth dashboard in Web UI (D30/D7 retention, active users, feedback)
+- HealthDashboard beta cohort line (D30/D7, active 7d, feedback count)
+- KPI export bundle: beta_metrics, feedback_summary, kpi_gates
+
 ## [0.4.5] - 2026-06-17
 
 ### Added

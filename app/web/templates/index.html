@@ -388,6 +388,26 @@
           <div id="evalKpiCount" class="dash-value">—</div>
         </div>
       </div>
+      <button id="refreshBetaGrowthBtn" data-tip="refreshBetaGrowthBtn">Refresh beta growth</button>
+      <div id="betaGrowthPanel" class="meta" style="margin:0.5rem 0;font-weight:600;"></div>
+      <div id="betaKpiGrid" class="dashboard-grid" style="margin-top:0.5rem;">
+        <div class="dash-card ok">
+          <h4>D30 retention</h4>
+          <div id="betaKpiD30" class="dash-value">—</div>
+        </div>
+        <div class="dash-card ok">
+          <h4>D7 retention</h4>
+          <div id="betaKpiD7" class="dash-value">—</div>
+        </div>
+        <div class="dash-card ok">
+          <h4>Active users (7d)</h4>
+          <div id="betaKpiActive" class="dash-value">—</div>
+        </div>
+        <div class="dash-card ok">
+          <h4>Feedback</h4>
+          <div id="betaKpiFeedback" class="dash-value">—</div>
+        </div>
+      </div>
       <button id="captureMetricsBtn" data-tip="captureMetricsBtn" data-i18n="btn.captureMetrics">Capture KPI snapshot</button>
       </section>
 
@@ -1838,6 +1858,52 @@
         }
       });
 
+      async function refreshBetaGrowth() {
+        const panel = document.getElementById("betaGrowthPanel");
+        if (!panel) {
+          return;
+        }
+        try {
+          const [betaResp, feedbackResp] = await Promise.all([
+            fetch("/api/ops/beta-metrics", { headers: authHeaders() }),
+            fetch("/api/feedback/summary", { headers: authHeaders() }),
+          ]);
+          const beta = await betaResp.json();
+          const feedback = await feedbackResp.json();
+          const d30 = beta.d30_retention_rate;
+          const d7 = beta.d7_retention_rate;
+          const d30Pct = d30 != null ? `${Math.round(Number(d30) * 1000) / 10}%` : "—";
+          const d7Pct = d7 != null ? `${Math.round(Number(d7) * 1000) / 10}%` : "—";
+          const targetPct = Math.round(Number(beta.target_d30_retention || 0.35) * 100);
+          panel.textContent =
+            `Beta growth: D30 ${d30Pct} (cohort ${beta.cohort_size_d30 || 0}, target ≥${targetPct}%) · D7 ${d7Pct} · active ${beta.active_users_7d || 0} · feedback ${feedback.total || 0}`;
+          const d30El = document.getElementById("betaKpiD30");
+          const d7El = document.getElementById("betaKpiD7");
+          const activeEl = document.getElementById("betaKpiActive");
+          const feedbackEl = document.getElementById("betaKpiFeedback");
+          if (d30El) {
+            d30El.textContent =
+              beta.cohort_size_d30 > 0 ? `${d30Pct} (${beta.retained_d30}/${beta.cohort_size_d30})` : d30Pct;
+          }
+          if (d7El) {
+            d7El.textContent =
+              beta.cohort_size_d7 > 0 ? `${d7Pct} (${beta.retained_d7}/${beta.cohort_size_d7})` : d7Pct;
+          }
+          if (activeEl) activeEl.textContent = String(beta.active_users_7d ?? "—");
+          if (feedbackEl) {
+            const avg = feedback.avg_rating != null ? ` · ★${Number(feedback.avg_rating).toFixed(1)}` : "";
+            feedbackEl.textContent = `${feedback.total ?? 0}${avg}`;
+          }
+        } catch {
+          panel.textContent = "Beta growth: unavailable";
+        }
+      }
+
+      const refreshBetaGrowthBtn = document.getElementById("refreshBetaGrowthBtn");
+      if (refreshBetaGrowthBtn) {
+        refreshBetaGrowthBtn.addEventListener("click", () => void refreshBetaGrowth());
+      }
+
       async function refreshEvalPassRate() {
         if (!evalPassRatePanel) {
           return;
@@ -2287,6 +2353,7 @@
 
       refreshMetricsHealth();
       refreshEvalPassRate();
+      refreshBetaGrowth();
       refreshOperatorDashboard();
       setInterval(refreshOperatorDashboard, 15000);
       if (window.TermitAgentHub) {

@@ -363,6 +363,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** beta metrics доступны из API; feedback из desktop; Prometheus `termit_beta_d30_retention_rate`.
 
+### Следующий этап (0.4.6): Beta growth dashboard — web + HealthDashboard
+
+- [x] Web UI: beta KPI grid (`/api/ops/beta-metrics`, `/api/feedback/summary`)
+- [x] Desktop `HealthDashboard` — D30/D7 retention, active users, feedback count
+- [x] `export_kpi_dashboard.py` — beta_metrics, feedback_summary, kpi_gates
+
+**DoD:** beta growth виден в web ops и HealthDashboard; KPI export bundle включает beta cohort.
+
 ---
 
 ## Порядок выполнения
