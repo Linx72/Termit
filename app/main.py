@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.core.structured_logging import configure_logging
+
 from app.api.routes.assignments import router as assignments_router
 from app.api.routes.automation import router as automation_router
 from app.api.routes.agents import router as agents_router
@@ -49,6 +51,7 @@ from app.state import (
 from app.web.routes import router as web_router
 
 settings = get_settings()
+configure_logging(json_logs=settings.log_json, level=settings.log_level)
 _version_file = Path(__file__).resolve().parent.parent / "VERSION"
 _app_version = (
     _version_file.read_text(encoding="utf-8").strip()

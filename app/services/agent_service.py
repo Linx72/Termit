@@ -1003,6 +1003,7 @@ class AgentService:
         def verify_fn() -> tuple[bool, str]:
             if not verify_cmd:
                 return True, "Verify skipped: no command configured."
+            started = time.perf_counter()
             ssh_cfg = _active_ssh_config.get()
             if ssh_cfg is not None:
                 result = self._ssh.execute_command(
@@ -1025,10 +1026,63 @@ class AgentService:
                 )
             detail = (result.stdout or result.stderr or "")[:500]
             ok = not result.executed or result.exit_code == 0
+            if self._trace_spans is not None and run_id:
+                self._trace_spans.record(
+                    run_id=run_id,
+                    name="verify.stage",
+                    status="ok" if ok else "failed",
+                    detail=detail,
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                )
             return ok, f"exit_code={result.exit_code}; {detail}"
 
+        async def traced_chat_fn(request: ChatRequest):
+            started = time.perf_counter()
+            try:
+                result = await self._chat_service.chat(request)
+            except Exception as exc:
+                if self._trace_spans is not None and run_id:
+                    self._trace_spans.record(
+                        run_id=run_id,
+                        name="provider.unknown",
+                        status="error",
+                        detail=str(exc)[:500],
+                        duration_ms=int((time.perf_counter() - started) * 1000),
+                    )
+                raise
+            if self._trace_spans is not None and run_id:
+                self._trace_spans.record(
+                    run_id=run_id,
+                    name=f"provider.{result.provider}",
+                    status="ok",
+                    detail=f"model={result.model}",
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                )
+            return result
+
         async def native_chat_fn(request: ChatRequest):
-            return await self._chat_service.chat_with_tools(request, tools_schema)
+            started = time.perf_counter()
+            try:
+                result = await self._chat_service.chat_with_tools(request, tools_schema)
+            except Exception as exc:
+                if self._trace_spans is not None and run_id:
+                    self._trace_spans.record(
+                        run_id=run_id,
+                        name="provider.unknown",
+                        status="error",
+                        detail=str(exc)[:500],
+                        duration_ms=int((time.perf_counter() - started) * 1000),
+                    )
+                raise
+            if self._trace_spans is not None and run_id:
+                self._trace_spans.record(
+                    run_id=run_id,
+                    name=f"provider.{result.provider}",
+                    status="ok",
+                    detail=f"model={result.model}",
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                )
+            return result
 
         def tool_fn(tool_name: str, arguments: dict[str, object]) -> str:
             started = time.perf_counter()
@@ -1150,6 +1204,27 @@ class AgentService:
                 message=trace_payload,
                 attempt=attempt,
             )
+            if self._trace_spans is not None:
+                span_status = "ok"
+                span_name = f"loop.step.{step.action}"
+                if step.action == "verify_pass":
+                    span_name = "verify.pass"
+                elif step.action == "verify_failed":
+                    span_name = "verify.failed"
+                    span_status = "failed"
+                elif step.action == "verify_retry":
+                    span_name = "verify.retry"
+                    span_status = "retry"
+                elif step.action == "parse_error":
+                    span_status = "error"
+                elif step.action == "tool" and str(step.observation).startswith("Tool error"):
+                    span_status = "error"
+                self._trace_spans.record(
+                    run_id=run_id,
+                    name=span_name,
+                    status=span_status,
+                    detail=(step.tool or str(step.observation or ""))[:500],
+                )
             if self._training_signals is not None:
                 obs_text = str(step.observation or "")
                 verified = False
@@ -1221,7 +1296,7 @@ class AgentService:
         loop_result = await self._loop_service.run(
             profile=profile_for_loop,
             payload=payload,
-            chat_fn=self._chat_service.chat,
+            chat_fn=traced_chat_fn,
             tool_fn=tool_fn,
             memory_context=memory_context,
             max_steps=resolve_loop_step_budget(profile, payload),

@@ -242,6 +242,8 @@ class Settings:
     guardrails_enabled: bool = True
     guardrails_max_patch_chars: int = 50000
     trace_spans_db_path: str = "./termit_trace_spans.db"
+    log_json: bool = False
+    log_level: str = "INFO"
     search_api_url: str = "http://127.0.0.1:8888"
     search_api_key: str = ""
     search_provider: str = "searxng"
@@ -653,6 +655,8 @@ def get_settings() -> Settings:
         guardrails_enabled=os.getenv("TERMIT_GUARDRAILS_ENABLED", "true").lower() in {"1", "true", "yes"},
         guardrails_max_patch_chars=int(os.getenv("TERMIT_GUARDRAILS_MAX_PATCH_CHARS", "50000")),
         trace_spans_db_path=os.getenv("TERMIT_TRACE_SPANS_DB_PATH", "./termit_trace_spans.db"),
+        log_json=os.getenv("TERMIT_LOG_JSON", "false").lower() in {"1", "true", "yes"},
+        log_level=os.getenv("TERMIT_LOG_LEVEL", "INFO"),
         search_api_url=os.getenv("TERMIT_SEARCH_API_URL", "http://127.0.0.1:8888"),
         search_api_key=os.getenv("TERMIT_SEARCH_API_KEY", ""),
         search_provider=os.getenv("TERMIT_SEARCH_PROVIDER", "searxng"),

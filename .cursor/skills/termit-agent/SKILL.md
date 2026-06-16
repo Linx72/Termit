@@ -38,7 +38,7 @@ description: >-
 | [`AUTOMATION_TASK_PROMPT_RU.md`](../../../AUTOMATION_TASK_PROMPT_RU.md) | do_all_automatic, toggles, `/api/ops/automation` |
 | [`termit-automation`](../termit-automation/SKILL.md) | Skill: server automation + Desktop panel |
 
-**Текущий вектор:** **0.3.7 finetune loop** закрыт. Фокус **0.3.8**: Desktop North Star UX (WorkflowHub + KPI gates), eval metrics by category, observability polish.
+**Текущий вектор:** **0.3.8 North Star UX** закрыт. Фокус **0.3.9+**: structured logging, trace spans (provider/verify), media human-approve.
 
 ### Post-parity focus (закрыто в 0.3.6)
 
@@ -48,11 +48,11 @@ description: >-
 4. ~~Eval/quality 2.0~~ — 74 scenarios, regression report, tiered gates
 5. ~~Release discipline~~ — RELEASE_FLOW, release_pack, signed TermitShell.app
 
-### Текущий фокус (0.3.8)
+### Текущий фокус (0.3.9+)
 
-1. Desktop North Star: WorkflowHub + KpiGatePanel в settings
-2. Eval observability: pass_rate_by_category в dashboard/Prometheus
-3. Prometheus alert hygiene (WorkersDown, provider burst)
+1. Structured JSON logs + redaction (`TERMIT_LOG_JSON`)
+2. Trace spans: provider + verification stages
+3. Media Studio paid ops confirm in Desktop
 
 Подробная карта: [reference.md](reference.md). Архив старых milestones: [archive/](archive/).
 

@@ -303,6 +303,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** в настройках desktop видны journeys и KPI gates; `/api/metrics/prometheus` экспортирует eval по категориям.
 
+### Следующий этап (0.3.9): Observability + Media Studio polish
+
+- [x] Structured JSON logs (`TERMIT_LOG_JSON`) + redaction policy
+- [x] Trace spans: `provider.*`, `verify.stage`, `verify.pass/failed/retry`
+- [x] Media Studio human-approve gate в Desktop (HTTP 428 → confirm UI)
+- [x] Error logs with stable `error_class` in JSON formatter
+
+**DoD:** JSON logs без секретов; agent run spans покрывают provider+verify; paid media требует confirm в UI.
+
 ---
 
 ## Порядок выполнения

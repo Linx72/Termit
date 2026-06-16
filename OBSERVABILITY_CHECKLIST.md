@@ -13,15 +13,15 @@
 
 - [x] request trace id propagation — trace middleware
 - [x] tool invocation spans — `TraceSpanStore`, platform spans API
-- [ ] model provider spans
-- [ ] verification stage spans
+- [x] model provider spans — `provider.{name}` in TraceSpanStore during agent loop
+- [x] verification stage spans — `verify.stage`, `verify.pass`, `verify.failed`, `verify.retry`
 
 ## Logging
 
-- [ ] structured logs (JSON preferred)
-- [ ] error logs with stable error classes
+- [x] structured logs (JSON preferred) — `TERMIT_LOG_JSON=true`, `app/core/structured_logging.py`
+- [x] error logs with stable error classes — `error_class` in JsonLogFormatter
 - [x] audit logs for risky tool actions — `GET /api/tools/audit`
-- [ ] redaction policy for sensitive data
+- [x] redaction policy for sensitive data — `redact_sensitive()` in structured logging
 
 ## Alerting
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import time
 from uuid import uuid4
@@ -41,15 +40,17 @@ class RequestTraceMiddleware(BaseHTTPMiddleware):
                 except Exception:  # noqa: BLE001
                     pass
             logger.info(
-                json.dumps(
-                    {
-                        "event": "http_request",
-                        "trace_id": trace_id,
-                        "method": request.method,
-                        "path": path,
-                        "status_code": status_code,
-                        "latency_ms": latency_ms,
-                    },
-                    ensure_ascii=True,
-                )
+                "%s %s -> %s (%sms)",
+                request.method,
+                path,
+                status_code,
+                latency_ms,
+                extra={
+                    "event": "http_request",
+                    "trace_id": trace_id,
+                    "method": request.method,
+                    "path": path,
+                    "status_code": status_code,
+                    "latency_ms": latency_ms,
+                },
             )

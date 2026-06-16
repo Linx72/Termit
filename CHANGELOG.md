@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.9] - 2026-06-16
+
+### Added
+- **Logging:** `TERMIT_LOG_JSON` + `app/core/structured_logging.py` (JSON lines, secret redaction, `error_class`)
+- **Tracing:** agent loop spans `provider.*`, `verify.stage`, `verify.pass/failed/retry`
+- **Media Studio Desktop:** human-approve UI on HTTP 428; provider selector stub/OpenAI
+- **Client:** `isMediaConfirmationRequired()`; `confirmed` defaults to false in `mediaOps.ts`
+
+### Changed
+- `OBSERVABILITY_CHECKLIST.md` — tracing/logging items closed
+- `.env.example` — `TERMIT_LOG_JSON`, `TERMIT_LOG_LEVEL`
+
 ## [0.3.8] - 2026-06-16
 
 ### Added

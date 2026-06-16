@@ -47,12 +47,22 @@ export async function generateMediaImage(
     height?: number;
     project_id?: string;
     provider?: string;
+    confirmed?: boolean;
   },
 ): Promise<{ asset: MediaAsset }> {
   return client.requestMedia<{ asset: MediaAsset }>("/api/media/generate-image", {
     method: "POST",
-    body: JSON.stringify({ ...body, confirmed: true, provider: body.provider ?? "stub" }),
+    body: JSON.stringify({
+      ...body,
+      confirmed: body.confirmed ?? false,
+      provider: body.provider ?? "stub",
+    }),
   });
+}
+
+export function isMediaConfirmationRequired(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.includes("Termit API 428:");
 }
 
 export async function runMediaStoryboard(
@@ -62,11 +72,15 @@ export async function runMediaStoryboard(
     project_id?: string;
     brand_kit_id?: string;
     max_scenes?: number;
+    confirmed?: boolean;
   },
 ): Promise<{ asset: MediaAsset; duration_sec: number }> {
   return client.requestMedia<{ asset: MediaAsset; duration_sec: number }>("/api/media/run-storyboard", {
     method: "POST",
-    body: JSON.stringify({ ...body, confirmed: true }),
+    body: JSON.stringify({
+      ...body,
+      confirmed: body.confirmed ?? false,
+    }),
   });
 }
 

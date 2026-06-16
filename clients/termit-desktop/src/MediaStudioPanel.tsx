@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { TermitClient } from "@termit/client";
 import {
   generateMediaImage,
+  isMediaConfirmationRequired,
   listBrandKits,
   listMediaAssets,
   mediaAssetFileUrl,
@@ -17,15 +18,22 @@ interface MediaStudioPanelProps {
   locale: Locale;
 }
 
+type PendingMediaAction =
+  | { kind: "generate"; prompt: string; provider: string }
+  | { kind: "storyboard" };
+
 export function MediaStudioPanel({ client, connected, locale }: MediaStudioPanelProps) {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [provider, setProvider] = useState<"stub" | "openai">("stub");
   const [projectId, setProjectId] = useState("desktop-studio");
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [kits, setKits] = useState<BrandKit[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pendingAction, setPendingAction] = useState<PendingMediaAction | null>(null);
+  const [confirmDetail, setConfirmDetail] = useState("");
 
   const refresh = useCallback(async () => {
     if (!connected) {
@@ -48,49 +56,74 @@ export function MediaStudioPanel({ client, connected, locale }: MediaStudioPanel
     void refresh();
   }, [refresh]);
 
-  const onGenerate = async () => {
+  const onGenerate = async (confirmed = false) => {
     if (!prompt.trim()) {
       return;
     }
     setBusy(true);
     setError("");
     setNotice("");
+    setPendingAction(null);
     try {
       const result = await generateMediaImage(client, {
         prompt: prompt.trim(),
         width: 512,
         height: 512,
         project_id: projectId,
-        provider: "stub",
+        provider,
+        confirmed,
       });
       setNotice(`${t(locale, "mediaStudioGenerated")}: ${result.asset.asset_id}`);
       await refresh();
     } catch (err) {
+      if (!confirmed && isMediaConfirmationRequired(err)) {
+        setConfirmDetail(err instanceof Error ? err.message : String(err));
+        setPendingAction({ kind: "generate", prompt: prompt.trim(), provider });
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
   };
 
-  const onRunStoryboard = async () => {
+  const onRunStoryboard = async (confirmed = false) => {
     setBusy(true);
     setError("");
     setNotice("");
+    setPendingAction(null);
     try {
       const result = await runMediaStoryboard(client, {
         storyboard_path: "data/media/examples/storyboard.example.json",
         project_id: projectId,
         brand_kit_id: "termit-default",
         max_scenes: 3,
+        confirmed,
       });
       setNotice(
         `${t(locale, "mediaStudioStoryboardDone")}: ${result.asset.asset_id} (${Math.round(result.duration_sec)}s)`,
       );
       await refresh();
     } catch (err) {
+      if (!confirmed && isMediaConfirmationRequired(err)) {
+        setConfirmDetail(err instanceof Error ? err.message : String(err));
+        setPendingAction({ kind: "storyboard" });
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onConfirmPending = async () => {
+    if (!pendingAction) {
+      return;
+    }
+    if (pendingAction.kind === "generate") {
+      await onGenerate(true);
+    } else {
+      await onRunStoryboard(true);
     }
   };
 
@@ -109,6 +142,28 @@ export function MediaStudioPanel({ client, connected, locale }: MediaStudioPanel
           <p className="hint">{t(locale, "mediaStudioHint")}</p>
           {error ? <p className="hint error-text">{error}</p> : null}
           {notice ? <p className="hint ok-text">{notice}</p> : null}
+          {pendingAction ? (
+            <div className="media-confirm-box">
+              <p className="hint">{t(locale, "mediaStudioConfirmTitle")}</p>
+              <p className="hint muted">{confirmDetail}</p>
+              <div className="row gap">
+                <button type="button" className="primary compact" disabled={busy} onClick={() => void onConfirmPending()}>
+                  {t(locale, "mediaStudioConfirmApprove")}
+                </button>
+                <button
+                  type="button"
+                  className="secondary compact"
+                  disabled={busy}
+                  onClick={() => {
+                    setPendingAction(null);
+                    setConfirmDetail("");
+                  }}
+                >
+                  {t(locale, "mediaStudioConfirmCancel")}
+                </button>
+              </div>
+            </div>
+          ) : null}
           {!connected ? <p className="hint">{t(locale, "mediaStudioConnectFirst")}</p> : null}
           {connected ? (
             <>
@@ -119,6 +174,17 @@ export function MediaStudioPanel({ client, connected, locale }: MediaStudioPanel
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
                 />
+              </div>
+              <div className="field">
+                <label htmlFor="mediaProvider">{t(locale, "mediaStudioProvider")}</label>
+                <select
+                  id="mediaProvider"
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as "stub" | "openai")}
+                >
+                  <option value="stub">{t(locale, "mediaStudioProviderStub")}</option>
+                  <option value="openai">{t(locale, "mediaStudioProviderOpenai")}</option>
+                </select>
               </div>
               <div className="field">
                 <label htmlFor="mediaPrompt">{t(locale, "mediaStudioPrompt")}</label>

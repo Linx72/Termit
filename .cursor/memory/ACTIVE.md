@@ -4,18 +4,18 @@
 
 ## Сводка
 
-- **0.3.8** — Desktop North Star UX + eval observability.
-- **0.3.7** — finetune loop closure, KPI gate +5%, tag `v0.3.7`.
+- **0.3.9** — JSON logs, provider/verify spans, Media Studio confirm UI.
+- **0.3.8** — North Star UX + eval by category.
 
 ## Файлы сессии
 
-- `clients/termit-desktop/src/App.tsx` — WorkflowHubPanel + KpiGatePanel
-- `app/services/eval_service.py` — `pass_rate_by_category`
-- `app/api/routes/metrics.py` — Prometheus eval metrics
-- `deploy/prometheus/alerts.yml` — WorkersDown + ProviderFailureBurst fix
-- `VERSION` → 0.3.8
+- `app/core/structured_logging.py`
+- `app/services/agent_service.py` — trace spans
+- `clients/termit-client/src/mediaOps.ts`
+- `clients/termit-desktop/src/MediaStudioPanel.tsx`
+- `VERSION` → 0.3.9
 
 ## Открытые задачи
 
-- [ ] Tag/push `v0.3.8` после commit
-- [ ] Следующий этап: media studio human-approve gate, structured JSON logs (OBSERVABILITY_CHECKLIST)
+- [ ] OTEL export for media tools (optional)
+- [ ] Следующий roadmap блок после observability closure

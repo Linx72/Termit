@@ -122,9 +122,15 @@ class PlatformParityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = TraceSpanStore(str(Path(tmp) / "spans.db"))
             span_id = store.record(run_id="run_test", name="tool.read_file", detail="ok")
+            store.record(run_id="run_test", name="provider.ollama", detail="model=llama3")
+            store.record(run_id="run_test", name="verify.stage", status="ok", detail="exit_code=0")
             spans = store.list_for_run("run_test")
-            self.assertEqual(len(spans), 1)
-            self.assertEqual(spans[0]["span_id"], span_id)
+            self.assertEqual(len(spans), 3)
+            span_ids = {item["span_id"] for item in spans}
+            self.assertIn(span_id, span_ids)
+            names = {item["name"] for item in spans}
+            self.assertIn("provider.ollama", names)
+            self.assertIn("verify.stage", names)
 
     def test_mcp_registry_loads_wrapped_servers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
