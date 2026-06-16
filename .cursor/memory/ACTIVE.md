@@ -21,4 +21,5 @@
 - [x] Track 5: `docs/RELEASE_FLOW.md`, `scripts/release_pack.sh`
 - [ ] Track 1: e2e flake tail (unstable → nightly only; PR deterministic)
 - [ ] Track 5: SLO/SLA dashboards и алерты
-- [ ] Фаза 5: docker prod polish, backup SQLite UI
+- [ ] Фаза 5: Grafana/SLO dashboards, API keys UI, dead-letter queue UI
+- [x] Фаза 5: docker prod overlay + SQLite backup script

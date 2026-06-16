@@ -214,7 +214,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ## Фаза 5 — Production & scale (4+ недель)
 
-- [ ] Docker compose prod, systemd/LaunchAgent polish, backup SQLite
+- [x] Docker compose prod, systemd/LaunchAgent polish, backup SQLite — `docker-compose.prod.yml`, `scripts/backup_sqlite.sh`
 - [ ] UI для API keys, team quotas, audit export (RBAC уже есть)
 - [ ] Grafana dashboard из Prometheus; alert на failed runs spike
 - [ ] Graceful shutdown workers, dead-letter queue UI, run retry policies

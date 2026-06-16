@@ -1,0 +1,33 @@
+# Production Docker Compose overlay
+#
+# Usage:
+#   cp deploy/docker.env.example .env
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Includes SQLite backup hint via scripts/backup_sqlite.sh (run on host or cron).
+
+services:
+  termit:
+    env_file:
+      - .env
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  caddy:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  searxng:
+    profiles:
+      - search
