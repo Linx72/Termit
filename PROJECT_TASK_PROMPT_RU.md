@@ -239,8 +239,8 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Трек 1 — Stability hardening (недели 1–2)
 
 - [x] Закрыть источники `ResourceWarning` (unclosed sqlite connections) в runtime и тестах
-- [ ] Дожать флейки e2e для фоновых run (`running -> completed`)
-- [ ] Разделить unstable integration тесты в nightly-контур
+- [ ] Дожать флейки e2e для фоновых run (`running -> completed`) — unstable suites в nightly, SSE fallback в PR
+- [x] Разделить unstable integration тесты в nightly-контур
 
 **DoD:** 20 последовательных прогонов smoke/release smoke без критичных флейков.
 
@@ -263,7 +263,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Трек 4 — Eval/quality 2.0 (недели 4–6)
 
 - [ ] Расширить parity-сценарии до 40+ (сложные multi-file/multi-step кейсы)
-- [ ] Развести quality gates: fast (PR), deep (nightly), release (обязательный)
+- [x] Развести quality gates: fast (PR), deep (nightly), release (local/manual с cloud judge)
 - [ ] Автоматизировать отчёт деградаций относительно предыдущего релиза
 
 **DoD:** каждый релиз проходит release gate; каждая регрессия имеет сценарий воспроизведения.
@@ -282,7 +282,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 2. [x] Стабилизировать `test_platform_e2e`/`test_agents_api` без тайминговых флейков
 3. [x] Разделить release smoke на deterministic core и extended suite
 4. [x] Добавить lifecycle summary в UI (completion/timeout/stale)
-5. [ ] Подготовить и выпустить `0.3.5` как stability release
+5. [x] Подготовить и выпустить `0.3.5` как stability release
 
 ---
 
