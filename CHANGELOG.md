@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.19] - 2026-06-17
+
+### Added
+- Model-aware eval runner for real A/B benchmark scoring
+
+
+## [0.4.19] - 2026-06-17
+
+### Added
+- Model-aware eval runner: `run_scenario(scenario_id, model=...)` and `model_llm` runner
+- Model benchmark suite `MB1`–`MB3` in `data/eval_scenarios_model_benchmark.json`
+- Benchmark baselines default to model suite (`use_model_benchmarks=true`)
+- `./scripts/benchmark_baselines.py --scenarios model` for A/B compare
+- `model` field on eval run request/response
+- Tests `test_eval_model_runner.py`
+
 ## [0.4.18] - 2026-06-17
 
 ### Added

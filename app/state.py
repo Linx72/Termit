@@ -627,6 +627,8 @@ def _build_eval_service() -> EvalService:
             settings.eval_humaneval_scenarios_path,
         ],
         quality_judge=quality_judge,
+        llm_caller=llm_caller,
+        model_benchmark_scenarios_path=settings.eval_model_benchmark_scenarios_path,
     )
 
 

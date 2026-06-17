@@ -763,6 +763,7 @@ class EvalScenarioResponse(BaseModel):
 
 class EvalRunRequest(BaseModel):
     scenario_id: str = Field(min_length=2, max_length=20)
+    model: Optional[str] = Field(default=None, max_length=200)
 
 
 class EvalRunResponse(BaseModel):
@@ -778,6 +779,7 @@ class EvalRunResponse(BaseModel):
     duration_ms: int = 0
     failure_class: Optional[str] = None
     execution_ref: Optional[str] = None
+    model: Optional[str] = None
 
 
 class EvalSuiteRunRequest(BaseModel):
@@ -822,6 +824,7 @@ class EvalBenchmarkRequest(BaseModel):
     persist: bool = True
     sync_routing: bool = False
     blend_alpha: float = Field(default=0.3, ge=0.0, le=1.0)
+    use_model_benchmarks: bool = True
 
 
 class EvalBenchmarkResponse(BaseModel):

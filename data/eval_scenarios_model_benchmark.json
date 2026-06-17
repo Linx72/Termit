@@ -1,0 +1,27 @@
+[
+  {
+    "id": "MB1",
+    "category": "model_benchmark",
+    "title": "Model: exact token response",
+    "prompt": "Reply with exactly the word EVAL_OK and nothing else.",
+    "runner": "model_llm",
+    "expect_contains": "EVAL_OK",
+    "model_system": "Follow instructions precisely. Output only what is asked."
+  },
+  {
+    "id": "MB2",
+    "category": "model_benchmark",
+    "title": "Model: arithmetic",
+    "prompt": "What is 17+25? Reply with the number only.",
+    "runner": "model_llm",
+    "expect_contains": "42"
+  },
+  {
+    "id": "MB3",
+    "category": "model_benchmark",
+    "title": "Model: python helper",
+    "prompt": "Write one line: def add(a, b): return a + b",
+    "runner": "model_llm",
+    "expect_contains": "def add"
+  }
+]

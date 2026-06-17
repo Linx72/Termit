@@ -32,6 +32,8 @@ clients/termit-shell/release/
 # Runtime artifacts under data/ (keep seed JSON tracked)
 data/*
 !data/eval_scenarios.json
+!data/eval_scenarios_model_benchmark.json
+!data/eval_scenarios_humaneval.json
 !data/agent_templates.json
 !data/skills/
 !data/skills/**/SKILL.md

@@ -467,14 +467,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Prometheus/Grafana видят MCP inject и tool usage.
 
-### Следующий этап (0.4.18): Routing benchmarks auto-sync
+### Следующий этап (0.4.19): Model-aware eval runner
 
-- [x] `RoutingBenchmarkSyncService` — scores из eval benchmark rows
-- [x] `POST /api/eval/benchmark/sync-routing` + `sync_routing` на baselines
-- [x] `scripts/sync_routing_benchmarks.py`
-- [x] Tests `test_routing_benchmark_sync.py`
+- [x] `model_llm` runner + `run_scenario(..., model=)` для A/B benchmark
+- [x] `data/eval_scenarios_model_benchmark.json` (MB1–MB3)
+- [x] Benchmark baselines default на model suite + `sync_routing`
+- [x] Tests `test_eval_model_runner.py`
 
-**DoD:** После baseline compare routing scores обновляются в `data/routing_benchmarks.json`.
+**DoD:** Baseline compare даёт разные pass_rate для termit vs reference model.
 
 ---
 

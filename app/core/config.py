@@ -146,6 +146,7 @@ class Settings:
     eval_iq_scenarios_path: str = "./data/eval_scenarios_iq.json"
     eval_swe_scenarios_path: str = "./data/eval_scenarios_swe.json"
     eval_humaneval_scenarios_path: str = "./data/eval_scenarios_humaneval.json"
+    eval_model_benchmark_scenarios_path: str = "./data/eval_scenarios_model_benchmark.json"
     eval_quality_judge_model: str = ""
     eval_benchmark_reference_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
     cloud_teacher_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
@@ -419,6 +420,10 @@ def get_settings() -> Settings:
         ),
         eval_humaneval_scenarios_path=os.getenv(
             "TERMIT_EVAL_HUMANEVAL_SCENARIOS_PATH", "./data/eval_scenarios_humaneval.json"
+        ),
+        eval_model_benchmark_scenarios_path=os.getenv(
+            "TERMIT_EVAL_MODEL_BENCHMARK_SCENARIOS_PATH",
+            "./data/eval_scenarios_model_benchmark.json",
         ),
         eval_quality_judge_model=os.getenv("TERMIT_EVAL_QUALITY_JUDGE_MODEL", ""),
         eval_benchmark_reference_model=os.getenv(

@@ -13,6 +13,9 @@ from app.services.routing_policy_service import RoutingPolicyService
 EVAL_CATEGORY_TO_TASK: dict[str, str] = {
     "coding": "coding",
     "cursor_parity": "coding",
+    "model_benchmark": "coding",
+    "humaneval": "coding",
+    "mbpp": "coding",
     "local": "debug",
     "retrieval": "debug",
     "platform": "general",

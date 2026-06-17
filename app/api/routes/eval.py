@@ -61,6 +61,7 @@ def _to_run_response(result: dict[str, object]) -> EvalRunResponse:
         duration_ms=int(result.get("duration_ms", 0)),
         failure_class=str(result["failure_class"]) if result.get("failure_class") else None,
         execution_ref=str(result["execution_ref"]) if result.get("execution_ref") else None,
+        model=str(result["model"]) if result.get("model") else None,
     )
 
 
@@ -85,7 +86,7 @@ async def run_scenario(
     service: EvalService = Depends(get_eval_service),
 ) -> EvalRunResponse:
     try:
-        result = service.run_scenario(payload.scenario_id)
+        result = service.run_scenario(payload.scenario_id, model=payload.model)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _to_run_response(result)
@@ -177,12 +178,17 @@ async def run_benchmark_baselines(
     service: EvalService = Depends(get_eval_service),
 ) -> EvalBenchmarkResponse:
     settings = get_settings()
-    scenario_ids = payload.scenario_ids or ["IQ1", "SWE1", "A1"]
+    if payload.scenario_ids:
+        scenario_ids = payload.scenario_ids
+    elif payload.use_model_benchmarks and service.model_benchmark_scenario_ids():
+        scenario_ids = service.model_benchmark_scenario_ids()
+    else:
+        scenario_ids = ["IQ1", "SWE1", "A1"]
     benchmark = EvalBenchmarkService(
         report_file_path=settings.eval_report_file_path,
         termit_model=settings.code_model,
         reference_model=settings.eval_benchmark_reference_model,
-        scenario_runner=lambda scenario_id, _model: service.run_scenario(scenario_id),
+        scenario_runner=lambda scenario_id, model: service.run_scenario(scenario_id, model=model),
         quality_judge=lambda result: float(result.get("quality_score", 0.0) or 0.0),
     )
     report = benchmark.compare_on_scenarios(scenario_ids, persist=payload.persist)

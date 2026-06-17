@@ -24,6 +24,7 @@ from app.services.browser_workflow_service import BrowserWorkflowService, WebWor
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.eval_report_store import EvalReportStore
 from app.services.eval_quality_judge_service import EvalQualityJudgeService
+from app.services.llm_caller_service import LlmCallerService
 from app.services.mcp_registry_service import McpRegistryService
 from app.services.search_provider import StubSearchProvider
 from app.services.agent_tool_schema import TOOL_DEFINITIONS
@@ -85,6 +86,8 @@ class EvalScenario:
     expect_min_dimension: int = 0
     max_cost_usd: float = 0.0
     enabled_tools: tuple[str, ...] = ()
+    model_system: str = ""
+    expect_contains: str = ""
 
 
 class EvalService:
@@ -101,6 +104,8 @@ class EvalService:
         extra_scenarios_path: Optional[str] = None,
         extra_scenarios_paths: Optional[list[str]] = None,
         quality_judge: Optional[EvalQualityJudgeService] = None,
+        llm_caller: Optional[LlmCallerService] = None,
+        model_benchmark_scenarios_path: Optional[str] = None,
     ) -> None:
         self._scenarios = self._load_scenarios(scenarios_path)
         for extra_path in extra_scenarios_paths or []:
@@ -120,6 +125,18 @@ class EvalService:
         self._web_fetcher = web_fetcher
         self._retrieval = retrieval_service
         self._quality_judge = quality_judge
+        self._llm_caller = llm_caller
+        self._model_benchmark_scenarios: list[EvalScenario] = []
+        if model_benchmark_scenarios_path:
+            benchmark_path = Path(model_benchmark_scenarios_path)
+            if benchmark_path.is_file():
+                self._model_benchmark_scenarios = self._load_scenarios(model_benchmark_scenarios_path)
+
+    def list_model_benchmark_scenarios(self) -> list[EvalScenario]:
+        return list(self._model_benchmark_scenarios)
+
+    def model_benchmark_scenario_ids(self) -> list[str]:
+        return [item.id for item in self._model_benchmark_scenarios]
 
     def _load_scenarios(self, scenarios_path: str) -> list[EvalScenario]:
         path = Path(scenarios_path)
@@ -174,6 +191,8 @@ class EvalService:
                     expect_min_dimension=int(item.get("expect_min_dimension", 0)),
                     max_cost_usd=float(item.get("max_cost_usd", 0)),
                     enabled_tools=tuple(str(t) for t in (item.get("enabled_tools") or [])),
+                    model_system=str(item.get("model_system", "")),
+                    expect_contains=str(item.get("expect_contains", "")),
                 )
             )
         return scenarios
@@ -189,13 +208,19 @@ class EvalService:
     def list_scenarios(self) -> list[EvalScenario]:
         return list(self._scenarios)
 
-    def run_scenario(self, scenario_id: str) -> dict[str, object]:
+    def run_scenario(self, scenario_id: str, *, model: Optional[str] = None) -> dict[str, object]:
         scenario = self._get_scenario(scenario_id)
         started = time.perf_counter()
         try:
-            execution_ref, passed, failure_class, safety_ok, automation = self._execute(scenario)
+            execution_ref, passed, failure_class, safety_ok, automation = self._execute(
+                scenario,
+                model=model,
+            )
             status = "passed" if passed else "failed"
-            message = "Scenario executed successfully." if passed else "Scenario execution failed."
+            if scenario.runner == "model_llm" and execution_ref:
+                message = str(execution_ref)
+            else:
+                message = "Scenario executed successfully." if passed else "Scenario execution failed."
         except Exception as exc:  # noqa: BLE001 - eval harness captures all runner failures
             execution_ref = None
             passed = False
@@ -224,7 +249,9 @@ class EvalService:
             "execution_ref": execution_ref,
             "response": message,
         }
-        if self._quality_judge is not None:
+        if model:
+            result["model"] = model.strip()
+        if self._quality_judge is not None and scenario.runner != "model_llm":
             judgement = self._quality_judge.judge_scenario(
                 prompt=scenario.prompt,
                 response=message,
@@ -360,11 +387,19 @@ class EvalService:
     def _get_scenario(self, scenario_id: str) -> EvalScenario:
         scenario = next((item for item in self._scenarios if item.id == scenario_id), None)
         if scenario is None:
+            scenario = next(
+                (item for item in self._model_benchmark_scenarios if item.id == scenario_id),
+                None,
+            )
+        if scenario is None:
             raise ValueError(f"Unknown scenario id: {scenario_id}")
         return scenario
 
     def _execute(
-        self, scenario: EvalScenario
+        self,
+        scenario: EvalScenario,
+        *,
+        model: Optional[str] = None,
     ) -> tuple[Optional[str], bool, Optional[str], int, str]:
         runner = scenario.runner
         if runner == "task":
@@ -403,7 +438,40 @@ class EvalService:
             return self._run_media_stub(scenario)
         if runner == "media_agent":
             return self._run_media_agent(scenario)
+        if runner == "model_llm":
+            return self._run_model_llm(scenario, model=model)
         raise ValueError(f"Unsupported runner: {runner}")
+
+    def _run_model_llm(
+        self,
+        scenario: EvalScenario,
+        *,
+        model: Optional[str],
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        if self._llm_caller is None:
+            raise RuntimeError("LLM caller is not configured for model_llm runner.")
+        model_name = (model or "").strip()
+        if not model_name:
+            raise ValueError("model_llm runner requires explicit model parameter.")
+        response = self._llm_caller.call(
+            model_name,
+            scenario.prompt,
+            system=scenario.model_system or "You are a precise coding assistant.",
+        )
+        passed = self._model_response_passes(response, scenario)
+        detail = response.strip()[:300]
+        return detail, passed, None if passed else "model_quality", 1, "model-eval"
+
+    @staticmethod
+    def _model_response_passes(response: str, scenario: EvalScenario) -> bool:
+        text = response.strip()
+        if not text:
+            return False
+        needles = [item.strip() for item in scenario.expect_contains.split(",") if item.strip()]
+        if not needles:
+            return len(text) >= 8
+        lowered = text.lower()
+        return any(needle.lower() in lowered for needle in needles)
 
     def _run_cross_platform_decompose(
         self, scenario: EvalScenario
