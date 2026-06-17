@@ -416,6 +416,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** MCP read/get работают через session; Desktop показывает capabilities enabled servers.
 
+### Следующий этап (0.4.12): MCP resource inject + agent read tools + eval P4
+
+- [x] `McpContextService` — catalog + preview resources в agent context
+- [x] Tools `mcp_read_resource`, `mcp_get_prompt` (+ auto с `mcp_invoke`)
+- [x] Eval P4 `platform_mcp_read`
+- [x] Event `mcp_context_injected`
+
+**DoD:** Agent run получает MCP resource context; eval P4 проходит.
+
 ---
 
 ## Порядок выполнения

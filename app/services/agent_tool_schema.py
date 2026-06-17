@@ -186,6 +186,37 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
             },
         },
     },
+    "mcp_read_resource": {
+        "type": "function",
+        "function": {
+            "name": "mcp_read_resource",
+            "description": "Read an MCP resource URI from a registered server.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "server_id": {"type": "string"},
+                    "uri": {"type": "string"},
+                },
+                "required": ["server_id", "uri"],
+            },
+        },
+    },
+    "mcp_get_prompt": {
+        "type": "function",
+        "function": {
+            "name": "mcp_get_prompt",
+            "description": "Fetch a named MCP prompt template from a registered server.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "server_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "arguments": {"type": "object"},
+                },
+                "required": ["server_id", "name"],
+            },
+        },
+    },
     "generate_image": {
         "type": "function",
         "function": {
@@ -395,8 +426,13 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
 
 
 def build_openai_tools(enabled_tools: list[str]) -> list[dict[str, object]]:
+    names = list(enabled_tools)
+    if "mcp_invoke" in names:
+        for companion in ("mcp_read_resource", "mcp_get_prompt"):
+            if companion not in names:
+                names.append(companion)
     tools: list[dict[str, object]] = []
-    for name in enabled_tools:
+    for name in names:
         spec = TOOL_DEFINITIONS.get(name)
         if spec is not None:
             tools.append(spec)

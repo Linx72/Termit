@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.12] - 2026-06-17
+
+### Added
+- `McpContextService` — auto-inject MCP resource catalog + previews into agent run context
+- Agent tools `mcp_read_resource` and `mcp_get_prompt` (auto-enabled with `mcp_invoke`)
+- Eval scenario P4 (`platform_mcp_read`) — list + read MCP resource via stdio mock
+- Run event `mcp_context_injected` when MCP context block is prepended
+
 ## [0.4.11] - 2026-06-17
 
 ### Added

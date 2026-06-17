@@ -948,6 +948,23 @@ class AgentService:
             if enrichment_lines:
                 memory_context = enrichment_lines + memory_context
 
+        if self._mcp is not None and {"mcp_invoke", "mcp_read_resource", "mcp_get_prompt"} & set(
+            profile_for_loop.enabled_tools
+        ):
+            from app.services.mcp_context_service import McpContextService
+
+            mcp_lines = McpContextService(self._mcp).build_context_lines(profile_for_loop)
+            if mcp_lines:
+                memory_context = mcp_lines + memory_context
+                if run_id:
+                    self._append_event(
+                        run_id=run_id,
+                        event_type="mcp_context_injected",
+                        state=AgentRunState.running,
+                        message=json_dumps({"lines": len(mcp_lines)}, ensure_ascii=False),
+                        attempt=attempt,
+                    )
+
         run_mode = (payload.run_mode or "agent").strip().lower()
         if run_mode == "plan" and self._reasoning_orchestrator is not None:
             try:
@@ -1614,6 +1631,37 @@ class AgentService:
             result_json = self._mcp.invoke_tool(server_id, mcp_tool, mcp_args)
             side_effects.append(("mcp_invoke", f"server={server_id} tool={mcp_tool}"))
             return result_json, side_effects
+        if tool_name == "mcp_read_resource":
+            if self._mcp is None:
+                raise AgentPermissionError("MCP registry is not configured.")
+            server_id = str(arguments.get("server_id", ""))
+            uri = str(arguments.get("uri", ""))
+            if not server_id or not uri:
+                raise AgentPermissionError("mcp_read_resource requires server_id and uri.")
+            self._ensure_mcp_server_allowed(profile, server_id)
+            payload = self._mcp.read_resource(server_id, uri)
+            from app.services.mcp_context_service import McpContextService
+
+            result_json = McpContextService.serialize_read_result(payload)
+            side_effects.append(("mcp_read_resource", f"server={server_id} uri={uri}"))
+            return result_json, side_effects
+        if tool_name == "mcp_get_prompt":
+            if self._mcp is None:
+                raise AgentPermissionError("MCP registry is not configured.")
+            server_id = str(arguments.get("server_id", ""))
+            prompt_name = str(arguments.get("name", ""))
+            prompt_args = arguments.get("arguments", {})
+            if not isinstance(prompt_args, dict):
+                prompt_args = {}
+            if not server_id or not prompt_name:
+                raise AgentPermissionError("mcp_get_prompt requires server_id and name.")
+            self._ensure_mcp_server_allowed(profile, server_id)
+            payload = self._mcp.get_prompt(server_id, prompt_name, prompt_args)
+            from app.services.mcp_context_service import McpContextService
+
+            result_json = McpContextService.serialize_prompt_result(payload)
+            side_effects.append(("mcp_get_prompt", f"server={server_id} name={prompt_name}"))
+            return result_json, side_effects
         built = build_tool_arguments(tool_name, arguments)
         ssh_cfg = _active_ssh_config.get()
         if tool_name == "list_files":
@@ -1800,6 +1848,14 @@ class AgentService:
         if tool_name not in set(profile.enabled_tools):
             raise AgentPermissionError(
                 f"Agent '{profile.name}' is not allowed to use tool '{tool_name}'."
+            )
+
+    @staticmethod
+    def _ensure_mcp_server_allowed(profile: AgentProfileResponse, server_id: str) -> None:
+        allowed_servers = [item.strip() for item in profile.allowed_mcp_servers if item.strip()]
+        if allowed_servers and "*" not in allowed_servers and server_id not in set(allowed_servers):
+            raise AgentPermissionError(
+                f"MCP server '{server_id}' is not allowed for agent '{profile.name}'."
             )
 
     @staticmethod

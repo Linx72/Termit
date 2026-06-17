@@ -1,37 +1,24 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-16T22:07:10Z
-
-**Причина:** session stop
-
-**Последний checkpoint:** [`20260616-220710_d62a1ca6-ef7d-4fbd-ada6-.md`](checkpoints/20260616-220710_d62a1ca6-ef7d-4fbd-ada6-.md)
+**Последнее обновление:** 2026-06-17
 
 ## Сводка
-- **v0.4.7** выпущен — Browser MCP preset (Playwright bridge), Sprint C parity. ## Что сделано ### MCP Browser preset - **`scripts/mcp_termit_browser.py`** — MCP stdio-сервер с инструментами `browser_navigate`, `browser_snapshot`, `browser_click` (Playwright) - **Preset `termit-br…
+
+- **v0.4.12** — MCP resource inject в agent context, tools `mcp_read_resource`/`mcp_get_prompt`, eval P4 `platform_mcp_read`
+- Тесты: **543 OK** (skipped=6)
 
 ## Файлы сессии
-- `/Users/amoros/Projects/Termit/app/services/mcp_stdio_client.py`
-- `/Users/amoros/Projects/Termit/app/services/mcp_registry_service.py`
-- `/Users/amoros/Projects/Termit/tests`
-- `/Users/amoros/Projects/Termit/tests/test_platform_parity.py`
-- `/Users/amoros/Projects/Termit/tests/test_p1_platform.py`
-- `/Users/amoros/Projects/Termit`
-- `/Users/amoros/Projects/Termit/scripts/hosted_smoke.sh`
-- `/Users/amoros/Projects/Termit/app/api/routes/platform.py`
-- `/Users/amoros/Projects/Termit/data/agent_templates.json`
-- `/Users/amoros/Projects/Termit/app`
-- `/Users/amoros/Projects/Termit/scripts/mcp_termit_browser.py`
-- `/Users/amoros/Projects/Termit/docs/MCP_BROWSER_RU.md`
-- `/Users/amoros/Projects/Termit/tests/test_mcp_browser_server.py`
-- `/Users/amoros/Projects/Termit/data/mcp_servers.json`
-- `/Users/amoros/Projects/Termit/data/skills/online-project/SKILL.md`
-- `/Users/amoros/Projects/Termit/PLATFORM_PARITY_PLAN_RU.md`
-- `/Users/amoros/Projects/Termit/.env.example`
-- `/Users/amoros/Projects/Termit/PROJECT_TASK_PROMPT_RU.md`
-- `/Users/amoros/Projects/Termit/VERSION`
-- `/Users/amoros/Projects/Termit/CHANGELOG.md`
-- `/Users/amoros/Projects/Termit/.cursor/memory/ACTIVE.md`
-- `/Users/amoros/Projects/Termit/.gitignore`
+
+- `app/services/mcp_context_service.py` (new)
+- `app/services/agent_service.py` — inject + tool handlers
+- `app/services/agent_tool_schema.py` — new tools + companion auto-enable
+- `app/services/eval_service.py` — `platform_mcp_read` runner
+- `data/eval_scenarios.json` — P4
+- `tests/test_mcp_context_service.py` (new)
+- `tests/test_eval_service.py`, `tests/test_rbac_and_platform.py` — 75 scenarios
+- `VERSION`, `CHANGELOG.md`, `docs/MIGRATION_NOTES_0.4.12.md`, `PROJECT_TASK_PROMPT_RU.md`
 
 ## Открытые задачи
-- [ ] Заполните вручную или через compact-chat после крупной сессии
+
+- [ ] Следующий `do all`: MCP prompt inject в plan mode / Desktop MCP resource picker
+- [ ] Eval MS12 cursor parity MCP read scenario (optional CP12)

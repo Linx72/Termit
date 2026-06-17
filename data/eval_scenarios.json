@@ -38,6 +38,7 @@
   {"id": "W8", "category": "web", "title": "Anti-loop action", "prompt": "Perform safe repetitive action with anti-loop constraints.", "runner": "web", "web_url": "https://eval.stub/W8", "web_max_steps": 2},
   {"id": "P1", "category": "platform", "title": "Web search citations", "prompt": "termite agent platform search", "runner": "platform_web_search"},
   {"id": "P2", "category": "platform", "title": "MCP registry invoke", "prompt": "Invoke MCP stub server.", "runner": "platform_mcp"},
+  {"id": "P4", "category": "platform", "title": "MCP resource read", "prompt": "List and read MCP resource via registry.", "runner": "platform_mcp_read"},
   {"id": "P3", "category": "platform", "title": "Spawn agent tool schema", "prompt": "Verify spawn_agent tool is registered.", "runner": "platform_spawn_tool", "platform_tool": "spawn_agent"},
   {"id": "R1", "category": "retrieval", "title": "Where is auth?", "prompt": "Locate authentication middleware in the codebase.", "runner": "retrieval", "retrieval_query": "auth API key middleware quota", "retrieval_expect": "auth_quota"},
   {"id": "M1", "category": "local", "title": "Sequence list read exec", "prompt": "List tests, read main entrypoint, run echo checkpoint.", "runner": "tool_sequence", "tool_steps": [{"op": "list", "path": "tests", "pattern": "test_*.py"}, {"op": "read", "path": "app/main.py"}, {"op": "exec", "command": "echo termit-seq-ok", "path": "."}]},
