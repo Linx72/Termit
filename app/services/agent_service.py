@@ -948,8 +948,10 @@ class AgentService:
             if enrichment_lines:
                 memory_context = enrichment_lines + memory_context
 
-        if self._mcp is not None and {"mcp_invoke", "mcp_read_resource", "mcp_get_prompt"} & set(
-            profile_for_loop.enabled_tools
+        if (
+            payload.mcp_context_inject is not False
+            and self._mcp is not None
+            and {"mcp_invoke", "mcp_read_resource", "mcp_get_prompt"} & set(profile_for_loop.enabled_tools)
         ):
             from app.services.mcp_context_service import McpContextService
 
@@ -969,6 +971,7 @@ class AgentService:
         run_mode = (payload.run_mode or "agent").strip().lower()
         if (
             run_mode == "plan"
+            and payload.mcp_context_inject is not False
             and self._mcp is not None
             and {"mcp_invoke", "mcp_read_resource", "mcp_get_prompt"} & set(profile_for_loop.enabled_tools)
         ):

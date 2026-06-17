@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.14] - 2026-06-17
+
+### Added
+- `mcp_context_inject` flag on `AgentRunRequest` (opt-out with `false`)
+- Desktop MCP prompt picker — list/get prompts, insert into Composer or Agent (plan)
+- Desktop setting: auto-inject MCP context on run (checkbox)
+- Eval P5 (`platform_mcp_prompt`) — list + get MCP prompt via stdio mock
+
 ## [0.4.13] - 2026-06-17
 
 ### Added

@@ -361,6 +361,12 @@ export function App() {
   >([]);
   const [mcpResourcePreview, setMcpResourcePreview] = useState("");
   const [mcpResourceLoading, setMcpResourceLoading] = useState(false);
+  const [mcpPromptServerId, setMcpPromptServerId] = useState("");
+  const [mcpPrompts, setMcpPrompts] = useState<
+    Array<{ name: string; description: string }>
+  >([]);
+  const [mcpPromptPreview, setMcpPromptPreview] = useState("");
+  const [mcpPromptLoading, setMcpPromptLoading] = useState(false);
   const [runSpansText, setRunSpansText] = useState("Select a run to view trace spans.");
   const [platformStatus, setPlatformStatus] = useState("Platform services not loaded.");
   const [runtimeMeta, setRuntimeMeta] = useState(() => getDesktopRuntimeMeta());
@@ -734,6 +740,7 @@ export function App() {
       workspace_scope: settings.workspace || undefined,
       retrieval_path_prefix: settings.workspace || undefined,
       run_mode: runMode,
+      mcp_context_inject: settings.mcpContextInject,
       auto_confirm_risky_tools: true,
       verify_after_patch: true,
       use_tool_loop: true,
@@ -1057,6 +1064,75 @@ export function App() {
     const block = `[MCP resource]\n${trimmed}\n`;
     setComposerInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${block}` : block));
     setPlatformStatus(locale === "ru" ? "Resource вставлен в Composer." : "Resource inserted into Composer.");
+  };
+
+  const loadMcpPrompts = async (serverId: string) => {
+    if (!connected || !serverId) {
+      return;
+    }
+    setMcpPromptLoading(true);
+    setMcpPromptServerId(serverId);
+    try {
+      const response = await client.listPlatformMcpPrompts(serverId);
+      setMcpPrompts(
+        response.prompts.map((item) => ({
+          name: item.name,
+          description: item.description || "",
+        }))
+      );
+      setMcpPromptPreview("");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setPlatformStatus(text);
+      setMcpPrompts([]);
+    } finally {
+      setMcpPromptLoading(false);
+    }
+  };
+
+  const previewMcpPrompt = async (serverId: string, name: string) => {
+    if (!connected || !serverId || !name) {
+      return;
+    }
+    setMcpPromptLoading(true);
+    try {
+      const response = await client.getPlatformMcpPrompt(serverId, name);
+      const text = response.messages
+        .map((item) => {
+          const content = item.content;
+          if (typeof content === "string") {
+            return content;
+          }
+          if (content && typeof content === "object" && "text" in content) {
+            return String((content as { text?: string }).text ?? "");
+          }
+          return "";
+        })
+        .filter(Boolean)
+        .join("\n");
+      const header = response.description ? `${response.description}\n\n` : "";
+      setMcpPromptPreview(header + (text || JSON.stringify(response.messages, null, 2)));
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setMcpPromptPreview(text);
+    } finally {
+      setMcpPromptLoading(false);
+    }
+  };
+
+  const injectMcpPromptTarget = (target: "composer" | "agent") => {
+    const trimmed = mcpPromptPreview.trim();
+    if (!trimmed) {
+      return;
+    }
+    const block = `[MCP prompt]\n${trimmed}\n`;
+    if (target === "composer") {
+      setComposerInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${block}` : block));
+      setPlatformStatus(locale === "ru" ? "Prompt вставлен в Composer." : "Prompt inserted into Composer.");
+      return;
+    }
+    setAgentInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${block}` : block));
+    setPlatformStatus(locale === "ru" ? "Prompt вставлен в Agent input (plan)." : "Prompt inserted into Agent input (plan).");
   };
 
   const toggleProjectSkill = (skillId: string) => {
@@ -2978,6 +3054,78 @@ export function App() {
               ) : null}
             </div>
           ) : null}
+
+          {platformMcpServers.some((item) => item.enabled && (item.prompts_count ?? 0) > 0) ? (
+            <div className="mcp-prompt-picker">
+              <label>{t(locale, "mcpPromptPicker")}</label>
+              <select
+                value={mcpPromptServerId}
+                onChange={(event) => void loadMcpPrompts(event.target.value)}
+                disabled={!connected || mcpPromptLoading}
+              >
+                <option value="">{t(locale, "mcpSelectServer")}</option>
+                {platformMcpServers
+                  .filter((item) => item.enabled && (item.prompts_count ?? 0) > 0)
+                  .map((item) => (
+                    <option key={item.server_id} value={item.server_id}>
+                      {item.name} ({item.prompts_count})
+                    </option>
+                  ))}
+              </select>
+              {mcpPrompts.length > 0 ? (
+                <ul className="muted compact-list">
+                  {mcpPrompts.map((item) => (
+                    <li key={item.name}>
+                      <button
+                        type="button"
+                        className="linkish compact"
+                        disabled={!connected || mcpPromptLoading}
+                        onClick={() => void previewMcpPrompt(mcpPromptServerId, item.name)}
+                      >
+                        {item.name}
+                      </button>
+                      {item.description ? <span className="hint"> — {item.description}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : mcpPromptServerId ? (
+                <p className="hint">{t(locale, "mcpNoPrompts")}</p>
+              ) : null}
+              {mcpPromptPreview ? (
+                <>
+                  <label>{t(locale, "mcpPromptPreview")}</label>
+                  <pre className="platform-spans">{mcpPromptPreview.slice(0, 4000)}</pre>
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="secondary compact"
+                      disabled={!connected}
+                      onClick={() => injectMcpPromptTarget("composer")}
+                    >
+                      {t(locale, "mcpInjectComposer")}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary compact"
+                      disabled={!connected}
+                      onClick={() => injectMcpPromptTarget("agent")}
+                    >
+                      {t(locale, "mcpInjectAgentPlan")}
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={settings.mcpContextInject}
+              onChange={(event) => updateSettings({ mcpContextInject: event.target.checked })}
+            />
+            {t(locale, "mcpContextInject")}
+          </label>
         </div>
         </details>
 

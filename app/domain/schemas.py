@@ -1105,6 +1105,7 @@ class AgentRunRequest(BaseModel):
     ssh_identity: Optional[str] = Field(default=None, max_length=2000)
     ssh_remote_path: Optional[str] = Field(default=None, max_length=2000)
     run_mode: Optional[str] = Field(default="agent", pattern="^(agent|ask|plan)$")
+    mcp_context_inject: Optional[bool] = None
 
 
 class SshConnectionTestRequest(BaseModel):

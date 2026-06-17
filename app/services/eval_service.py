@@ -391,6 +391,8 @@ class EvalService:
             return self._run_platform_mcp(scenario)
         if runner == "platform_mcp_read":
             return self._run_platform_mcp_read(scenario)
+        if runner == "platform_mcp_prompt":
+            return self._run_platform_mcp_prompt(scenario)
         if runner == "platform_spawn_tool":
             return self._run_platform_spawn_tool(scenario)
         if runner == "cross_platform_decompose":
@@ -786,6 +788,76 @@ while True:
                     and len(contents) == 1
                     and isinstance(contents[0], dict)
                     and "eval resource ok" in str(contents[0].get("text", ""))
+                )
+            registry.close_sessions()
+        return server.server_id, passed, None if passed else "verification_error", 1, "semi-auto"
+
+    def _run_platform_mcp_prompt(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        mock_script = r"""
+import json, sys
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.decode("utf-8").strip()
+        if line == "":
+            break
+        key, value = line.split(":", 1)
+        headers[key.strip().lower()] = value.strip()
+    length = int(headers["content-length"])
+    body = sys.stdin.buffer.read(length)
+    return json.loads(body.decode("utf-8"))
+
+def write_msg(payload):
+    data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+    sys.stdout.buffer.write(f"Content-Length: {len(data)}\r\n\r\n".encode("ascii"))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get("method")
+    req_id = msg.get("id")
+    if method == "initialize":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"protocolVersion": "2024-11-05", "capabilities": {}}})
+    elif method == "tools/list":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"tools": [{"name": "ping", "inputSchema": {"type": "object"}}]}})
+    elif method == "prompts/list":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"prompts": [{"name": "eval_plan", "description": "Eval plan prompt", "arguments": []}]}})
+    elif method == "prompts/get":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"description": "Eval plan prompt", "messages": [{"role": "user", "content": {"type": "text", "text": "eval prompt ok"}}]}})
+    elif method == "ping":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {}})
+"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            script_path = Path(tmp) / "eval_mcp_prompt.py"
+            script_path.write_text(mock_script, encoding="utf-8")
+            registry = McpRegistryService(str(Path(tmp) / "mcp.json"))
+            server = registry.upsert_server(
+                name="eval-prompt",
+                command=sys.executable,
+                args=[str(script_path)],
+                allowed_tools=["ping"],
+            )
+            prompts = registry.list_prompts(server.server_id)
+            passed = len(prompts) == 1 and prompts[0].name == "eval_plan"
+            if passed:
+                payload = registry.get_prompt(server.server_id, "eval_plan", {})
+                messages = payload.get("messages", [])
+                passed = (
+                    isinstance(messages, list)
+                    and len(messages) == 1
+                    and "eval prompt ok" in json.dumps(messages, ensure_ascii=True)
                 )
             registry.close_sessions()
         return server.server_id, passed, None if passed else "verification_error", 1, "semi-auto"

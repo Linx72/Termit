@@ -4,19 +4,18 @@
 
 ## Сводка
 
-- **v0.4.13** — MCP plan prompt inject, Desktop MCP resource picker, eval CP21
-- Тесты: **544 OK** (skipped=6); desktop build OK
+- **v0.4.14** — MCP prompt picker Desktop, `mcp_context_inject` opt-out, eval P5
+- Тесты: **545 OK** (skipped=6)
 
 ## Файлы сессии
 
-- `app/services/mcp_context_service.py` — `build_plan_prompt_lines`
-- `app/services/agent_service.py` — `mcp_prompt_injected`
-- `clients/termit-client/src/client.ts`, `platform.ts` — list resources/prompts
-- `clients/termit-desktop/src/App.tsx`, `i18n.ts` — resource picker UI
-- `data/eval_scenarios.json` — CP21
-- `tests/test_mcp_context_service.py`, `tests/test_eval_service.py`
+- `app/domain/schemas.py` — `mcp_context_inject`
+- `app/services/agent_service.py` — respect opt-out
+- `app/services/eval_service.py` — `platform_mcp_prompt`
+- `clients/termit-desktop/src/App.tsx`, `settings.ts`, `i18n.ts`
+- `clients/termit-client/src/types.ts`
+- `data/eval_scenarios.json` — P5
 
 ## Открытые задачи
 
-- [ ] Следующий `do all`: Desktop MCP prompt picker / inject prompt into plan panel
-- [ ] Agent run flag `mcp_context_inject=false` для opt-out (optional)
+- [ ] Следующий `do all`: MCP inject telemetry в ops dashboard / KPI gate для MCP usage

@@ -434,6 +434,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Plan mode видит MCP prompts; Desktop читает resources; CP21 проходит.
 
+### Следующий этап (0.4.14): MCP prompt picker + context inject opt-out + P5
+
+- [x] Desktop MCP prompt picker (Composer + Agent plan input)
+- [x] `mcp_context_inject` на `AgentRunRequest` + Desktop checkbox
+- [x] Eval P5 `platform_mcp_prompt`
+
+**DoD:** Prompt picker работает; inject можно отключить; P5 проходит.
+
 ---
 
 ## Порядок выполнения

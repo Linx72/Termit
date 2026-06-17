@@ -119,6 +119,7 @@ export interface AgentRunRequest {
   ssh_identity?: string;
   ssh_remote_path?: string;
   run_mode?: "agent" | "ask" | "plan";
+  mcp_context_inject?: boolean;
 }
 
 export interface AgentRunCreateResponse {

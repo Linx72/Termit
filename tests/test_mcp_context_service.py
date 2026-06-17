@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.domain.schemas import AgentProfileResponse, TaskType
+from app.domain.schemas import AgentProfileResponse, AgentRunRequest, TaskType
 from app.services.agent_tool_schema import build_openai_tools
 from app.services.mcp_context_service import McpContextService
 from app.services.mcp_registry_service import McpRegistryService
@@ -121,6 +121,12 @@ class McpContextServiceTests(unittest.TestCase):
         names = [item["function"]["name"] for item in tools]
         self.assertIn("mcp_read_resource", names)
         self.assertIn("mcp_get_prompt", names)
+
+    def test_mcp_context_inject_request_flag(self) -> None:
+        default_payload = AgentRunRequest(input="demo")
+        self.assertIsNone(default_payload.mcp_context_inject)
+        disabled = AgentRunRequest(input="demo", mcp_context_inject=False)
+        self.assertFalse(disabled.mcp_context_inject)
 
 
 if __name__ == "__main__":

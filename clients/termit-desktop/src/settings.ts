@@ -28,6 +28,7 @@ export interface StoredSettings {
   sshRemotePath: string;
   runtimeMode: "auto" | "desktop" | "web";
   defaultAgentTemplate: string;
+  mcpContextInject: boolean;
 }
 
 export const STORAGE_KEY = "termit-app-settings";
@@ -62,6 +63,7 @@ export function loadSettings(): StoredSettings {
     sshRemotePath: "",
     runtimeMode: "auto",
     defaultAgentTemplate: "desktop-cursor-parity-stable",
+    mcpContextInject: true,
   };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
