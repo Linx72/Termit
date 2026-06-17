@@ -339,7 +339,16 @@ export function App() {
     Array<{ schedule_id: string; agent_id: string; cron: string; enabled: boolean }>
   >([]);
   const [platformMcpServers, setPlatformMcpServers] = useState<
-    Array<{ server_id: string; name: string; command: string; enabled: boolean }>
+    Array<{
+      server_id: string;
+      name: string;
+      command: string;
+      enabled: boolean;
+      ping_ok?: boolean;
+      tools_count?: number;
+      resources_count?: number;
+      prompts_count?: number;
+    }>
   >([]);
   const [mcpDraftName, setMcpDraftName] = useState("");
   const [mcpDraftCommand, setMcpDraftCommand] = useState("");
@@ -819,14 +828,39 @@ export function App() {
           enabled: item.enabled,
         }))
       );
-      setPlatformMcpServers(
-        mcp.servers.map((item) => ({
-          server_id: item.server_id,
-          name: item.name,
-          command: item.command,
-          enabled: item.enabled,
-        }))
+      const capabilityRows = await Promise.all(
+        mcp.servers.map(async (item) => {
+          if (!item.enabled) {
+            return {
+              server_id: item.server_id,
+              name: item.name,
+              command: item.command,
+              enabled: item.enabled,
+            };
+          }
+          try {
+            const cap = await client.getPlatformMcpCapabilities(item.server_id);
+            return {
+              server_id: item.server_id,
+              name: item.name,
+              command: item.command,
+              enabled: item.enabled,
+              ping_ok: cap.ping_ok,
+              tools_count: cap.tools_count,
+              resources_count: cap.resources_count,
+              prompts_count: cap.prompts_count,
+            };
+          } catch {
+            return {
+              server_id: item.server_id,
+              name: item.name,
+              command: item.command,
+              enabled: item.enabled,
+            };
+          }
+        })
       );
+      setPlatformMcpServers(capabilityRows);
       setPlatformStatus(
         [
           `hooks: ${hooks.enabled ? "on" : "off"} (${hooks.configured_events.length} events)`,
@@ -2776,6 +2810,13 @@ export function App() {
               {platformMcpServers.map((item) => (
                 <li key={item.server_id}>
                   {item.name} · {item.command} {item.enabled ? "" : t(locale, "mcpDisabled")}
+                  {item.enabled && item.tools_count != null ? (
+                    <span className="hint">
+                      {" "}
+                      · ping {item.ping_ok ? "ok" : "—"} · tools {item.tools_count} · res{" "}
+                      {item.resources_count ?? 0} · prompts {item.prompts_count ?? 0}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>

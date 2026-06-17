@@ -134,7 +134,7 @@ def main() -> None:
                     "result": {
                         "protocolVersion": "2024-11-05",
                         "capabilities": {"tools": {}},
-                        "serverInfo": {"name": "termit-browser", "version": "0.4.7"},
+                        "serverInfo": {"name": "termit-browser", "version": "0.4.11"},
                     },
                 }
             )
@@ -144,8 +144,33 @@ def main() -> None:
             _write_message({"jsonrpc": "2.0", "id": req_id, "result": {}})
         elif method == "resources/list" and req_id is not None:
             _write_message({"jsonrpc": "2.0", "id": req_id, "result": {"resources": []}})
+        elif method == "resources/read" and req_id is not None:
+            params = message.get("params", {})
+            params_dict = params if isinstance(params, dict) else {}
+            uri = str(params_dict.get("uri", ""))
+            _write_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {"contents": [{"uri": uri, "text": f"Resource snapshot for {uri}"}]},
+                }
+            )
         elif method == "prompts/list" and req_id is not None:
             _write_message({"jsonrpc": "2.0", "id": req_id, "result": {"prompts": []}})
+        elif method == "prompts/get" and req_id is not None:
+            params = message.get("params", {})
+            params_dict = params if isinstance(params, dict) else {}
+            name = str(params_dict.get("name", "browser"))
+            _write_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "description": f"Prompt {name}",
+                        "messages": [{"role": "user", "content": {"type": "text", "text": name}}],
+                    },
+                }
+            )
         elif method == "tools/call" and req_id is not None:
             params = message.get("params", {})
             params_dict = params if isinstance(params, dict) else {}

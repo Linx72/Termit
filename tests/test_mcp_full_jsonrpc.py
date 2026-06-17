@@ -45,9 +45,15 @@ while True:
     elif method == "ping":
         write_msg({"jsonrpc": "2.0", "id": req_id, "result": {}})
     elif method == "resources/list":
-        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"resources": []}})
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"resources": [{"uri": "demo://doc", "name": "demo", "mimeType": "text/plain"}]}})
+    elif method == "resources/read":
+        uri = msg.get("params", {}).get("uri", "demo://doc")
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"contents": [{"uri": uri, "text": "demo body"}]}})
     elif method == "prompts/list":
-        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"prompts": []}})
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"prompts": [{"name": "demo_prompt", "description": "demo", "arguments": []}]}})
+    elif method == "prompts/get":
+        name = msg.get("params", {}).get("name", "demo_prompt")
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"description": name, "messages": [{"role": "user", "content": {"type": "text", "text": "hello"}}]}})
 """
 
 
@@ -79,11 +85,30 @@ class McpFullJsonRpcApiTests(unittest.TestCase):
 
                 resources = client.get(f"/api/platform/mcp/servers/{server_id}/resources")
                 self.assertEqual(resources.status_code, 200)
-                self.assertEqual(resources.json()["resources"], [])
+                self.assertEqual(resources.json()["resources"][0]["uri"], "demo://doc")
 
                 prompts = client.get(f"/api/platform/mcp/servers/{server_id}/prompts")
                 self.assertEqual(prompts.status_code, 200)
-                self.assertEqual(prompts.json()["prompts"], [])
+                self.assertEqual(prompts.json()["prompts"][0]["name"], "demo_prompt")
+
+                caps = client.get(f"/api/platform/mcp/servers/{server_id}/capabilities")
+                self.assertEqual(caps.status_code, 200)
+                self.assertTrue(caps.json()["ping_ok"])
+                self.assertEqual(caps.json()["prompts_count"], 1)
+
+                read = client.post(
+                    f"/api/platform/mcp/servers/{server_id}/resources/read",
+                    json={"uri": "demo://doc"},
+                )
+                self.assertEqual(read.status_code, 200)
+                self.assertEqual(read.json()["contents"][0]["text"], "demo body")
+
+                prompt = client.post(
+                    f"/api/platform/mcp/servers/{server_id}/prompts/get",
+                    json={"name": "demo_prompt", "arguments": {}},
+                )
+                self.assertEqual(prompt.status_code, 200)
+                self.assertEqual(prompt.json()["name"], "demo_prompt")
             finally:
                 app.dependency_overrides.clear()
                 registry.close_sessions()

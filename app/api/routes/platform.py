@@ -14,6 +14,11 @@ from app.domain.schemas import (
     McpCursorImportResponse,
     McpInvokeRequest,
     McpInvokeResponse,
+    McpCapabilitiesResponse,
+    McpResourceReadRequest,
+    McpResourceReadResponse,
+    McpPromptGetRequest,
+    McpPromptGetResponse,
     McpPingResponse,
     McpPromptArgumentResponse,
     McpPromptListResponse,
@@ -355,6 +360,59 @@ async def list_mcp_server_prompts(
             )
             for item in prompts
         ],
+    )
+
+
+@router.get("/mcp/servers/{server_id}/capabilities", response_model=McpCapabilitiesResponse)
+async def mcp_server_capabilities(
+    server_id: str,
+    registry: McpRegistryService = Depends(get_mcp_registry_service),
+) -> McpCapabilitiesResponse:
+    try:
+        payload = registry.get_capabilities(server_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return McpCapabilitiesResponse.model_validate(payload)
+
+
+@router.post("/mcp/servers/{server_id}/resources/read", response_model=McpResourceReadResponse)
+async def read_mcp_resource(
+    server_id: str,
+    payload: McpResourceReadRequest,
+    registry: McpRegistryService = Depends(get_mcp_registry_service),
+) -> McpResourceReadResponse:
+    try:
+        result = registry.read_resource(server_id, payload.uri)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    contents_raw = result.get("contents", [])
+    contents = [item for item in contents_raw if isinstance(item, dict)] if isinstance(contents_raw, list) else []
+    return McpResourceReadResponse(server_id=server_id, uri=payload.uri, contents=contents)
+
+
+@router.post("/mcp/servers/{server_id}/prompts/get", response_model=McpPromptGetResponse)
+async def get_mcp_prompt(
+    server_id: str,
+    payload: McpPromptGetRequest,
+    registry: McpRegistryService = Depends(get_mcp_registry_service),
+) -> McpPromptGetResponse:
+    try:
+        result = registry.get_prompt(server_id, payload.name, payload.arguments)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    messages_raw = result.get("messages", [])
+    messages = [item for item in messages_raw if isinstance(item, dict)] if isinstance(messages_raw, list) else []
+    return McpPromptGetResponse(
+        server_id=server_id,
+        name=payload.name,
+        description=str(result.get("description", "")),
+        messages=messages,
     )
 
 

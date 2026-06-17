@@ -185,6 +185,19 @@ class McpStdioSession:
                 )
         return prompts
 
+    def read_resource(self, uri: str) -> dict[str, object]:
+        self.start()
+        result = self._request("resources/read", {"uri": uri})
+        return result if isinstance(result, dict) else {"contents": []}
+
+    def get_prompt(self, name: str, arguments: dict[str, object] | None = None) -> dict[str, object]:
+        self.start()
+        result = self._request(
+            "prompts/get",
+            {"name": name, "arguments": arguments or {}},
+        )
+        return result if isinstance(result, dict) else {"messages": []}
+
     def _initialize_session(self) -> None:
         if self._initialized:
             return

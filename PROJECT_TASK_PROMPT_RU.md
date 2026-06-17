@@ -407,6 +407,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** MCP session exposes resources/prompts; onboarding conversion в KPI gates.
 
+### Следующий этап (0.4.11): MCP resources/read + prompts/get + Desktop capabilities
+
+- [x] `McpStdioSession`: `read_resource`, `get_prompt`
+- [x] API: `/capabilities`, `POST .../resources/read`, `POST .../prompts/get`
+- [x] Desktop MCP list — ping/tools/resources/prompts counts
+- [x] Tests extended in `test_mcp_full_jsonrpc.py`
+
+**DoD:** MCP read/get работают через session; Desktop показывает capabilities enabled servers.
+
 ---
 
 ## Порядок выполнения

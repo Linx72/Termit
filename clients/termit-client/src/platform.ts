@@ -43,6 +43,29 @@ export interface PlatformMcpInvokeResponse {
   result_json: string;
 }
 
+export interface PlatformMcpCapabilities {
+  server_id: string;
+  enabled: boolean;
+  ping_ok: boolean;
+  tools_count: number;
+  resources_count: number;
+  prompts_count: number;
+  transport: string;
+}
+
+export interface PlatformMcpResourceReadResponse {
+  server_id: string;
+  uri: string;
+  contents: Array<Record<string, unknown>>;
+}
+
+export interface PlatformMcpPromptGetResponse {
+  server_id: string;
+  name: string;
+  description: string;
+  messages: Array<Record<string, unknown>>;
+}
+
 export interface PlatformAgentSchedule {
   schedule_id: string;
   agent_id: string;

@@ -197,6 +197,68 @@ class McpRegistryService:
         session = self._get_session(server)
         return session.list_prompts()
 
+    def read_resource(self, server_id: str, uri: str) -> dict[str, object]:
+        server = self.get_server(server_id)
+        if server is None or not server.enabled:
+            raise ValueError(f"MCP server not found or disabled: {server_id}")
+        if server.command.strip().lower() in {"", "stub"}:
+            return {"contents": [{"uri": uri, "text": "stub resource"}]}
+        session = self._get_session(server)
+        return session.read_resource(uri)
+
+    def get_prompt(
+        self,
+        server_id: str,
+        name: str,
+        arguments: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        server = self.get_server(server_id)
+        if server is None or not server.enabled:
+            raise ValueError(f"MCP server not found or disabled: {server_id}")
+        if server.command.strip().lower() in {"", "stub"}:
+            return {"description": "stub prompt", "messages": [{"role": "user", "content": {"type": "text", "text": name}}]}
+        session = self._get_session(server)
+        return session.get_prompt(name, arguments or {})
+
+    def get_capabilities(self, server_id: str) -> dict[str, object]:
+        server = self.get_server(server_id)
+        if server is None:
+            raise ValueError(f"MCP server not found: {server_id}")
+        if not server.enabled:
+            return {
+                "server_id": server_id,
+                "enabled": False,
+                "ping_ok": False,
+                "tools_count": 0,
+                "resources_count": 0,
+                "prompts_count": 0,
+                "transport": "disabled",
+            }
+        if server.command.strip().lower() in {"", "stub"}:
+            return {
+                "server_id": server_id,
+                "enabled": True,
+                "ping_ok": True,
+                "tools_count": 1,
+                "resources_count": 0,
+                "prompts_count": 0,
+                "transport": "stub",
+            }
+        session = self._get_session(server)
+        ping_ok = session.ping()
+        tools = session.list_tools()
+        resources = session.list_resources()
+        prompts = session.list_prompts()
+        return {
+            "server_id": server_id,
+            "enabled": True,
+            "ping_ok": ping_ok,
+            "tools_count": len(tools),
+            "resources_count": len(resources),
+            "prompts_count": len(prompts),
+            "transport": "stdio_session",
+        }
+
     def _get_session(self, server: McpServerRecord) -> McpStdioSession:
         with self._lock:
             session = self._sessions.get(server.server_id)

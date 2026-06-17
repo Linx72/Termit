@@ -481,6 +481,31 @@ export class TermitClient {
     });
   }
 
+  getPlatformMcpCapabilities(serverId: string): Promise<import("./platform").PlatformMcpCapabilities> {
+    return this.request(`/api/platform/mcp/servers/${encodeURIComponent(serverId)}/capabilities`);
+  }
+
+  readPlatformMcpResource(
+    serverId: string,
+    uri: string
+  ): Promise<import("./platform").PlatformMcpResourceReadResponse> {
+    return this.request(`/api/platform/mcp/servers/${encodeURIComponent(serverId)}/resources/read`, {
+      method: "POST",
+      body: JSON.stringify({ uri }),
+    });
+  }
+
+  getPlatformMcpPrompt(
+    serverId: string,
+    name: string,
+    args: Record<string, unknown> = {}
+  ): Promise<import("./platform").PlatformMcpPromptGetResponse> {
+    return this.request(`/api/platform/mcp/servers/${encodeURIComponent(serverId)}/prompts/get`, {
+      method: "POST",
+      body: JSON.stringify({ name, arguments: args }),
+    });
+  }
+
   listPlatformSchedules(agentId?: string): Promise<import("./platform").PlatformAgentScheduleListResponse> {
     const query = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
     return this.request(`/api/platform/schedules${query}`);

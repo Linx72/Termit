@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.11] - 2026-06-17
+
+### Added
+- MCP `resources/read` and `prompts/get` via stdio session
+- `GET /api/platform/mcp/servers/{id}/capabilities`
+- Desktop MCP panel shows ping + tools/resources/prompts counts
+
 ## [0.4.10] - 2026-06-17
 
 ### Added

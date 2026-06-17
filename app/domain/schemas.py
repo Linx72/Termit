@@ -1731,6 +1731,38 @@ class McpPingResponse(BaseModel):
     transport: str = "stdio_session"
 
 
+class McpCapabilitiesResponse(BaseModel):
+    server_id: str
+    enabled: bool
+    ping_ok: bool
+    tools_count: int = 0
+    resources_count: int = 0
+    prompts_count: int = 0
+    transport: str = "stdio_session"
+
+
+class McpResourceReadRequest(BaseModel):
+    uri: str = Field(min_length=1, max_length=2000)
+
+
+class McpResourceReadResponse(BaseModel):
+    server_id: str
+    uri: str
+    contents: list[dict[str, object]] = Field(default_factory=list)
+
+
+class McpPromptGetRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    arguments: dict[str, object] = Field(default_factory=dict)
+
+
+class McpPromptGetResponse(BaseModel):
+    server_id: str
+    name: str
+    description: str = ""
+    messages: list[dict[str, object]] = Field(default_factory=list)
+
+
 class ProjectRulesImportRequest(BaseModel):
     workspace_root: str = Field(default=".", max_length=4096)
     active_path: str = Field(default="", max_length=4096)
