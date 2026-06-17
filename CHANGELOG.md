@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.13] - 2026-06-17
+
+### Added
+- Plan mode: MCP prompt catalog + preview inject (`mcp_prompt_injected` event)
+- Desktop MCP resource picker — list/read resources, insert preview into Composer
+- `listPlatformMcpResources` / `listPlatformMcpPrompts` in termit-client
+- Eval CP21 (`platform_mcp_read` cursor parity)
+
 ## [0.4.12] - 2026-06-17
 
 ### Added

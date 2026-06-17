@@ -485,6 +485,14 @@ export class TermitClient {
     return this.request(`/api/platform/mcp/servers/${encodeURIComponent(serverId)}/capabilities`);
   }
 
+  listPlatformMcpResources(serverId: string): Promise<import("./platform").PlatformMcpResourceListResponse> {
+    return this.request(`/api/platform/mcp/servers/${encodeURIComponent(serverId)}/resources`);
+  }
+
+  listPlatformMcpPrompts(serverId: string): Promise<import("./platform").PlatformMcpPromptListResponse> {
+    return this.request(`/api/platform/mcp/servers/${encodeURIComponent(serverId)}/prompts`);
+  }
+
   readPlatformMcpResource(
     serverId: string,
     uri: string

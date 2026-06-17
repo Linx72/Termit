@@ -53,6 +53,29 @@ export interface PlatformMcpCapabilities {
   transport: string;
 }
 
+export interface PlatformMcpResourceSummary {
+  uri: string;
+  name: string;
+  description: string;
+  mime_type: string;
+}
+
+export interface PlatformMcpResourceListResponse {
+  server_id: string;
+  resources: PlatformMcpResourceSummary[];
+}
+
+export interface PlatformMcpPromptSummary {
+  name: string;
+  description: string;
+  arguments: Array<Record<string, unknown>>;
+}
+
+export interface PlatformMcpPromptListResponse {
+  server_id: string;
+  prompts: PlatformMcpPromptSummary[];
+}
+
 export interface PlatformMcpResourceReadResponse {
   server_id: string;
   uri: string;

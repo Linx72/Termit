@@ -355,6 +355,12 @@ export function App() {
   const [mcpDraftArgs, setMcpDraftArgs] = useState("");
   const [mcpSaving, setMcpSaving] = useState(false);
   const [mcpImportBusy, setMcpImportBusy] = useState(false);
+  const [mcpPickerServerId, setMcpPickerServerId] = useState("");
+  const [mcpResources, setMcpResources] = useState<
+    Array<{ uri: string; name: string; description: string }>
+  >([]);
+  const [mcpResourcePreview, setMcpResourcePreview] = useState("");
+  const [mcpResourceLoading, setMcpResourceLoading] = useState(false);
   const [runSpansText, setRunSpansText] = useState("Select a run to view trace spans.");
   const [platformStatus, setPlatformStatus] = useState("Platform services not loaded.");
   const [runtimeMeta, setRuntimeMeta] = useState(() => getDesktopRuntimeMeta());
@@ -996,6 +1002,61 @@ export function App() {
     } finally {
       setMcpImportBusy(false);
     }
+  };
+
+  const loadMcpResources = async (serverId: string) => {
+    if (!connected || !serverId) {
+      return;
+    }
+    setMcpResourceLoading(true);
+    setMcpPickerServerId(serverId);
+    try {
+      const response = await client.listPlatformMcpResources(serverId);
+      setMcpResources(
+        response.resources.map((item) => ({
+          uri: item.uri,
+          name: item.name || item.uri,
+          description: item.description || "",
+        }))
+      );
+      setMcpResourcePreview("");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setPlatformStatus(text);
+      setMcpResources([]);
+    } finally {
+      setMcpResourceLoading(false);
+    }
+  };
+
+  const readMcpResourcePreview = async (serverId: string, uri: string) => {
+    if (!connected || !serverId || !uri) {
+      return;
+    }
+    setMcpResourceLoading(true);
+    try {
+      const response = await client.readPlatformMcpResource(serverId, uri);
+      const text = response.contents
+        .map((item) => (typeof item.text === "string" ? item.text : ""))
+        .filter(Boolean)
+        .join("\n");
+      setMcpResourcePreview(text || JSON.stringify(response.contents, null, 2));
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setMcpResourcePreview(text);
+    } finally {
+      setMcpResourceLoading(false);
+    }
+  };
+
+  const injectMcpResourceToComposer = () => {
+    const trimmed = mcpResourcePreview.trim();
+    if (!trimmed) {
+      return;
+    }
+    const block = `[MCP resource]\n${trimmed}\n`;
+    setComposerInput((prev) => (prev.trim() ? `${prev.trim()}\n\n${block}` : block));
+    setPlatformStatus(locale === "ru" ? "Resource вставлен в Composer." : "Resource inserted into Composer.");
   };
 
   const toggleProjectSkill = (skillId: string) => {
@@ -2864,6 +2925,59 @@ export function App() {
               {t(locale, "refreshMcp")}
             </button>
           </div>
+
+          {platformMcpServers.some((item) => item.enabled && (item.resources_count ?? 0) > 0) ? (
+            <div className="mcp-resource-picker">
+              <label>{t(locale, "mcpResourcePicker")}</label>
+              <select
+                value={mcpPickerServerId}
+                onChange={(event) => void loadMcpResources(event.target.value)}
+                disabled={!connected || mcpResourceLoading}
+              >
+                <option value="">{t(locale, "mcpSelectServer")}</option>
+                {platformMcpServers
+                  .filter((item) => item.enabled && (item.resources_count ?? 0) > 0)
+                  .map((item) => (
+                    <option key={item.server_id} value={item.server_id}>
+                      {item.name} ({item.resources_count})
+                    </option>
+                  ))}
+              </select>
+              {mcpResources.length > 0 ? (
+                <ul className="muted compact-list">
+                  {mcpResources.map((item) => (
+                    <li key={item.uri}>
+                      <button
+                        type="button"
+                        className="linkish compact"
+                        disabled={!connected || mcpResourceLoading}
+                        onClick={() => void readMcpResourcePreview(mcpPickerServerId, item.uri)}
+                      >
+                        {item.name}
+                      </button>
+                      {item.description ? <span className="hint"> — {item.description}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : mcpPickerServerId ? (
+                <p className="hint">{t(locale, "mcpNoResources")}</p>
+              ) : null}
+              {mcpResourcePreview ? (
+                <>
+                  <label>{t(locale, "mcpResourcePreview")}</label>
+                  <pre className="platform-spans">{mcpResourcePreview.slice(0, 4000)}</pre>
+                  <button
+                    type="button"
+                    className="secondary compact"
+                    disabled={!connected}
+                    onClick={injectMcpResourceToComposer}
+                  >
+                    {t(locale, "mcpInjectComposer")}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         </details>
 

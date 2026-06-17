@@ -953,7 +953,8 @@ class AgentService:
         ):
             from app.services.mcp_context_service import McpContextService
 
-            mcp_lines = McpContextService(self._mcp).build_context_lines(profile_for_loop)
+            mcp_service = McpContextService(self._mcp)
+            mcp_lines = mcp_service.build_context_lines(profile_for_loop)
             if mcp_lines:
                 memory_context = mcp_lines + memory_context
                 if run_id:
@@ -966,6 +967,25 @@ class AgentService:
                     )
 
         run_mode = (payload.run_mode or "agent").strip().lower()
+        if (
+            run_mode == "plan"
+            and self._mcp is not None
+            and {"mcp_invoke", "mcp_read_resource", "mcp_get_prompt"} & set(profile_for_loop.enabled_tools)
+        ):
+            from app.services.mcp_context_service import McpContextService
+
+            prompt_lines = McpContextService(self._mcp).build_plan_prompt_lines(profile_for_loop)
+            if prompt_lines:
+                memory_context = prompt_lines + memory_context
+                if run_id:
+                    self._append_event(
+                        run_id=run_id,
+                        event_type="mcp_prompt_injected",
+                        state=AgentRunState.running,
+                        message=json_dumps({"lines": len(prompt_lines)}, ensure_ascii=False),
+                        attempt=attempt,
+                    )
+
         if run_mode == "plan" and self._reasoning_orchestrator is not None:
             try:
                 reasoning = self._reasoning_orchestrator.run_reasoning_pass(task=payload.input)

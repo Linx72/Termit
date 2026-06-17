@@ -48,6 +48,10 @@ while True:
         write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"resources": [{"uri": "demo://resource", "name": "demo", "description": "demo resource", "mimeType": "text/plain"}]}})
     elif method == "resources/read":
         write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"contents": [{"uri": "demo://resource", "text": "demo resource body"}]}})
+    elif method == "prompts/list":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"prompts": [{"name": "plan_starter", "description": "Planning template", "arguments": []}]}})
+    elif method == "prompts/get":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"description": "Planning template", "messages": [{"role": "user", "content": {"type": "text", "text": "Start planning with MCP context"}}]}})
     elif method == "ping":
         write_msg({"jsonrpc": "2.0", "id": req_id, "result": {}})
 """
@@ -82,6 +86,35 @@ class McpContextServiceTests(unittest.TestCase):
             self.assertIn("[MCP context]", joined)
             self.assertIn("demo://resource", joined)
             self.assertIn("demo resource body", joined)
+
+    def test_build_plan_prompt_lines_injects_prompt_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            script_path = Path(tmp) / "mock_mcp.py"
+            script_path.write_text(_MCP_MOCK_WITH_READ, encoding="utf-8")
+            registry_path = Path(tmp) / "registry.json"
+            registry = McpRegistryService(str(registry_path))
+            self.addCleanup(registry.close_sessions)
+            server = registry.upsert_server(
+                name="mock",
+                command=sys.executable,
+                args=[str(script_path)],
+                allowed_tools=["ping"],
+            )
+            profile = AgentProfileResponse(
+                agent_id="a1",
+                name="Demo",
+                task_type=TaskType.coding,
+                system_prompt="demo",
+                enabled_tools=["mcp_get_prompt"],
+                allowed_mcp_servers=[server.server_id],
+                created_at="2026-01-01T00:00:00Z",
+                updated_at="2026-01-01T00:00:00Z",
+            )
+            lines = McpContextService(registry).build_plan_prompt_lines(profile)
+            joined = "\n".join(lines)
+            self.assertIn("[MCP plan prompts]", joined)
+            self.assertIn("plan_starter", joined)
+            self.assertIn("Start planning with MCP context", joined)
 
     def test_build_openai_tools_adds_mcp_companion_tools(self) -> None:
         tools = build_openai_tools(["read_file", "mcp_invoke"])

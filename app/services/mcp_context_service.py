@@ -73,6 +73,65 @@ class McpContextService:
         lines.append("Use mcp_read_resource / mcp_get_prompt for full content.")
         return lines
 
+    def build_plan_prompt_lines(
+        self,
+        profile: AgentProfileResponse,
+        *,
+        max_servers: int = 3,
+        max_prompts_per_server: int = 5,
+        max_previews_per_server: int = 1,
+        max_preview_chars: int = 400,
+    ) -> list[str]:
+        if not self._mcp_tools_enabled(profile):
+            return []
+
+        server_ids = self._allowed_server_ids(profile)
+        if not server_ids:
+            return []
+
+        lines: list[str] = ["[MCP plan prompts]"]
+        injected = False
+
+        for server_id in server_ids[:max_servers]:
+            try:
+                server = self._registry.get_server(server_id)
+            except ValueError:
+                continue
+            if server is None or not server.enabled:
+                continue
+
+            try:
+                prompts = self._registry.list_prompts(server_id)
+            except Exception:  # noqa: BLE001
+                continue
+            if not prompts:
+                continue
+
+            injected = True
+            lines.append(f"Server `{server_id}` prompts:")
+            for prompt in prompts[:max_prompts_per_server]:
+                desc = f" — {prompt.description}" if prompt.description else ""
+                lines.append(f"- {prompt.name}{desc}")
+
+            previews = 0
+            for prompt in prompts[:max_previews_per_server]:
+                if previews >= max_previews_per_server:
+                    break
+                try:
+                    payload = self._registry.get_prompt(server_id, prompt.name, {})
+                except Exception:  # noqa: BLE001
+                    continue
+                text = self._extract_prompt_text(payload, max_preview_chars)
+                if not text:
+                    continue
+                previews += 1
+                lines.append(f"Prompt `{prompt.name}` preview:\n{text}")
+
+        if not injected:
+            return []
+        lines.append("Use mcp_get_prompt during planning for full template content.")
+        return lines
+
     @staticmethod
     def _mcp_tools_enabled(profile: AgentProfileResponse) -> bool:
         enabled = set(profile.enabled_tools)
@@ -102,6 +161,28 @@ class McpContextService:
             blob = item.get("blob")
             if isinstance(blob, str) and blob.strip():
                 chunks.append(f"[binary blob {len(blob)} chars omitted]")
+        joined = "\n".join(chunks).strip()
+        if len(joined) > max_chars:
+            return joined[: max_chars - 3] + "..."
+        return joined
+
+    @staticmethod
+    def _extract_prompt_text(payload: dict[str, object], max_chars: int) -> str:
+        messages = payload.get("messages")
+        if not isinstance(messages, list):
+            return ""
+        chunks: list[str] = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            if isinstance(content, str) and content.strip():
+                chunks.append(content.strip())
+                continue
+            if isinstance(content, dict):
+                text = content.get("text")
+                if isinstance(text, str) and text.strip():
+                    chunks.append(text.strip())
         joined = "\n".join(chunks).strip()
         if len(joined) > max_chars:
             return joined[: max_chars - 3] + "..."

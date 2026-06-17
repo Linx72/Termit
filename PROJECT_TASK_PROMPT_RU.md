@@ -425,6 +425,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Agent run получает MCP resource context; eval P4 проходит.
 
+### Следующий этап (0.4.13): MCP plan prompt inject + Desktop resource picker + CP21
+
+- [x] `build_plan_prompt_lines` — catalog + preview MCP prompts в plan mode
+- [x] Event `mcp_prompt_injected`
+- [x] Desktop MCP resource picker (list/read → Composer)
+- [x] Eval CP21 `platform_mcp_read` (cursor parity)
+
+**DoD:** Plan mode видит MCP prompts; Desktop читает resources; CP21 проходит.
+
 ---
 
 ## Порядок выполнения
