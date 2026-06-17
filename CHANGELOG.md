@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.18] - 2026-06-17
+
+### Added
+- `RoutingBenchmarkSyncService` — aggregate eval benchmark rows into routing scores by task type
+- `POST /api/eval/benchmark/sync-routing` — sync `data/routing_benchmarks.json` from latest or inline report
+- `sync_routing` flag on `POST /api/eval/benchmark/baselines` — auto-update after baseline compare
+- `scripts/sync_routing_benchmarks.py` — CLI sync from latest eval report JSONL
+- `RoutingPolicyService.update_benchmark_scores()` with EMA blend + persist
+- Tests `test_routing_benchmark_sync.py`
+
+
 ## [0.4.17] - 2026-06-17
 
 ### Added

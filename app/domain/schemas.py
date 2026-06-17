@@ -820,6 +820,8 @@ class EvalDashboardResponse(BaseModel):
 class EvalBenchmarkRequest(BaseModel):
     scenario_ids: list[str] = Field(default_factory=list)
     persist: bool = True
+    sync_routing: bool = False
+    blend_alpha: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
 class EvalBenchmarkResponse(BaseModel):
@@ -831,6 +833,24 @@ class EvalBenchmarkResponse(BaseModel):
     termit_quality_mean: float
     reference_quality_mean: float
     rows: list[dict[str, object]] = Field(default_factory=list)
+    routing_sync: Optional[dict[str, object]] = None
+
+
+class RoutingBenchmarkSyncRequest(BaseModel):
+    blend_alpha: float = Field(default=0.3, ge=0.0, le=1.0)
+    dry_run: bool = False
+    persist: bool = True
+    from_latest: bool = True
+    benchmark_report: Optional[dict[str, object]] = None
+
+
+class RoutingBenchmarkSyncResponse(BaseModel):
+    dry_run: bool
+    benchmark_id: Optional[str] = None
+    updated_models: list[str] = Field(default_factory=list)
+    computed_scores: dict[str, dict[str, float]] = Field(default_factory=dict)
+    blend_alpha: float = 0.3
+    synced_at: Optional[str] = None
 
 
 class ListFilesRequest(BaseModel):

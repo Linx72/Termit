@@ -10,13 +10,41 @@ from app.domain.schemas import (
     EvalScenarioResponse,
     EvalSuiteRunRequest,
     EvalSuiteRunResponse,
+    RoutingBenchmarkSyncRequest,
+    RoutingBenchmarkSyncResponse,
 )
 from app.services.eval_benchmark_service import EvalBenchmarkService
 from app.services.eval_ci_gate import DEEP_GATE, FAST_GATE, RELEASE_GATE, evaluate_tier_gate
 from app.services.eval_service import EvalService
-from app.state import get_eval_service, get_settings
+from app.services.routing_benchmark_sync_service import RoutingBenchmarkSyncService
+from app.state import get_eval_service, get_routing_policy_service, get_settings
 
 router = APIRouter(prefix="/api/eval", tags=["eval"])
+
+
+def _scenario_category_map(service: EvalService) -> dict[str, str]:
+    return {item.id: item.category for item in service.list_scenarios()}
+
+
+def _sync_routing_from_benchmark(
+    *,
+    report: dict[str, object],
+    service: EvalService,
+    blend_alpha: float,
+    persist: bool,
+    dry_run: bool,
+) -> dict[str, object]:
+    sync = RoutingBenchmarkSyncService(
+        get_routing_policy_service(),
+        report_file_path=get_settings().eval_report_file_path,
+    )
+    return sync.sync_from_report(
+        report,
+        category_by_scenario_id=_scenario_category_map(service),
+        blend_alpha=blend_alpha,
+        persist=persist,
+        dry_run=dry_run,
+    )
 
 
 def _to_run_response(result: dict[str, object]) -> EvalRunResponse:
@@ -158,6 +186,15 @@ async def run_benchmark_baselines(
         quality_judge=lambda result: float(result.get("quality_score", 0.0) or 0.0),
     )
     report = benchmark.compare_on_scenarios(scenario_ids, persist=payload.persist)
+    routing_sync: dict[str, object] | None = None
+    if payload.sync_routing:
+        routing_sync = _sync_routing_from_benchmark(
+            report=report,
+            service=service,
+            blend_alpha=payload.blend_alpha,
+            persist=True,
+            dry_run=False,
+        )
     return EvalBenchmarkResponse(
         benchmark_id=str(report["benchmark_id"]),
         termit_model=str(report["termit_model"]),
@@ -167,4 +204,49 @@ async def run_benchmark_baselines(
         termit_quality_mean=float(report["termit_quality_mean"]),
         reference_quality_mean=float(report["reference_quality_mean"]),
         rows=list(report.get("rows", [])),
+        routing_sync=routing_sync,
+    )
+
+
+@router.post("/benchmark/sync-routing", response_model=RoutingBenchmarkSyncResponse)
+async def sync_routing_benchmarks(
+    payload: RoutingBenchmarkSyncRequest,
+    service: EvalService = Depends(get_eval_service),
+) -> RoutingBenchmarkSyncResponse:
+    settings = get_settings()
+    sync = RoutingBenchmarkSyncService(
+        get_routing_policy_service(),
+        report_file_path=settings.eval_report_file_path,
+    )
+    categories = _scenario_category_map(service)
+    try:
+        if payload.benchmark_report is not None:
+            summary = sync.sync_from_report(
+                payload.benchmark_report,
+                category_by_scenario_id=categories,
+                blend_alpha=payload.blend_alpha,
+                persist=payload.persist,
+                dry_run=payload.dry_run,
+            )
+        elif payload.from_latest:
+            summary = sync.sync_from_latest_report(
+                category_by_scenario_id=categories,
+                blend_alpha=payload.blend_alpha,
+                persist=payload.persist,
+                dry_run=payload.dry_run,
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide benchmark_report or set from_latest=true.",
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RoutingBenchmarkSyncResponse(
+        dry_run=bool(summary.get("dry_run")),
+        benchmark_id=str(summary["benchmark_id"]) if summary.get("benchmark_id") else None,
+        updated_models=list(summary.get("updated_models", [])),
+        computed_scores=dict(summary.get("computed_scores", {})),
+        blend_alpha=float(summary.get("blend_alpha", payload.blend_alpha)),
+        synced_at=str(summary["synced_at"]) if summary.get("synced_at") else None,
     )

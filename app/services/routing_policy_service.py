@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
 from pathlib import Path
@@ -108,6 +109,62 @@ class RoutingPolicyService:
         if not model_scores:
             return None
         return float(model_scores.get(task_type.value, model_scores.get("general")))
+
+    def update_benchmark_scores(
+        self,
+        updates: dict[str, dict[str, float]],
+        *,
+        blend_alpha: float = 0.0,
+        persist: bool = True,
+    ) -> dict[str, object]:
+        """Merge or replace benchmark scores and optionally persist to disk."""
+        alpha = max(0.0, min(1.0, float(blend_alpha)))
+        updated_models: list[str] = []
+        for model, task_scores in updates.items():
+            model_key = str(model).strip()
+            if not model_key:
+                continue
+            bucket = self._benchmark_scores.setdefault(model_key, {})
+            model_changed = False
+            for task, raw_score in task_scores.items():
+                task_key = str(task).strip()
+                if not task_key:
+                    continue
+                score = round(float(raw_score), 4)
+                old = bucket.get(task_key)
+                if old is None:
+                    merged = score
+                else:
+                    merged = round(alpha * score + (1.0 - alpha) * float(old), 4)
+                if old != merged:
+                    model_changed = True
+                bucket[task_key] = merged
+            if model_changed:
+                updated_models.append(model_key)
+        if persist and updated_models:
+            self._persist_benchmarks()
+        return {
+            "updated_models": sorted(updated_models),
+            "blend_alpha": alpha,
+            "benchmark_models": self.list_benchmark_models(),
+        }
+
+    def reload_benchmarks(self) -> None:
+        self._benchmark_scores = self._load_benchmarks(str(self._benchmarks_path))
+
+    def _persist_benchmarks(self) -> None:
+        path = self._benchmarks_path
+        existing: dict[str, object] = {}
+        if path.exists():
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        version = int(existing.get("version", 1) or 1) + 1
+        payload = {
+            "version": version,
+            "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "scores": self._benchmark_scores,
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     def _load_profiles(self, profiles_path: str) -> list[RepoModelProfile]:
         path = Path(profiles_path)
