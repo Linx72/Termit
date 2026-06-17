@@ -14,8 +14,23 @@ class McpToolDescriptor:
     input_schema: dict[str, object] = field(default_factory=dict)
 
 
+@dataclass
+class McpResourceDescriptor:
+    uri: str
+    name: str = ""
+    description: str = ""
+    mime_type: str = ""
+
+
+@dataclass
+class McpPromptDescriptor:
+    name: str
+    description: str = ""
+    arguments: list[dict[str, object]] = field(default_factory=list)
+
+
 class McpStdioSession:
-    """Minimal MCP stdio client: initialize → tools/list → tools/call."""
+    """MCP stdio client: initialize → tools/resources/prompts list → tools/call."""
 
     def __init__(
         self,
@@ -110,6 +125,65 @@ class McpStdioSession:
             {"name": tool_name, "arguments": arguments},
         )
         return result if isinstance(result, dict) else {"content": [{"type": "text", "text": str(result)}]}
+
+    def ping(self) -> bool:
+        self.start()
+        try:
+            result = self._request("ping", {})
+        except RuntimeError:
+            return False
+        return isinstance(result, dict)
+
+    def list_resources(self) -> list[McpResourceDescriptor]:
+        self.start()
+        try:
+            response = self._request("resources/list", {})
+        except RuntimeError:
+            return []
+        resources_raw = response.get("resources", []) if isinstance(response, dict) else []
+        resources: list[McpResourceDescriptor] = []
+        if isinstance(resources_raw, list):
+            for item in resources_raw:
+                if not isinstance(item, dict):
+                    continue
+                uri = str(item.get("uri", "")).strip()
+                if not uri:
+                    continue
+                resources.append(
+                    McpResourceDescriptor(
+                        uri=uri,
+                        name=str(item.get("name", "")),
+                        description=str(item.get("description", "")),
+                        mime_type=str(item.get("mimeType", item.get("mime_type", ""))),
+                    )
+                )
+        return resources
+
+    def list_prompts(self) -> list[McpPromptDescriptor]:
+        self.start()
+        try:
+            response = self._request("prompts/list", {})
+        except RuntimeError:
+            return []
+        prompts_raw = response.get("prompts", []) if isinstance(response, dict) else []
+        prompts: list[McpPromptDescriptor] = []
+        if isinstance(prompts_raw, list):
+            for item in prompts_raw:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name", "")).strip()
+                if not name:
+                    continue
+                args_raw = item.get("arguments", [])
+                args = [arg for arg in args_raw if isinstance(arg, dict)] if isinstance(args_raw, list) else []
+                prompts.append(
+                    McpPromptDescriptor(
+                        name=name,
+                        description=str(item.get("description", "")),
+                        arguments=args,
+                    )
+                )
+        return prompts
 
     def _initialize_session(self) -> None:
         if self._initialized:

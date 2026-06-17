@@ -1696,6 +1696,41 @@ class McpToolListResponse(BaseModel):
     tools: list[McpToolResponse] = Field(default_factory=list)
 
 
+class McpResourceResponse(BaseModel):
+    uri: str
+    name: str = ""
+    description: str = ""
+    mime_type: str = ""
+
+
+class McpResourceListResponse(BaseModel):
+    server_id: str
+    resources: list[McpResourceResponse] = Field(default_factory=list)
+
+
+class McpPromptArgumentResponse(BaseModel):
+    name: str = ""
+    description: str = ""
+    required: bool = False
+
+
+class McpPromptResponse(BaseModel):
+    name: str
+    description: str = ""
+    arguments: list[McpPromptArgumentResponse] = Field(default_factory=list)
+
+
+class McpPromptListResponse(BaseModel):
+    server_id: str
+    prompts: list[McpPromptResponse] = Field(default_factory=list)
+
+
+class McpPingResponse(BaseModel):
+    server_id: str
+    ok: bool
+    transport: str = "stdio_session"
+
+
 class ProjectRulesImportRequest(BaseModel):
     workspace_root: str = Field(default=".", max_length=4096)
     active_path: str = Field(default="", max_length=4096)

@@ -46,6 +46,12 @@ while True:
         write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"protocolVersion": "2024-11-05", "capabilities": {}}})
     elif method == "tools/list":
         write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"tools": [{"name": "ping", "description": "demo", "inputSchema": {"type": "object"}}]}})
+    elif method == "ping":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {}})
+    elif method == "resources/list":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"resources": [{"uri": "demo://resource", "name": "demo", "description": "demo resource", "mimeType": "text/plain"}]}})
+    elif method == "prompts/list":
+        write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"prompts": [{"name": "demo_prompt", "description": "demo prompt", "arguments": []}]}})
     elif method == "tools/call":
         write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": "pong"}]}})
 """
@@ -120,6 +126,20 @@ class P1PlatformTests(unittest.TestCase):
             self.assertIn("stdio_session", payload)
             tools = registry.list_tools(server.server_id)
             self.assertEqual(tools[0].name, "ping")
+
+    def test_mcp_full_jsonrpc_lists_resources_and_prompts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            script_path = Path(tmp) / "mock_mcp.py"
+            script_path.write_text(_MCP_MOCK_SERVER, encoding="utf-8")
+            session = McpStdioSession(command="python3", args=[str(script_path)])
+            try:
+                self.assertTrue(session.ping())
+                resources = session.list_resources()
+                self.assertEqual(resources[0].uri, "demo://resource")
+                prompts = session.list_prompts()
+                self.assertEqual(prompts[0].name, "demo_prompt")
+            finally:
+                session.close()
 
 
 if __name__ == "__main__":

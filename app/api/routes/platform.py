@@ -14,6 +14,12 @@ from app.domain.schemas import (
     McpCursorImportResponse,
     McpInvokeRequest,
     McpInvokeResponse,
+    McpPingResponse,
+    McpPromptArgumentResponse,
+    McpPromptListResponse,
+    McpPromptResponse,
+    McpResourceListResponse,
+    McpResourceResponse,
     McpToolListResponse,
     McpToolResponse,
     McpServerCreateRequest,
@@ -277,6 +283,77 @@ async def list_mcp_server_tools(
                 input_schema=item.input_schema,
             )
             for item in tools
+        ],
+    )
+
+
+@router.get("/mcp/servers/{server_id}/ping", response_model=McpPingResponse)
+async def ping_mcp_server(
+    server_id: str,
+    registry: McpRegistryService = Depends(get_mcp_registry_service),
+) -> McpPingResponse:
+    try:
+        ok = registry.ping_server(server_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return McpPingResponse(server_id=server_id, ok=ok)
+
+
+@router.get("/mcp/servers/{server_id}/resources", response_model=McpResourceListResponse)
+async def list_mcp_server_resources(
+    server_id: str,
+    registry: McpRegistryService = Depends(get_mcp_registry_service),
+) -> McpResourceListResponse:
+    try:
+        resources = registry.list_resources(server_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return McpResourceListResponse(
+        server_id=server_id,
+        resources=[
+            McpResourceResponse(
+                uri=item.uri,
+                name=item.name,
+                description=item.description,
+                mime_type=item.mime_type,
+            )
+            for item in resources
+        ],
+    )
+
+
+@router.get("/mcp/servers/{server_id}/prompts", response_model=McpPromptListResponse)
+async def list_mcp_server_prompts(
+    server_id: str,
+    registry: McpRegistryService = Depends(get_mcp_registry_service),
+) -> McpPromptListResponse:
+    try:
+        prompts = registry.list_prompts(server_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return McpPromptListResponse(
+        server_id=server_id,
+        prompts=[
+            McpPromptResponse(
+                name=item.name,
+                description=item.description,
+                arguments=[
+                    McpPromptArgumentResponse(
+                        name=str(arg.get("name", "")),
+                        description=str(arg.get("description", "")),
+                        required=bool(arg.get("required", False)),
+                    )
+                    for arg in item.arguments
+                    if isinstance(arg, dict)
+                ],
+            )
+            for item in prompts
         ],
     )
 

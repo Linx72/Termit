@@ -166,6 +166,37 @@ class McpRegistryService:
         session = self._get_session(server)
         return session.list_tools()
 
+    def ping_server(self, server_id: str) -> bool:
+        server = self.get_server(server_id)
+        if server is None or not server.enabled:
+            raise ValueError(f"MCP server not found or disabled: {server_id}")
+        if server.command.strip().lower() in {"", "stub"}:
+            return True
+        session = self._get_session(server)
+        return session.ping()
+
+    def list_resources(self, server_id: str):
+        from app.services.mcp_stdio_client import McpResourceDescriptor
+
+        server = self.get_server(server_id)
+        if server is None or not server.enabled:
+            raise ValueError(f"MCP server not found or disabled: {server_id}")
+        if server.command.strip().lower() in {"", "stub"}:
+            return []
+        session = self._get_session(server)
+        return session.list_resources()
+
+    def list_prompts(self, server_id: str):
+        from app.services.mcp_stdio_client import McpPromptDescriptor
+
+        server = self.get_server(server_id)
+        if server is None or not server.enabled:
+            raise ValueError(f"MCP server not found or disabled: {server_id}")
+        if server.command.strip().lower() in {"", "stub"}:
+            return []
+        session = self._get_session(server)
+        return session.list_prompts()
+
     def _get_session(self, server: McpServerRecord) -> McpStdioSession:
         with self._lock:
             session = self._sessions.get(server.server_id)

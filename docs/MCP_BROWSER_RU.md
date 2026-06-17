@@ -56,6 +56,7 @@ curl -s http://127.0.0.1:8765/api/platform/mcp/servers | jq '.servers[] | select
 
 - `browser_click` требует `confirmed=true` (как native tool).
 - Сервер **disabled by default** — включайте только для online-профилей.
+- Session API: `GET /api/platform/mcp/servers/{id}/ping|resources|prompts`.
 - Все вызовы пишутся в MCP audit log.
 
 ## Связанные файлы

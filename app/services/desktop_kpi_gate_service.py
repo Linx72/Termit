@@ -17,6 +17,7 @@ class DesktopKpiGateService:
         telemetry_summary_provider: Callable[[], dict[str, object]] | None = None,
         metrics_summary_provider: Callable[[], dict[str, object]] | None = None,
         beta_metrics_provider: Callable[[], dict[str, object]] | None = None,
+        onboarding_metrics_provider: Callable[[], dict[str, object]] | None = None,
     ) -> None:
         self._path = Path(north_star_path)
         self._eval_dashboard_provider = eval_dashboard_provider
@@ -24,6 +25,7 @@ class DesktopKpiGateService:
         self._telemetry_summary_provider = telemetry_summary_provider
         self._metrics_summary_provider = metrics_summary_provider
         self._beta_metrics_provider = beta_metrics_provider
+        self._onboarding_metrics_provider = onboarding_metrics_provider
 
     def _load_targets(self) -> dict[str, float]:
         if not self._path.is_file():
@@ -128,6 +130,18 @@ class DesktopKpiGateService:
                     "D30 retention (beta)",
                     float(d30_rate),
                     targets.get("d30_retention_min", 0.35),
+                )
+
+        if self._onboarding_metrics_provider is not None:
+            onboarding = self._onboarding_metrics_provider()
+            assigned = int(onboarding.get("total_assigned", 0) or 0)
+            conversion = onboarding.get("overall_conversion_rate")
+            if assigned >= 5 and isinstance(conversion, (int, float)):
+                add_gate(
+                    "onboarding_conversion",
+                    "Onboarding conversion",
+                    float(conversion),
+                    targets.get("onboarding_conversion_min", 0.5),
                 )
 
         telemetry: dict[str, object] = {}

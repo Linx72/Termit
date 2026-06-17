@@ -1199,6 +1199,9 @@ def _build_desktop_kpi_gate_service():
         metrics["feedback_total"] = _build_feedback_store().summarize().get("total", 0)
         return metrics
 
+    def onboarding_metrics_provider() -> dict[str, object]:
+        return _build_onboarding_experiment_service().summarize(telemetry.list_events())
+
     return DesktopKpiGateService(
         settings.desktop_north_star_path,
         eval_dashboard_provider=eval_dashboard_provider,
@@ -1206,6 +1209,7 @@ def _build_desktop_kpi_gate_service():
         telemetry_summary_provider=telemetry_summary_provider,
         metrics_summary_provider=metrics_summary_provider,
         beta_metrics_provider=beta_metrics_provider,
+        onboarding_metrics_provider=onboarding_metrics_provider,
     )
 
 

@@ -140,6 +140,12 @@ def main() -> None:
             )
         elif method == "tools/list":
             _write_message({"jsonrpc": "2.0", "id": req_id, "result": {"tools": _TOOLS}})
+        elif method == "ping" and req_id is not None:
+            _write_message({"jsonrpc": "2.0", "id": req_id, "result": {}})
+        elif method == "resources/list" and req_id is not None:
+            _write_message({"jsonrpc": "2.0", "id": req_id, "result": {"resources": []}})
+        elif method == "prompts/list" and req_id is not None:
+            _write_message({"jsonrpc": "2.0", "id": req_id, "result": {"prompts": []}})
         elif method == "tools/call" and req_id is not None:
             params = message.get("params", {})
             params_dict = params if isinstance(params, dict) else {}

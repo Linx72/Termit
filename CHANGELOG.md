@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.10] - 2026-06-17
+
+### Added
+- MCP full JSON-RPC session: ping, resources/list, prompts/list
+- Platform API: `/api/platform/mcp/servers/{id}/ping|resources|prompts`
+- KPI gate `onboarding_conversion_min` (≥50%, cohort ≥5)
+
 ## [0.4.9] - 2026-06-17
 
 ### Added

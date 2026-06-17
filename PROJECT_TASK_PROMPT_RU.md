@@ -398,6 +398,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** A/B onboarding измеряется; conversion доступен из API.
 
+### Следующий этап (0.4.10): MCP JSON-RPC full session + onboarding KPI gate
+
+- [x] `McpStdioSession`: ping, resources/list, prompts/list
+- [x] Platform API: `/mcp/servers/{id}/ping|resources|prompts`
+- [x] KPI gate `onboarding_conversion_min` (≥50%, cohort ≥5)
+- [x] Tests `test_mcp_full_jsonrpc.py`
+
+**DoD:** MCP session exposes resources/prompts; onboarding conversion в KPI gates.
+
 ---
 
 ## Порядок выполнения

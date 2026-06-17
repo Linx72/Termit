@@ -15,7 +15,7 @@
 | Multi-agent orchestrator | ✅ | Antigravity parallel | spawn sub-run из loop |
 | Repo RAG | ✅ keyword/semantic | — | symbol graph, auto-reindex |
 | Web | ✅ SearXNG (self-host) + stub | Perplexity Search | fetch+extract rerank, desktop citations UI |
-| MCP | ✅ registry + stdio_json transport | Cursor, Antigravity, OpenAI | full MCP JSON-RPC session, RBAC per profile |
+| MCP | ✅ registry + stdio_json transport | Cursor, Antigravity, OpenAI | RBAC per profile; resources/prompts/ping via session |
 | Skills/Rules в продукте | ✅ API + inject MVP | Antigravity, OpenAI Skills | UI inject, project-scoped routes |
 | SDK Agent.create/resume | ✅ termit-client v2 MVP | Cursor SDK | stream-only (no poll fallback removal) |
 | Scheduled agents | ✅ cron service + API | Antigravity cron | desktop UI badge |
