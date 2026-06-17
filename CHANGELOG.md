@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.17] - 2026-06-17
+
+### Added
+- Prometheus export: `termit_mcp_*` gauges (inject, tool calls, adoption rate)
+- Grafana SLO dashboard row: MCP inject/adoption + usage counters
+
 ## [0.4.16] - 2026-06-17
 
 ### Added

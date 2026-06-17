@@ -459,6 +459,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Web UI показывает MCP metrics из agent-runs/metrics.
 
+### Следующий этап (0.4.17): Prometheus MCP + Grafana panel
+
+- [x] `termit_mcp_*` gauges в `/api/metrics/prometheus`
+- [x] Grafana SLO dashboard MCP row
+- [x] Tests in `test_response_cache_and_metrics.py`
+
+**DoD:** Prometheus/Grafana видят MCP inject и tool usage.
+
 ---
 
 ## Порядок выполнения

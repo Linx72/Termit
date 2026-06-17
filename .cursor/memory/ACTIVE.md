@@ -4,8 +4,8 @@
 
 ## Сводка
 
-- **v0.4.16** — Web ops dashboard MCP cards (inject, tools, adoption)
+- **v0.4.17** — Prometheus `termit_mcp_*` + Grafana MCP panels
 
 ## Открытые задачи
 
-- [ ] Следующий `do all`: Prometheus counters для MCP events / Grafana panel stub
+- [ ] Следующий `do all`: model eval benchmark runner / routing_benchmarks auto-update from eval reports

@@ -114,6 +114,34 @@
       ],
       "title": "Cost signals",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 30 },
+      "id": 11,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "expr": "termit_mcp_inject_rate", "legendFormat": "inject rate", "refId": "A" },
+        { "expr": "termit_mcp_adoption_rate", "legendFormat": "adoption", "refId": "B" }
+      ],
+      "title": "MCP inject & adoption",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 30 },
+      "id": 12,
+      "targets": [
+        { "expr": "termit_mcp_invoke_total", "legendFormat": "invoke", "refId": "A" },
+        { "expr": "termit_mcp_read_resource_total", "legendFormat": "read_resource", "refId": "B" },
+        { "expr": "termit_mcp_get_prompt_total", "legendFormat": "get_prompt", "refId": "C" },
+        { "expr": "termit_mcp_context_inject_total", "legendFormat": "context inject", "refId": "D" },
+        { "expr": "termit_mcp_prompt_inject_total", "legendFormat": "prompt inject", "refId": "E" }
+      ],
+      "title": "MCP usage counters",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

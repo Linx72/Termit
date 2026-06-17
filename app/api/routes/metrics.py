@@ -266,6 +266,33 @@ async def metrics_prometheus(
         lines.append(f"# TYPE termit_{key} gauge")
         lines.append(_prom_line(f"termit_{key}", float(queue.get(key, 0.0))))
     for key, help_text in (
+        ("mcp_context_inject_total", "MCP context auto-inject events."),
+        ("mcp_prompt_inject_total", "MCP prompt auto-inject events in plan mode."),
+        ("mcp_invoke_total", "MCP invoke tool-loop steps."),
+        ("mcp_read_resource_total", "MCP read_resource tool-loop steps."),
+        ("mcp_get_prompt_total", "MCP get_prompt tool-loop steps."),
+        ("mcp_tool_calls_total", "Total MCP tool-loop tool calls."),
+        ("mcp_inject_runs", "Agent runs with MCP context or prompt inject."),
+        ("mcp_active_runs", "Agent runs with any MCP inject or tool usage."),
+    ):
+        lines.append(f"# HELP termit_{key} {help_text}")
+        lines.append(f"# TYPE termit_{key} gauge")
+        lines.append(_prom_line(f"termit_{key}", float(queue.get(key, 0))))
+    for key in ("mcp_inject_rate",):
+        lines.append(f"# HELP termit_{key} Share of MCP-active runs with auto-inject.")
+        lines.append(f"# TYPE termit_{key} gauge")
+        lines.append(_prom_line(f"termit_{key}", float(queue.get(key, 0.0))))
+    tool_loop_runs = float(queue.get("tool_loop_runs", 0) or 0)
+    mcp_active = float(queue.get("mcp_active_runs", 0) or 0)
+    mcp_adoption = mcp_active / tool_loop_runs if tool_loop_runs else 0.0
+    lines.extend(
+        [
+            "# HELP termit_mcp_adoption_rate MCP-active runs share among tool-loop runs.",
+            "# TYPE termit_mcp_adoption_rate gauge",
+            _prom_line("termit_mcp_adoption_rate", mcp_adoption),
+        ]
+    )
+    for key, help_text in (
         ("orchestration_runs_total", "Total orchestration runs."),
         ("coder_attempts_total", "Total coder attempts in orchestration loop."),
         ("coder_retry_runs_total", "Orchestration runs requiring coder retry."),
