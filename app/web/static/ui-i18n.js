@@ -120,6 +120,9 @@ window.TERMIT_I18N = {
     dashWorkers: "Workers alive",
     dashDeadLetter: "Dead-letter rate",
     dashRuns: "Run states",
+    dashMcpInject: "MCP inject rate",
+    dashMcpTools: "MCP tool calls",
+    dashMcpAdoption: "MCP adoption",
     dashWaiting: "Waiting for metrics...",
     dashLoadFailed: "Failed to load agent metrics.",
     dashRefreshFailed: "Dashboard refresh failed.",
@@ -197,17 +200,21 @@ window.TERMIT_I18N = {
       avgAttempts: "avg attempts",
     },
     helpHtml: {
-      dashboard: `<summary>Queue, workers, dead-letter trend</summary>
+      dashboard: `<summary>Queue, workers, dead-letter trend, MCP usage</summary>
         <ul>
           <li><strong>Logic:</strong> cards poll agent queue metrics every 15s and compare against alert thresholds.</li>
           <li><strong>Queue utilization</strong> — depth vs capacity; high values mean backlog risk.</li>
           <li><strong>Workers alive</strong> — background threads processing agent runs.</li>
           <li><strong>Dead-letter rate</strong> — failed runs among terminal states; sparkline is session-local trend.</li>
+          <li><strong>MCP inject rate</strong> — share of MCP-active runs that received auto context/prompt inject (target 20% when ≥5 runs).</li>
+          <li><strong>MCP tool calls</strong> — mcp_invoke / mcp_read_resource / mcp_get_prompt usage from tool loop events.</li>
+          <li><strong>MCP adoption</strong> — MCP-active runs vs tool-loop runs (target 5% when ≥10 tool-loop runs).</li>
           <li><strong>/healthz</strong> — dependency probe for load balancers (DB paths, providers, workers, scheduler).</li>
         </ul>
         <span class="cmd-block">curl -s http://127.0.0.1:8765/healthz
 curl -s http://127.0.0.1:8765/api/metrics/thresholds
-curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics</span>`,
+curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics
+curl -s http://127.0.0.1:8765/api/desktop/mcp-metrics</span>`,
       chat: `<summary>Chat — buttons and routing logic</summary>
         <ul>
           <li><strong>Run</strong> — single LLM request; router picks model by task_type if Model is empty.</li>
@@ -414,6 +421,9 @@ curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics</span>`,
     dashWorkers: "Живые воркеры",
     dashDeadLetter: "Dead-letter rate",
     dashRuns: "Состояния run",
+    dashMcpInject: "MCP inject rate",
+    dashMcpTools: "MCP tool calls",
+    dashMcpAdoption: "MCP adoption",
     dashWaiting: "Ожидание метрик...",
     dashLoadFailed: "Не удалось загрузить метрики агентов.",
     dashRefreshFailed: "Ошибка обновления панели.",
@@ -491,17 +501,21 @@ curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics</span>`,
       avgAttempts: "ср. попыток",
     },
     helpHtml: {
-      dashboard: `<summary>Панель: очередь, воркеры, dead-letter</summary>
+      dashboard: `<summary>Панель: очередь, воркеры, dead-letter, MCP</summary>
         <ul>
           <li><strong>Логика:</strong> карточки опрашивают <code>/api/ops/agent-runs/metrics</code> каждые 15 сек и сравнивают с порогами из <code>/api/metrics/thresholds</code>.</li>
           <li><strong>Загрузка очереди</strong> — сколько run ждут воркеров относительно ёмкости; высокие значения = риск backlog.</li>
           <li><strong>Воркеры</strong> — фоновые потоки, выполняющие agent runs (retry, backoff, dead-letter после исчерпания попыток).</li>
           <li><strong>Dead-letter</strong> — доля failed среди завершённых run; sparkline — тренд в текущей сессии браузера.</li>
+          <li><strong>MCP inject rate</strong> — доля MCP-active runs с auto-inject context/prompt (цель 20% при ≥5 runs).</li>
+          <li><strong>MCP tool calls</strong> — вызовы mcp_invoke / mcp_read_resource / mcp_get_prompt из tool loop.</li>
+          <li><strong>MCP adoption</strong> — MCP-active runs / tool-loop runs (цель 5% при ≥10 tool-loop runs).</li>
           <li><strong>/healthz</strong> — проверка зависимостей: SQLite, провайдеры LLM, воркеры, scheduler обслуживания.</li>
         </ul>
         <span class="cmd-block">curl -s http://127.0.0.1:8765/healthz
 curl -s http://127.0.0.1:8765/api/metrics/thresholds
-curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics</span>`,
+curl -s http://127.0.0.1:8765/api/ops/agent-runs/metrics
+curl -s http://127.0.0.1:8765/api/desktop/mcp-metrics</span>`,
       chat: `<summary>Чат — кнопки и логика маршрутизации</summary>
         <ul>
           <li><strong>Запустить</strong> — один запрос к LLM; если Model пусто, <em>router</em> выбирает модель по task_type (coding/review/debug/explain/general).</li>
@@ -759,6 +773,9 @@ window.TERMIT_I18N_KEYS = {
   "dash.workers": "dashWorkers",
   "dash.deadLetter": "dashDeadLetter",
   "dash.runs": "dashRuns",
+  "dash.mcpInject": "dashMcpInject",
+  "dash.mcpTools": "dashMcpTools",
+  "dash.mcpAdoption": "dashMcpAdoption",
   "dash.waiting": "dashWaiting",
   "label.lang": "langLabel",
 };

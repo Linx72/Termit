@@ -98,6 +98,21 @@
           <div id="dashRunsValue" class="dash-value">—</div>
           <div id="dashRunsMeta" class="dash-meta">Ожидание метрик...</div>
         </div>
+        <div id="dashMcpInjectCard" data-tip="dashMcpInjectCard" class="dash-card ok">
+          <h4 data-i18n="dash.mcpInject">MCP inject rate</h4>
+          <div id="dashMcpInjectValue" class="dash-value">—</div>
+          <div id="dashMcpInjectMeta" class="dash-meta" data-i18n="dash.waiting">Ожидание метрик...</div>
+        </div>
+        <div id="dashMcpToolsCard" data-tip="dashMcpToolsCard" class="dash-card ok">
+          <h4 data-i18n="dash.mcpTools">MCP tool calls</h4>
+          <div id="dashMcpToolsValue" class="dash-value">—</div>
+          <div id="dashMcpToolsMeta" class="dash-meta" data-i18n="dash.waiting">Ожидание метрик...</div>
+        </div>
+        <div id="dashMcpAdoptionCard" data-tip="dashMcpAdoptionCard" class="dash-card ok">
+          <h4 data-i18n="dash.mcpAdoption">MCP adoption</h4>
+          <div id="dashMcpAdoptionValue" class="dash-value">—</div>
+          <div id="dashMcpAdoptionMeta" class="dash-meta" data-i18n="dash.waiting">Ожидание метрик...</div>
+        </div>
       </div>
       <button id="refreshDashboardBtn" data-tip="refreshDashboardBtn" data-i18n="btn.refreshDashboard">Обновить панель</button>
       <button id="checkHealthzBtn" data-tip="checkHealthzBtn" data-i18n="btn.checkHealthz">Проверить /healthz</button>
@@ -596,6 +611,15 @@
       const dashDeadLetterTrendEl = document.getElementById("dashDeadLetterTrend");
       const dashRunsValueEl = document.getElementById("dashRunsValue");
       const dashRunsMetaEl = document.getElementById("dashRunsMeta");
+      const dashMcpInjectCard = document.getElementById("dashMcpInjectCard");
+      const dashMcpToolsCard = document.getElementById("dashMcpToolsCard");
+      const dashMcpAdoptionCard = document.getElementById("dashMcpAdoptionCard");
+      const dashMcpInjectValueEl = document.getElementById("dashMcpInjectValue");
+      const dashMcpInjectMetaEl = document.getElementById("dashMcpInjectMeta");
+      const dashMcpToolsValueEl = document.getElementById("dashMcpToolsValue");
+      const dashMcpToolsMetaEl = document.getElementById("dashMcpToolsMeta");
+      const dashMcpAdoptionValueEl = document.getElementById("dashMcpAdoptionValue");
+      const dashMcpAdoptionMetaEl = document.getElementById("dashMcpAdoptionMeta");
       const deadLetterTrendSamples = [];
       const API_KEY_STORAGE = "termit_api_key";
       let operatorDashboardLoaded = false;
@@ -780,6 +804,44 @@
           dashRunsCard,
           metrics.health_status === "degraded" ? "degraded" : (metrics.health_status === "warning" ? "warning" : "ok")
         );
+
+        const mcpInjectRate = Number(metrics.mcp_inject_rate || 0);
+        const mcpActiveRuns = Number(metrics.mcp_active_runs || 0);
+        const mcpInjectRuns = Number(metrics.mcp_inject_runs || 0);
+        const mcpContextInjectTotal = Number(metrics.mcp_context_inject_total || 0);
+        const mcpPromptInjectTotal = Number(metrics.mcp_prompt_inject_total || 0);
+        const mcpToolCalls = Number(metrics.mcp_tool_calls_total || 0);
+        const mcpInvokeTotal = Number(metrics.mcp_invoke_total || 0);
+        const mcpReadTotal = Number(metrics.mcp_read_resource_total || 0);
+        const mcpGetPromptTotal = Number(metrics.mcp_get_prompt_total || 0);
+        const toolLoopRuns = Number(metrics.tool_loop_runs || 0);
+        const mcpAdoptionRate = toolLoopRuns > 0 ? mcpActiveRuns / toolLoopRuns : 0;
+        const mcpInjectTarget = 0.2;
+        const mcpAdoptionTarget = 0.05;
+
+        dashMcpInjectValueEl.textContent = formatPercent(mcpInjectRate);
+        dashMcpInjectMetaEl.textContent =
+          `${mcpInjectRuns}/${mcpActiveRuns} runs · ctx ${mcpContextInjectTotal} · prompt ${mcpPromptInjectTotal} · target ${formatPercent(mcpInjectTarget)}`;
+        applyDashCardStatus(
+          dashMcpInjectCard,
+          mcpActiveRuns >= 5 && mcpInjectRate < mcpInjectTarget
+            ? "warning"
+            : (mcpActiveRuns > 0 ? "ok" : "ok")
+        );
+
+        dashMcpToolsValueEl.textContent = String(mcpToolCalls);
+        dashMcpToolsMetaEl.textContent =
+          `invoke ${mcpInvokeTotal} · read ${mcpReadTotal} · get_prompt ${mcpGetPromptTotal}`;
+        applyDashCardStatus(dashMcpToolsCard, mcpToolCalls > 0 ? "ok" : "ok");
+
+        dashMcpAdoptionValueEl.textContent = formatPercent(mcpAdoptionRate);
+        dashMcpAdoptionMetaEl.textContent =
+          `${mcpActiveRuns}/${toolLoopRuns} MCP-active / tool-loop · target ${formatPercent(mcpAdoptionTarget)}`;
+        applyDashCardStatus(
+          dashMcpAdoptionCard,
+          toolLoopRuns >= 10 && mcpAdoptionRate < mcpAdoptionTarget ? "warning" : "ok"
+        );
+
         operatorDashboardLoaded = true;
       }
 

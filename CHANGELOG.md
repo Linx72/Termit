@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.16] - 2026-06-17
+
+### Added
+- Web ops dashboard: MCP inject rate, tool calls, and adoption cards
+- Dashboard help (RU/EN) documents MCP metrics and `/api/desktop/mcp-metrics`
+- Tests `test_web_dashboard_mcp.py`
+
 ## [0.4.15] - 2026-06-17
 
 ### Added

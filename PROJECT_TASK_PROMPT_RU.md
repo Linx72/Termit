@@ -451,6 +451,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** MCP usage виден в ops/desktop; gates в north-star.
 
+### Следующий этап (0.4.16): Web ops dashboard MCP panel
+
+- [x] Dashboard cards: inject rate, tool calls, adoption
+- [x] i18n RU/EN + help section
+- [x] Tests `test_web_dashboard_mcp.py`
+
+**DoD:** Web UI показывает MCP metrics из agent-runs/metrics.
+
 ---
 
 ## Порядок выполнения
