@@ -167,7 +167,7 @@ Learning: training_signals → curator → finetune → regression gate
 | Задача | Файлы | Exit |
 |--------|-------|------|
 | Orchestration phase «plan only» read-only | `multi_agent_orchestrator.py` | |
-| UI «Build» → enqueue agent run with plan | desktop + SDK | |
+| UI «Build» → enqueue agent run with plan | desktop + SDK + `/api/orchestration/build-from-plan` | ✅ |
 
 **Sprint C exit criteria**
 

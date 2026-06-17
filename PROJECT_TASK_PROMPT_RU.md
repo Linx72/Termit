@@ -380,6 +380,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** агент может вызывать браузер через `mcp_invoke` + audit; preset документирован.
 
+### Следующий этап (0.4.8): Plan → Build agent enqueue
+
+- [x] `POST /api/orchestration/build-from-plan` — очередь agent run из плана
+- [x] `PlanBuildService` + trace span `plan.build_enqueue`
+- [x] Desktop Plan panel: Build / Build+Verify → agent run (не только Composer)
+- [x] `orchestrationOps.buildFromPlan` в termit-client; Prometheus `plan_build_enqueued_total`
+
+**DoD:** Plan → Build ставит agent run в очередь; метрики и тесты API.
+
 ---
 
 ## Порядок выполнения

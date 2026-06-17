@@ -645,4 +645,9 @@ export class TermitClient {
   requestFeedback<T>(path: string, init?: RequestInit): Promise<T> {
     return this.request<T>(path, init);
   }
+
+  /** Orchestration APIs (`/api/orchestration/*`). */
+  requestOrchestration<T>(path: string, init?: RequestInit): Promise<T> {
+    return this.request<T>(path, init);
+  }
 }

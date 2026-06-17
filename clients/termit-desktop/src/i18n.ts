@@ -21,8 +21,8 @@ const messages = {
     runCommand: "Выполнить",
     commandPlaceholder: "git status, pytest, npm test…",
     planTitle: "Режим плана",
-    planHint: "Только план — без кода. «Build → Composer» переносит план в Компоновщик.",
-    build: "Build → Composer",
+    planHint: "Только план — без кода. «Build» ставит agent run в очередь по плану.",
+    build: "Build → Agent run",
     sessions: "Сессии",
     newSession: "Новая",
     searchSessions: "Поиск…",
@@ -110,7 +110,7 @@ const messages = {
     runEvalHeavyJob: "Запустить eval heavy job",
     safeApplyHint: "Безопасное применение",
     contextSuggestions: "Подсказки контекста",
-    buildAndVerify: "Build → Composer → Verify",
+    buildAndVerify: "Build → Agent run + Verify",
     checkpointAvailable: "Checkpoint",
     observabilityTitle: "Наблюдаемость runtime",
     obsDeadLetter: "Dead-letter rate",
@@ -338,7 +338,7 @@ const messages = {
     sgPlanPurpose:
       "Сначала план без кода — снижает риск лишних правок. Готовый план переносится в Компоновщик или с verify.",
     sgPlanSteps:
-      "Опишите фичу или рефакторинг в поле ввода.\n«Составить план» — модель вернёт шаги без патчей и команд.\n«Build → Composer» — план в Компоновщик для реализации.\n«Build → Composer → Verify» — то же + подсказка verify-команд в Терминале.",
+      "Опишите фичу или рефакторинг в поле ввода.\n«Составить план» — модель вернёт шаги без патчей и команд.\n«Build → Agent run» — постановка agent run по плану.\n«Build → Agent run + Verify» — то же с verify_after_patch.",
     sgTerminalTitle: "Раздел «Терминал»",
     sgTerminalPurpose:
       "Выполнение shell-команд через Termit execute_command (с подтверждением и RBAC). Удобно для git, pytest, npm.",
@@ -488,8 +488,8 @@ const messages = {
     runCommand: "Run",
     commandPlaceholder: "git status, pytest, npm test…",
     planTitle: "Plan mode",
-    planHint: "Planning only — no code. Build sends the plan to Composer.",
-    build: "Build → Composer",
+    planHint: "Planning only — no code. Build enqueues an agent run from the plan.",
+    build: "Build → Agent run",
     sessions: "Sessions",
     newSession: "New",
     searchSessions: "Search…",
@@ -577,7 +577,7 @@ const messages = {
     runEvalHeavyJob: "Run eval heavy job",
     safeApplyHint: "Safe apply",
     contextSuggestions: "Context suggestions",
-    buildAndVerify: "Build → Composer → Verify",
+    buildAndVerify: "Build → Agent run + Verify",
     checkpointAvailable: "Checkpoint",
     observabilityTitle: "Runtime observability",
     obsDeadLetter: "Dead-letter rate",
@@ -805,7 +805,7 @@ const messages = {
     sgPlanPurpose:
       "Plan without code first. Send the plan to Composer or Composer+verify when ready.",
     sgPlanSteps:
-      "Describe the feature or refactor.\nPlan — model returns steps without patches.\nBuild → Composer sends plan to Composer.\nBuild → Composer → Verify adds verify hints in Terminal.",
+      "Describe the feature or refactor.\nPlan — model returns steps without patches.\nBuild → Agent run enqueues implementation from the plan.\nBuild → Agent run + Verify enables verify_after_patch.",
     sgTerminalTitle: "Terminal tab",
     sgTerminalPurpose:
       "Shell via Termit execute_command (confirmation + RBAC). Good for git, pytest, npm.",

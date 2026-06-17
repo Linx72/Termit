@@ -20,6 +20,7 @@ class OrchestrationApiTests(unittest.TestCase):
         self.assertIn("openhands_contract_actions_total", body)
         self.assertIn("orchestration_tool_loop_runs_total", body)
         self.assertIn("orchestration_tool_steps_total", body)
+        self.assertIn("plan_build_enqueued_total", body)
 
 
 if __name__ == "__main__":

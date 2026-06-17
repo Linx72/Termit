@@ -22,12 +22,14 @@ from app.services.telemetry_store import TelemetryStore
 from app.services.agent_service import AgentService
 from app.services.eval_service import EvalService
 from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
+from app.services.plan_build_service import PlanBuildService
 from app.state import (
     get_agent_service,
     get_desktop_kpi_gate_service,
     get_eval_service,
     get_metrics_snapshot_store,
     get_multi_agent_orchestrator,
+    get_plan_build_service,
     get_telemetry_store,
     get_beta_cohort_service,
 )
@@ -145,12 +147,14 @@ async def metrics_prometheus(
     telemetry: TelemetryStore = Depends(get_telemetry_store),
     agent_service: AgentService = Depends(get_agent_service),
     orchestrator: MultiAgentOrchestrator = Depends(get_multi_agent_orchestrator),
+    plan_build: PlanBuildService = Depends(get_plan_build_service),
     eval_service: EvalService = Depends(get_eval_service),
     settings: Settings = Depends(get_settings),
 ) -> PlainTextResponse:
     summary = telemetry.snapshot()
     queue = agent_service.queue_metrics()
     orchestration = orchestrator.metrics_snapshot()
+    orchestration.update(plan_build.metrics_snapshot())
     thresholds = AgentAlertThresholds(
         queue_utilization_percent=settings.agent_alert_queue_utilization_percent,
         dead_letter_rate=settings.agent_alert_dead_letter_rate,
@@ -271,6 +275,7 @@ async def metrics_prometheus(
         ("openhands_contract_actions_total", "Captured OpenHands action/observation pairs."),
         ("orchestration_tool_loop_runs_total", "Runs where orchestrator tool-loop executed."),
         ("orchestration_tool_steps_total", "Tool steps executed by orchestrator tool-loop."),
+        ("plan_build_enqueued_total", "Agent runs enqueued from Plan → Build."),
     ):
         lines.append(f"# HELP termit_{key} {help_text}")
         lines.append(f"# TYPE termit_{key} gauge")

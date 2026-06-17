@@ -36,6 +36,7 @@ from app.services.memory_store import MemoryBackend, MemoryStore
 from app.services.metrics_snapshot_store import MetricsSnapshotStore
 from app.services.model_router import ModelRouter
 from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
+from app.services.plan_build_service import PlanBuildService
 from app.services.routing_policy_service import RoutingPolicyService
 from app.services.ops_service import OpsService
 from app.services.team_workspace_service import TeamWorkspaceService
@@ -817,6 +818,20 @@ def _build_multi_agent_orchestrator() -> MultiAgentOrchestrator:
 
 def get_multi_agent_orchestrator() -> MultiAgentOrchestrator:
     return _build_multi_agent_orchestrator()
+
+
+@lru_cache
+def _build_plan_build_service() -> PlanBuildService:
+    return PlanBuildService(
+        agent_service=_build_agent_service(),
+        registry=_build_agent_registry_store(),
+        templates=_build_agent_templates_store(),
+        trace_spans=_build_trace_span_store(),
+    )
+
+
+def get_plan_build_service() -> PlanBuildService:
+    return _build_plan_build_service()
 
 
 @lru_cache

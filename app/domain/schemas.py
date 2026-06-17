@@ -344,6 +344,26 @@ class OrchestrationMetricsResponse(BaseModel):
     openhands_contract_actions_total: float = 0
     orchestration_tool_loop_runs_total: float = 0
     orchestration_tool_steps_total: float = 0
+    plan_build_enqueued_total: float = 0
+
+
+class BuildFromPlanRequest(BaseModel):
+    plan_text: str = Field(min_length=1, max_length=20000)
+    objective: Optional[str] = Field(default=None, max_length=500)
+    agent_id: Optional[str] = None
+    template_id: Optional[str] = Field(default="desktop-cursor-parity-stable", max_length=64)
+    session_id: Optional[str] = None
+    plan_run_id: Optional[str] = Field(default=None, max_length=64)
+    verify_after_patch: bool = False
+    priority: int = Field(default=0, ge=0, le=100)
+
+
+class BuildFromPlanResponse(BaseModel):
+    run_id: str
+    agent_id: str
+    state: str
+    queued_position: int
+    input_preview: str
 
 
 class CrossPlatformStackInfo(BaseModel):

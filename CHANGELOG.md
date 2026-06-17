@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.8] - 2026-06-17
+
+### Added
+- Plan → Build: `POST /api/orchestration/build-from-plan` enqueues agent run from plan
+- Desktop Plan panel Build / Build+Verify → agent queue (not Composer-only)
+- `buildFromPlan` in termit-client; Prometheus `plan_build_enqueued_total`
+
 ## [0.4.7] - 2026-06-17
 
 ### Added

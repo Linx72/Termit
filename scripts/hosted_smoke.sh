@@ -58,6 +58,24 @@ expect_code() {
   [[ "$got" == "$want" ]]
 }
 
+expect_post_json() {
+  local path="$1"
+  local want="$2"
+  local body="$3"
+  local got
+  if [[ -n "$API_KEY" ]]; then
+    got="$(curl -s --max-time "$TIMEOUT" -o /dev/null -w '%{http_code}' \
+      -H "Content-Type: application/json" -H "X-API-Key: ${API_KEY}" \
+      -X POST -d "$body" "${BASE_URL}${path}")"
+  else
+    got="$(curl -s --max-time "$TIMEOUT" -o /dev/null -w '%{http_code}' \
+      -H "Content-Type: application/json" \
+      -X POST -d "$body" "${BASE_URL}${path}")"
+  fi
+  echo "POST ${path} -> HTTP ${got} (want ${want})"
+  [[ "$got" == "$want" ]]
+}
+
 echo "== Termit hosted smoke =="
 echo "Base URL: ${BASE_URL}"
 
@@ -80,6 +98,7 @@ expect_code /api/eval/dashboard 200
 expect_code /api/desktop/kpi-gates 200
 expect_code /api/ops/beta-metrics 200
 expect_code /api/platform/mcp/servers 200
+expect_post_json /api/orchestration/build-from-plan 200 '{"plan_text":"1. Smoke step"}'
 
 if [[ -n "$API_KEY" ]]; then
   expect_code /api/ops/agent-runs/metrics 200

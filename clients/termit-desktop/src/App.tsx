@@ -3,6 +3,7 @@ import {
   TermitClient,
   buildComposerMessage,
   buildComponentComposerMessage,
+  buildFromPlan,
   filterComposerPatchesToPaths,
   parseComposerPatches,
   stripComposerJsonBlock,
@@ -1754,59 +1755,47 @@ export function App() {
     }
   };
 
-  const runPlanToComposer = (planText: string) => {
+  const runPlanToAgentBuild = async (planText: string, verify = false) => {
     const trimmed = planText.trim();
-    if (!trimmed) {
+    if (!trimmed || !connected) {
       return;
     }
-    setComposerInput(trimmed);
-    setSettings((prev) => ({ ...prev, chatInteractionMode: "agent" }));
-    setAttachments([]);
-    setBlocks((prev) => [
-      ...prev,
-      {
-        id: blockId(),
-        kind: "meta",
-        text:
-          locale === "ru"
-            ? "План перенесён в Composer. Теперь можно запускать реализацию."
-            : "Plan moved to Composer. You can now run implementation.",
-      },
-    ]);
-    setBlocks((prev) => [
-      ...prev,
-      {
-        id: blockId(),
-        kind: "meta",
-        text:
-          locale === "ru"
-            ? "Cursor flow: режим переключен на Agent, откройте Composer и запустите реализацию плана."
-            : "Cursor flow: switched to Agent mode, open Composer and run implementation from the plan.",
-      },
-    ]);
+    setBusy(true);
+    try {
+      const templateId = settings.defaultAgentTemplate || "desktop-cursor-parity-stable";
+      const result = await buildFromPlan(client, {
+        plan_text: trimmed,
+        verify_after_patch: verify,
+        session_id: settings.sessionId || undefined,
+        template_id: templateId,
+      });
+      setComposerInput(trimmed);
+      setSettings((prev) => ({ ...prev, chatInteractionMode: "agent" }));
+      setBlocks((prev) => [
+        ...prev,
+        {
+          id: blockId(),
+          kind: "meta",
+          text:
+            locale === "ru"
+              ? `Plan → Build: agent run ${result.run_id} в очереди (позиция ${result.queued_position}).`
+              : `Plan → Build: agent run ${result.run_id} queued (position ${result.queued_position}).`,
+        },
+      ]);
+      if (result.agent_id) {
+        setSelectedAgentId(result.agent_id);
+        void refreshAgentRuns(result.agent_id);
+      }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setBlocks((prev) => [...prev, { id: blockId(), kind: "error", text }]);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const runPlanToComposerWithVerify = (planText: string) => {
-    const trimmed = planText.trim();
-    if (!trimmed) {
-      return;
-    }
-    setPendingVerifyCommands((prev) => {
-      const items = [...prev, "python3 -m unittest discover -s tests -q"];
-      return items.filter((item, index, all) => all.indexOf(item) === index);
-    });
-    runPlanToComposer(trimmed);
-    setBlocks((prev) => [
-      ...prev,
-      {
-        id: blockId(),
-        kind: "meta",
-        text:
-          locale === "ru"
-            ? "Добавлена verify-команда для Терминала."
-            : "Verify command added for Terminal.",
-      },
-    ]);
+    void runPlanToAgentBuild(planText, true);
   };
 
   const runPlanMode = async (message: string): Promise<{ response: string; sessionId?: string }> => {
@@ -2921,7 +2910,7 @@ export function App() {
             locale={locale}
             connected={connected}
             onRunPlan={runPlanMode}
-            onBuild={runPlanToComposer}
+            onBuild={(plan) => void runPlanToAgentBuild(plan, false)}
             onBuildAndVerify={runPlanToComposerWithVerify}
             externalBusy={busy}
             modeLabel={activeRunModeLabel}
