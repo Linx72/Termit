@@ -165,3 +165,21 @@ export interface OnboardingMetricsResponse {
 export async function getOnboardingMetrics(client: TermitClient): Promise<OnboardingMetricsResponse> {
   return client.requestDesktop<OnboardingMetricsResponse>("/api/desktop/onboarding-metrics");
 }
+
+export interface McpUsageMetricsResponse {
+  mcp_context_inject_total: number;
+  mcp_prompt_inject_total: number;
+  mcp_invoke_total: number;
+  mcp_read_resource_total: number;
+  mcp_get_prompt_total: number;
+  mcp_tool_calls_total: number;
+  mcp_inject_runs: number;
+  mcp_active_runs: number;
+  mcp_inject_rate: number;
+  tool_loop_runs: number;
+  mcp_adoption_rate: number | null;
+}
+
+export async function getMcpUsageMetrics(client: TermitClient): Promise<McpUsageMetricsResponse> {
+  return client.requestDesktop<McpUsageMetricsResponse>("/api/desktop/mcp-metrics");
+}

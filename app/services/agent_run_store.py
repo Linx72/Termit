@@ -6,6 +6,7 @@ from typing import Optional, Protocol
 
 from app.domain.schemas import AgentRunEvent, AgentRunRecordResponse, AgentRunState
 from app.services.tool_loop_metrics import aggregate_tool_loop_events, empty_tool_loop_metrics
+from app.services.mcp_usage_metrics import aggregate_mcp_usage_events, empty_mcp_usage_metrics
 
 
 class AgentRunStore(Protocol):
@@ -37,6 +38,9 @@ class AgentRunStore(Protocol):
         ...
 
     def tool_loop_event_metrics(self) -> dict[str, object]:
+        ...
+
+    def mcp_usage_metrics(self) -> dict[str, object]:
         ...
 
     def cleanup_old_runs(
@@ -124,6 +128,16 @@ class InMemoryAgentRunStore:
         if not rows:
             return empty_tool_loop_metrics()
         return aggregate_tool_loop_events(rows, completed_run_ids)
+
+    def mcp_usage_metrics(self) -> dict[str, object]:
+        with self._lock:
+            rows: list[tuple[str, str, str]] = []
+            for run_id, events in self._events.items():
+                for event in events:
+                    rows.append((run_id, event.event_type, event.message))
+        if not rows:
+            return empty_mcp_usage_metrics()
+        return aggregate_mcp_usage_events(rows)
 
     def cleanup_old_runs(
         self,

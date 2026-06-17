@@ -1202,6 +1202,27 @@ def _build_desktop_kpi_gate_service():
     def onboarding_metrics_provider() -> dict[str, object]:
         return _build_onboarding_experiment_service().summarize(telemetry.list_events())
 
+    def mcp_metrics_provider() -> dict[str, object]:
+        raw = agent_service.queue_metrics()
+        tool_loop_runs = int(raw.get("tool_loop_runs", 0) or 0)
+        mcp_active = int(raw.get("mcp_active_runs", 0) or 0)
+        adoption = round(mcp_active / tool_loop_runs, 4) if tool_loop_runs else None
+        return {
+            **{key: raw.get(key) for key in (
+                "mcp_context_inject_total",
+                "mcp_prompt_inject_total",
+                "mcp_invoke_total",
+                "mcp_read_resource_total",
+                "mcp_get_prompt_total",
+                "mcp_tool_calls_total",
+                "mcp_inject_runs",
+                "mcp_active_runs",
+                "mcp_inject_rate",
+                "tool_loop_runs",
+            )},
+            "mcp_adoption_rate": adoption,
+        }
+
     return DesktopKpiGateService(
         settings.desktop_north_star_path,
         eval_dashboard_provider=eval_dashboard_provider,
@@ -1210,6 +1231,7 @@ def _build_desktop_kpi_gate_service():
         metrics_summary_provider=metrics_summary_provider,
         beta_metrics_provider=beta_metrics_provider,
         onboarding_metrics_provider=onboarding_metrics_provider,
+        mcp_metrics_provider=mcp_metrics_provider,
     )
 
 

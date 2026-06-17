@@ -561,6 +561,15 @@ class AgentRunsMetricsResponse(BaseModel):
     tool_loop_verify_pass_rate: float = 0.0
     tool_loop_tool_success_rate: float = 0.0
     tool_loop_completion_rate: float = 0.0
+    mcp_context_inject_total: int = 0
+    mcp_prompt_inject_total: int = 0
+    mcp_invoke_total: int = 0
+    mcp_read_resource_total: int = 0
+    mcp_get_prompt_total: int = 0
+    mcp_tool_calls_total: int = 0
+    mcp_inject_runs: int = 0
+    mcp_active_runs: int = 0
+    mcp_inject_rate: float = 0.0
     orchestration_runs_total: float = 0.0
     coder_attempts_total: float = 0.0
     coder_retry_runs_total: float = 0.0
@@ -1945,6 +1954,20 @@ class OnboardingMetricsResponse(BaseModel):
     variants: list[OnboardingVariantMetrics] = Field(default_factory=list)
     unknown_assigned: int = 0
     unknown_completed: int = 0
+
+
+class McpUsageMetricsResponse(BaseModel):
+    mcp_context_inject_total: int = 0
+    mcp_prompt_inject_total: int = 0
+    mcp_invoke_total: int = 0
+    mcp_read_resource_total: int = 0
+    mcp_get_prompt_total: int = 0
+    mcp_tool_calls_total: int = 0
+    mcp_inject_runs: int = 0
+    mcp_active_runs: int = 0
+    mcp_inject_rate: float = 0.0
+    tool_loop_runs: int = 0
+    mcp_adoption_rate: Optional[float] = None
 
 
 class MediaGenerateImageRequest(BaseModel):

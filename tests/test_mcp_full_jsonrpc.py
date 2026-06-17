@@ -134,6 +134,26 @@ class OnboardingKpiGateTests(unittest.TestCase):
         onboarding_gate = next(item for item in payload["gates"] if item["gate_id"] == "onboarding_conversion")
         self.assertTrue(onboarding_gate["passed"])
 
+    def test_mcp_inject_rate_gate_when_active_runs_enough(self) -> None:
+        service = DesktopKpiGateService(
+            "data/desktop_north_star.json",
+            eval_dashboard_provider=lambda: {"pass_rate": 0.9},
+            agent_metrics_provider=lambda: {
+                "tool_loop_completion_rate": 0.9,
+                "tool_loop_tool_success_rate": 0.9,
+            },
+            mcp_metrics_provider=lambda: {
+                "mcp_active_runs": 8,
+                "mcp_inject_rate": 0.5,
+                "tool_loop_runs": 20,
+                "mcp_adoption_rate": 0.4,
+            },
+        )
+        payload = service.evaluate_gates()
+        gate_ids = [str(item["gate_id"]) for item in payload["gates"]]
+        self.assertIn("mcp_inject_rate", gate_ids)
+        self.assertIn("mcp_adoption_rate", gate_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

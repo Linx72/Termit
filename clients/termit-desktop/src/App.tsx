@@ -367,6 +367,7 @@ export function App() {
   >([]);
   const [mcpPromptPreview, setMcpPromptPreview] = useState("");
   const [mcpPromptLoading, setMcpPromptLoading] = useState(false);
+  const [mcpMetricsText, setMcpMetricsText] = useState("");
   const [runSpansText, setRunSpansText] = useState("Select a run to view trace spans.");
   const [platformStatus, setPlatformStatus] = useState("Platform services not loaded.");
   const [runtimeMeta, setRuntimeMeta] = useState(() => getDesktopRuntimeMeta());
@@ -874,6 +875,21 @@ export function App() {
         })
       );
       setPlatformMcpServers(capabilityRows);
+      try {
+        const mcpUsage = await client.requestDesktop<{
+          mcp_inject_runs: number;
+          mcp_active_runs: number;
+          mcp_tool_calls_total: number;
+          mcp_inject_rate: number;
+        }>("/api/desktop/mcp-metrics");
+        setMcpMetricsText(
+          locale === "ru"
+            ? `MCP: inject ${mcpUsage.mcp_inject_runs}/${mcpUsage.mcp_active_runs} runs · tools ${mcpUsage.mcp_tool_calls_total} · rate ${Math.round(mcpUsage.mcp_inject_rate * 100)}%`
+            : `MCP: inject ${mcpUsage.mcp_inject_runs}/${mcpUsage.mcp_active_runs} runs · tools ${mcpUsage.mcp_tool_calls_total} · rate ${Math.round(mcpUsage.mcp_inject_rate * 100)}%`
+        );
+      } catch {
+        setMcpMetricsText("");
+      }
       setPlatformStatus(
         [
           `hooks: ${hooks.enabled ? "on" : "off"} (${hooks.configured_events.length} events)`,
@@ -3126,6 +3142,7 @@ export function App() {
             />
             {t(locale, "mcpContextInject")}
           </label>
+          {mcpMetricsText ? <p className="hint">{mcpMetricsText}</p> : null}
         </div>
         </details>
 

@@ -4,18 +4,20 @@
 
 ## Сводка
 
-- **v0.4.14** — MCP prompt picker Desktop, `mcp_context_inject` opt-out, eval P5
-- Тесты: **545 OK** (skipped=6)
+- **v0.4.15** — MCP usage telemetry (ops metrics, desktop API, KPI gates)
+- Тесты: **548 OK** (skipped=6)
 
 ## Файлы сессии
 
-- `app/domain/schemas.py` — `mcp_context_inject`
-- `app/services/agent_service.py` — respect opt-out
-- `app/services/eval_service.py` — `platform_mcp_prompt`
-- `clients/termit-desktop/src/App.tsx`, `settings.ts`, `i18n.ts`
-- `clients/termit-client/src/types.ts`
-- `data/eval_scenarios.json` — P5
+- `app/services/mcp_usage_metrics.py` (new)
+- `app/services/agent_run_store.py`, `sqlite_agent_run_store.py`
+- `app/services/desktop_kpi_gate_service.py`
+- `app/api/routes/desktop.py` — `/mcp-metrics`
+- `data/desktop_north_star.json`
+- `clients/termit-client/src/desktopOps.ts`
+- `clients/termit-desktop/src/App.tsx`
+- `tests/test_mcp_usage_metrics.py`
 
 ## Открытые задачи
 
-- [ ] Следующий `do all`: MCP inject telemetry в ops dashboard / KPI gate для MCP usage
+- [ ] Следующий `do all`: MCP metrics panel в ops dashboard web UI

@@ -18,6 +18,7 @@ class DesktopKpiGateService:
         metrics_summary_provider: Callable[[], dict[str, object]] | None = None,
         beta_metrics_provider: Callable[[], dict[str, object]] | None = None,
         onboarding_metrics_provider: Callable[[], dict[str, object]] | None = None,
+        mcp_metrics_provider: Callable[[], dict[str, object]] | None = None,
     ) -> None:
         self._path = Path(north_star_path)
         self._eval_dashboard_provider = eval_dashboard_provider
@@ -26,6 +27,7 @@ class DesktopKpiGateService:
         self._metrics_summary_provider = metrics_summary_provider
         self._beta_metrics_provider = beta_metrics_provider
         self._onboarding_metrics_provider = onboarding_metrics_provider
+        self._mcp_metrics_provider = mcp_metrics_provider
 
     def _load_targets(self) -> dict[str, float]:
         if not self._path.is_file():
@@ -144,6 +146,28 @@ class DesktopKpiGateService:
                     targets.get("onboarding_conversion_min", 0.5),
                 )
 
+        mcp_metrics: dict[str, object] = {}
+        if self._mcp_metrics_provider is not None:
+            mcp_metrics = self._mcp_metrics_provider()
+            mcp_active = int(mcp_metrics.get("mcp_active_runs", 0) or 0)
+            tool_loop_runs = int(mcp_metrics.get("tool_loop_runs", 0) or 0)
+            if mcp_active >= 5:
+                add_gate(
+                    "mcp_inject_rate",
+                    "MCP context inject rate",
+                    float(mcp_metrics.get("mcp_inject_rate", 0.0)),
+                    targets.get("mcp_inject_rate_min", 0.2),
+                )
+            if tool_loop_runs >= 10:
+                adoption = mcp_metrics.get("mcp_adoption_rate")
+                if isinstance(adoption, (int, float)):
+                    add_gate(
+                        "mcp_adoption_rate",
+                        "MCP adoption (runs with MCP / tool loop runs)",
+                        float(adoption),
+                        targets.get("mcp_adoption_rate_min", 0.05),
+                    )
+
         telemetry: dict[str, object] = {}
         if self._telemetry_summary_provider is not None:
             telemetry = self._telemetry_summary_provider()
@@ -210,6 +234,7 @@ class DesktopKpiGateService:
             },
             "telemetry": telemetry,
             "metrics_summary": metrics_summary,
+            "mcp_metrics": mcp_metrics,
         }
 
     def journeys_payload(self) -> dict[str, object]:

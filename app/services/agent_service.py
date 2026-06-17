@@ -462,6 +462,7 @@ class AgentService:
             "by_outcome_class": by_outcome_class,
         }
         metrics.update(self._run_store.tool_loop_event_metrics())
+        metrics.update(self._run_store.mcp_usage_metrics())
         return metrics
 
     def cleanup_runs(self, retention_days: int | None = None, dry_run: bool = False) -> dict[str, object]:

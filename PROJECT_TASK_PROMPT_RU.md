@@ -442,6 +442,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Prompt picker работает; inject можно отключить; P5 проходит.
 
+### Следующий этап (0.4.15): MCP telemetry + KPI gates
+
+- [x] `mcp_usage_metrics` из agent run events
+- [x] Поля MCP в `/api/ops/agent-runs/metrics`
+- [x] `GET /api/desktop/mcp-metrics` + Desktop hint line
+- [x] KPI gates `mcp_inject_rate`, `mcp_adoption_rate`
+
+**DoD:** MCP usage виден в ops/desktop; gates в north-star.
+
 ---
 
 ## Порядок выполнения

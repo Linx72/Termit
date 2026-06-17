@@ -16,6 +16,7 @@ from app.domain.schemas import (
     DesktopWorkflowEventResponse,
     OnboardingMetricsResponse,
     OnboardingVariantMetrics,
+    McpUsageMetricsResponse,
 )
 from app.services.agent_policy_preset_service import AgentPolicyPresetService
 from app.services.desktop_accelerator_service import DesktopAcceleratorService
@@ -23,6 +24,7 @@ from app.services.desktop_kpi_gate_service import DesktopKpiGateService
 from app.services.desktop_workflow_telemetry_service import DesktopWorkflowTelemetryService
 from app.services.onboarding_experiment_service import OnboardingExperimentService
 from app.state import (
+    get_agent_service,
     get_agent_policy_preset_service,
     get_desktop_accelerator_service,
     get_desktop_kpi_gate_service,
@@ -89,6 +91,29 @@ async def onboarding_metrics(
         variants=variants,
         unknown_assigned=int(summary.get("unknown_assigned", 0)),
         unknown_completed=int(summary.get("unknown_completed", 0)),
+    )
+
+
+@router.get("/mcp-metrics", response_model=McpUsageMetricsResponse)
+async def mcp_metrics(
+    agent_service=Depends(get_agent_service),
+) -> McpUsageMetricsResponse:
+    raw = agent_service.queue_metrics()
+    tool_loop_runs = int(raw.get("tool_loop_runs", 0) or 0)
+    mcp_active = int(raw.get("mcp_active_runs", 0) or 0)
+    adoption = round(mcp_active / tool_loop_runs, 4) if tool_loop_runs else None
+    return McpUsageMetricsResponse(
+        mcp_context_inject_total=int(raw.get("mcp_context_inject_total", 0) or 0),
+        mcp_prompt_inject_total=int(raw.get("mcp_prompt_inject_total", 0) or 0),
+        mcp_invoke_total=int(raw.get("mcp_invoke_total", 0) or 0),
+        mcp_read_resource_total=int(raw.get("mcp_read_resource_total", 0) or 0),
+        mcp_get_prompt_total=int(raw.get("mcp_get_prompt_total", 0) or 0),
+        mcp_tool_calls_total=int(raw.get("mcp_tool_calls_total", 0) or 0),
+        mcp_inject_runs=int(raw.get("mcp_inject_runs", 0) or 0),
+        mcp_active_runs=mcp_active,
+        mcp_inject_rate=float(raw.get("mcp_inject_rate", 0.0) or 0.0),
+        tool_loop_runs=tool_loop_runs,
+        mcp_adoption_rate=adoption,
     )
 
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.15] - 2026-06-17
+
+### Added
+- MCP usage telemetry in `/api/ops/agent-runs/metrics` (inject counts, tool calls, inject rate)
+- `GET /api/desktop/mcp-metrics` — MCP adoption + inject summary for Desktop
+- KPI gates `mcp_inject_rate` and `mcp_adoption_rate` (north-star targets)
+- `mcp_usage_metrics` aggregation from agent run events
+
 ## [0.4.14] - 2026-06-17
 
 ### Added

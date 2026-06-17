@@ -64,6 +64,8 @@
     "automation_rate_min": 0.6,
     "chat_p95_ttft_ms_max": 3000,
     "d30_retention_min": 0.35,
-    "onboarding_conversion_min": 0.5
+    "onboarding_conversion_min": 0.5,
+    "mcp_inject_rate_min": 0.2,
+    "mcp_adoption_rate_min": 0.05
   }
 }

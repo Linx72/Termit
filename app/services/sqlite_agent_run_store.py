@@ -8,6 +8,7 @@ from typing import Optional
 
 from app.domain.schemas import AgentRunEvent, AgentRunRecordResponse, AgentRunState
 from app.services.tool_loop_metrics import aggregate_tool_loop_events, empty_tool_loop_metrics
+from app.services.mcp_usage_metrics import aggregate_mcp_usage_events, empty_mcp_usage_metrics
 
 
 class SQLiteAgentRunStore:
@@ -256,6 +257,21 @@ class SQLiteAgentRunStore:
         completed_run_ids = {str(row["run_id"]) for row in completed_rows}
         rows = [(str(row["run_id"]), str(row["event_type"]), str(row["message"])) for row in event_rows]
         return aggregate_tool_loop_events(rows, completed_run_ids)
+
+    def mcp_usage_metrics(self) -> dict[str, object]:
+        with self._lock, closing(self._connect()) as conn:
+            event_rows = conn.execute(
+                """
+                SELECT run_id, event_type, message
+                FROM agent_run_events
+                WHERE event_type IN ('mcp_context_injected', 'mcp_prompt_injected')
+                   OR event_type IN ('tool_loop_tool', 'tool_loop_tool_error', 'tool_loop_step')
+                """
+            ).fetchall()
+        if not event_rows:
+            return empty_mcp_usage_metrics()
+        rows = [(str(row["run_id"]), str(row["event_type"]), str(row["message"])) for row in event_rows]
+        return aggregate_mcp_usage_events(rows)
 
     def cleanup_old_runs(
         self,

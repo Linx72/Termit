@@ -148,6 +148,10 @@ class DesktopOpsTests(unittest.TestCase):
         self.assertEqual(gates.status_code, 200)
         self.assertIn("gates", gates.json())
 
+        mcp_metrics = client.get("/api/desktop/mcp-metrics")
+        self.assertEqual(mcp_metrics.status_code, 200)
+        self.assertIn("mcp_active_runs", mcp_metrics.json())
+
         beta = client.get("/api/ops/beta-metrics")
         self.assertEqual(beta.status_code, 200)
         self.assertIn("target_d30_retention", beta.json())
