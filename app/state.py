@@ -367,6 +367,7 @@ def _task_agent_runner(
     task_type,
     session_id: Optional[str],
     project_id: Optional[str],
+    model: Optional[str] = None,
 ) -> str:
     from app.domain.schemas import AgentRunRequest, AgentRunState, TaskType
 
@@ -381,7 +382,12 @@ def _task_agent_runner(
     )
     if not agent_id:
         raise PlanningError("No agent configured for TERMIT_TASK_USE_AGENT.")
-    payload = AgentRunRequest(input=input_text, session_id=session_id, project_id=project_id)
+    payload = AgentRunRequest(
+        input=input_text,
+        session_id=session_id,
+        project_id=project_id,
+        model=model,
+    )
     queued = service.create_run(agent_id, payload)
     deadline = time.time() + 180
     while time.time() < deadline:

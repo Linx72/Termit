@@ -219,6 +219,8 @@ class EvalService:
             status = "passed" if passed else "failed"
             if scenario.runner == "model_llm" and execution_ref:
                 message = str(execution_ref)
+            elif scenario.runner == "task" and model and execution_ref:
+                message = str(execution_ref)
             else:
                 message = "Scenario executed successfully." if passed else "Scenario execution failed."
         except Exception as exc:  # noqa: BLE001 - eval harness captures all runner failures
@@ -251,7 +253,9 @@ class EvalService:
         }
         if model:
             result["model"] = model.strip()
-        if self._quality_judge is not None and scenario.runner != "model_llm":
+        if self._quality_judge is not None and not (
+            scenario.runner == "model_llm" or (scenario.runner == "task" and model)
+        ):
             judgement = self._quality_judge.judge_scenario(
                 prompt=scenario.prompt,
                 response=message,
@@ -403,7 +407,7 @@ class EvalService:
     ) -> tuple[Optional[str], bool, Optional[str], int, str]:
         runner = scenario.runner
         if runner == "task":
-            return self._run_task_scenario(scenario)
+            return self._run_task_scenario(scenario, model=model)
         if runner == "tool_list":
             return self._run_tool_list(scenario)
         if runner == "tool_read":
@@ -494,7 +498,23 @@ class EvalService:
         ref = f"stack={profile.stack_id} tasks={len(tasks)} platforms={[p.value for p in platforms]}"
         return ref, ok, None if ok else "cross_platform_plan", 1, "automated"
 
-    def _run_task_scenario(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
+    _TASK_TYPE_SYSTEM: dict[str, str] = {
+        "coding": "You are a coding assistant. Provide concrete, runnable code.",
+        "debug": "You are a debugging assistant. Explain root cause and propose a fix.",
+        "review": "You are a code reviewer. Provide actionable review notes.",
+        "explain": "You explain code clearly and suggest simplifications.",
+        "general": "You are a helpful assistant. Be precise and concise.",
+    }
+
+    def _run_task_scenario(
+        self,
+        scenario: EvalScenario,
+        *,
+        model: Optional[str] = None,
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        model_name = (model or "").strip()
+        if model_name and self._llm_caller is not None:
+            return self._run_model_task(scenario, model=model_name)
         if self._task_service is None:
             raise RuntimeError("Task service is not configured for eval runs.")
         task_type = TaskType(scenario.task_type)
@@ -503,12 +523,32 @@ class EvalService:
                 input=scenario.prompt,
                 task_type=task_type,
                 mode=TaskMode.auto,
+                model=model_name or None,
             )
         )
         task = self._task_service.get_task(created.task_id)
         passed = task.state == TaskState.completed
         failure_class = task.failure_class if not passed else None
         return created.task_id, passed, failure_class, 1, "full-auto"
+
+    def _run_model_task(
+        self,
+        scenario: EvalScenario,
+        *,
+        model: str,
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        if self._llm_caller is None:
+            raise RuntimeError("LLM caller is not configured for model task runner.")
+        system = self._TASK_TYPE_SYSTEM.get(
+            scenario.task_type,
+            self._TASK_TYPE_SYSTEM["general"],
+        )
+        if scenario.model_system.strip():
+            system = scenario.model_system.strip()
+        response = self._llm_caller.call(model, scenario.prompt, system=system)
+        passed = self._model_response_passes(response, scenario)
+        detail = response.strip()[:300]
+        return detail, passed, None if passed else "model_quality", 1, "model-task"
 
     def _run_tool_list(self, scenario: EvalScenario) -> tuple[str, bool, Optional[str], int, str]:
         if self._tooling is None:

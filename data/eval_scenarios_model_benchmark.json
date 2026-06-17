@@ -23,5 +23,23 @@
     "prompt": "Write one line: def add(a, b): return a + b",
     "runner": "model_llm",
     "expect_contains": "def add"
+  },
+  {
+    "id": "MT1",
+    "category": "model_benchmark",
+    "title": "Task: is_even function",
+    "prompt": "Write a Python function is_even(n) that returns True for even integers.",
+    "runner": "task",
+    "task_type": "coding",
+    "expect_contains": "def is_even"
+  },
+  {
+    "id": "MT2",
+    "category": "model_benchmark",
+    "title": "Task: debug fix",
+    "prompt": "Fix this bug: add(a,b) returns a-b instead of a+b. Show corrected return line.",
+    "runner": "task",
+    "task_type": "debug",
+    "expect_contains": "a + b"
   }
 ]

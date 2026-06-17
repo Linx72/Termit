@@ -17,9 +17,15 @@ class _ModelAwareLlmCaller:
         if "eval_ok" in prompt.lower():
             return "EVAL_OK" if "termit" in model or "core" in model else "WRONG"
         if "17+25" in prompt:
-            return "42" if "qwen" in model or "deepseek" in model else "41"
+            return "42" if "qwen" in model or "deepseek" in model or "termit" in model or "core" in model else "41"
         if "def add" in prompt.lower():
-            return "def add(a, b): return a + b" if "instruct" in model else "def add(a,b): pass"
+            return "def add(a, b): return a + b" if "instruct" in model or "termit" in model or "core" in model else "def add(a,b): pass"
+        if "is_even" in prompt.lower():
+            if "termit" in model or "core" in model:
+                return "def is_even(n): return n % 2 == 0"
+            return "I cannot write code for this task."
+        if "a-b instead" in prompt.lower() or "a+b" in prompt.lower():
+            return "return a + b" if "termit" in model or "core" in model or "qwen" in model else "return a - b"
         return "unknown"
 
 
@@ -33,7 +39,28 @@ class EvalModelRunnerTests(unittest.TestCase):
 
     def test_model_benchmark_scenarios_loaded(self) -> None:
         ids = self.service.model_benchmark_scenario_ids()
-        self.assertEqual(ids, ["MB1", "MB2", "MB3"])
+        self.assertEqual(ids, ["MB1", "MB2", "MB3", "MT1", "MT2"])
+
+    def test_task_runner_with_model_uses_llm_path(self) -> None:
+        result = self.service.run_scenario("MT1", model="ollama:termit-core-ft")
+        self.assertEqual(result["status"], "passed")
+        self.assertIn("def is_even", str(result["message"]).lower())
+
+    def test_task_runner_weak_model_fails_mt1(self) -> None:
+        result = self.service.run_scenario("MT1", model="ollama:weak-model")
+        self.assertEqual(result["status"], "failed")
+
+    def test_benchmark_includes_task_runner_scenarios(self) -> None:
+        benchmark = EvalBenchmarkService(
+            termit_model="ollama:termit-core-ft",
+            reference_model="ollama:weak-model",
+            scenario_runner=lambda scenario_id, model: self.service.run_scenario(
+                scenario_id,
+                model=model,
+            ),
+        )
+        report = benchmark.compare_on_scenarios(["MT1", "MT2"], persist=False)
+        self.assertGreater(report["termit_pass_rate"], report["reference_pass_rate"])
 
     def test_model_llm_runner_passes_with_matching_model(self) -> None:
         result = self.service.run_scenario("MB1", model="ollama:termit-core-ft")

@@ -118,7 +118,7 @@ class TaskAgentAssignmentTests(unittest.TestCase):
             service = TaskService(
                 ToolingService(root_path="."),
                 InMemoryTaskStore(),
-                agent_runner=lambda input_text, task_type, session_id, project_id: "ok",
+                agent_runner=lambda input_text, task_type, session_id, project_id, model=None: "ok",
                 use_agent_for_auto=True,
                 agent_registry=self.registry,
                 agent_templates=templates,

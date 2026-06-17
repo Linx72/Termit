@@ -1,10 +1,12 @@
 # Changelog
 
-## [0.4.19] - 2026-06-17
+## [0.4.20] - 2026-06-17
 
 ### Added
-- Model-aware eval runner for real A/B benchmark scoring
-
+- Task model override: `TaskCreateRequest.model`, `AgentRunRequest.model`, SQLite `tasks.model`
+- Eval task runner uses model-aware LLM path when `model=` is set (MT1–MT2 scenarios)
+- Agent run honors forced model before router/repo profile resolution
+- Tests `test_task_model_override.py`, extended `test_eval_model_runner.py`
 
 ## [0.4.19] - 2026-06-17
 

@@ -999,6 +999,7 @@ class TaskCreateRequest(BaseModel):
     mode: TaskMode = TaskMode.auto
     session_id: Optional[str] = None
     project_id: Optional[str] = Field(default=None, max_length=256)
+    model: Optional[str] = Field(default=None, max_length=200)
 
 
 class TaskEvent(BaseModel):
@@ -1022,6 +1023,7 @@ class TaskStatusResponse(BaseModel):
     mode: TaskMode
     session_id: Optional[str] = None
     project_id: Optional[str] = None
+    model: Optional[str] = None
     created_at: str
     updated_at: str
     report: Optional[str] = None
@@ -1138,6 +1140,7 @@ class AgentRunRequest(BaseModel):
     ssh_remote_path: Optional[str] = Field(default=None, max_length=2000)
     run_mode: Optional[str] = Field(default="agent", pattern="^(agent|ask|plan)$")
     mcp_context_inject: Optional[bool] = None
+    model: Optional[str] = Field(default=None, max_length=200)
 
 
 class SshConnectionTestRequest(BaseModel):

@@ -49,7 +49,7 @@ class ExternalError(TaskExecutionError):
     error_class = "external_error"
 
 
-TaskAgentRunner = Callable[[str, TaskType, Optional[str], Optional[str]], str]
+TaskAgentRunner = Callable[[str, TaskType, Optional[str], Optional[str], Optional[str]], str]
 
 
 def _utc_now_iso() -> str:
@@ -97,6 +97,7 @@ class TaskService:
             mode=payload.mode,
             session_id=payload.session_id,
             project_id=payload.project_id,
+            model=payload.model,
             created_at=now,
             updated_at=now,
             attempts=0,
@@ -473,7 +474,13 @@ class TaskService:
             )
             if self._agent_runner is None:
                 raise PlanningError("Agent runner is not configured.")
-            response = self._agent_runner(prompt, task.task_type, session_id, task.project_id)
+            response = self._agent_runner(
+                prompt,
+                task.task_type,
+                session_id,
+                task.project_id,
+                task.model,
+            )
             execution_notes.append(f"[{atomic.step_id}] {response[:500]}")
             self._append_event(
                 task_id,
@@ -496,7 +503,13 @@ class TaskService:
         )
         if self._agent_runner is None:
             raise PlanningError("Agent runner is not configured.")
-        response = self._agent_runner(task.input, task.task_type, task.session_id, task.project_id)
+        response = self._agent_runner(
+            task.input,
+            task.task_type,
+            task.session_id,
+            task.project_id,
+            task.model,
+        )
         execution_notes = [response]
         self._append_event(
             task_id,

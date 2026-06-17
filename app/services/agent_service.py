@@ -701,6 +701,9 @@ class AgentService:
         profile: AgentProfileResponse,
         payload: AgentRunRequest,
     ) -> tuple[str, list[str] | None]:
+        requested = (payload.model or "").strip()
+        if requested:
+            return requested, None
         repo_profile = self._resolve_repo_profile_id(profile, payload)
         path_prefix = self._run_path_prefix(profile, payload)
         router = getattr(self._chat_service, "model_router", None)

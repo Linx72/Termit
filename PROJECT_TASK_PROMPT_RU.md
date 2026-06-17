@@ -467,14 +467,14 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Prometheus/Grafana видят MCP inject и tool usage.
 
-### Следующий этап (0.4.19): Model-aware eval runner
+### Следующий этап (0.4.20): Task runner model override
 
-- [x] `model_llm` runner + `run_scenario(..., model=)` для A/B benchmark
-- [x] `data/eval_scenarios_model_benchmark.json` (MB1–MB3)
-- [x] Benchmark baselines default на model suite + `sync_routing`
-- [x] Tests `test_eval_model_runner.py`
+- [x] `TaskCreateRequest.model` + `AgentRunRequest.model` passthrough
+- [x] Eval task runner: model → LLM coding path (MT1–MT2)
+- [x] SQLite tasks.model column
+- [x] Tests `test_task_model_override.py`
 
-**DoD:** Baseline compare даёт разные pass_rate для termit vs reference model.
+**DoD:** Coding task scenarios в benchmark дают разные pass_rate по model.
 
 ---
 
