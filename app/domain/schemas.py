@@ -1862,6 +1862,23 @@ class DesktopWorkflowEventResponse(BaseModel):
     timestamp: str
 
 
+class OnboardingVariantMetrics(BaseModel):
+    variant: str
+    assigned: int = 0
+    completed: int = 0
+    conversion_rate: Optional[float] = None
+    median_completion_ms: Optional[int] = None
+
+
+class OnboardingMetricsResponse(BaseModel):
+    total_assigned: int = 0
+    total_completed: int = 0
+    overall_conversion_rate: Optional[float] = None
+    variants: list[OnboardingVariantMetrics] = Field(default_factory=list)
+    unknown_assigned: int = 0
+    unknown_completed: int = 0
+
+
 class MediaGenerateImageRequest(BaseModel):
     prompt: str = Field(min_length=3, max_length=4000)
     width: int = Field(default=1024, ge=64, le=4096)

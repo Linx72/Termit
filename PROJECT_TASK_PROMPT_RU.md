@@ -389,6 +389,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Plan → Build ставит agent run в очередь; метрики и тесты API.
 
+### Следующий этап (0.4.9): A/B onboarding variants + conversion metrics
+
+- [x] Variant A (Quick Start first) vs B (wizard-first) в `FirstRunWizard`
+- [x] Telemetry: `onboarding_variant_assigned`, `onboarding_quick_start`, `onboarding_wizard_complete`
+- [x] `GET /api/desktop/onboarding-metrics` — conversion по variant
+- [x] `onboardingExperiment.ts` + tests; hosted smoke
+
+**DoD:** A/B onboarding измеряется; conversion доступен из API.
+
 ---
 
 ## Порядок выполнения

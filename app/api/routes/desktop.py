@@ -14,16 +14,20 @@ from app.domain.schemas import (
     DesktopSharedRunListResponse,
     DesktopWorkflowEventRequest,
     DesktopWorkflowEventResponse,
+    OnboardingMetricsResponse,
+    OnboardingVariantMetrics,
 )
 from app.services.agent_policy_preset_service import AgentPolicyPresetService
 from app.services.desktop_accelerator_service import DesktopAcceleratorService
 from app.services.desktop_kpi_gate_service import DesktopKpiGateService
 from app.services.desktop_workflow_telemetry_service import DesktopWorkflowTelemetryService
+from app.services.onboarding_experiment_service import OnboardingExperimentService
 from app.state import (
     get_agent_policy_preset_service,
     get_desktop_accelerator_service,
     get_desktop_kpi_gate_service,
     get_desktop_workflow_telemetry_service,
+    get_onboarding_experiment_service,
 )
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
@@ -64,6 +68,27 @@ async def record_workflow_event(
         event_id=str(row["event_id"]),
         event_type=str(row["event_type"]),
         timestamp=str(row["timestamp"]),
+    )
+
+
+@router.get("/onboarding-metrics", response_model=OnboardingMetricsResponse)
+async def onboarding_metrics(
+    telemetry: DesktopWorkflowTelemetryService = Depends(get_desktop_workflow_telemetry_service),
+    experiment: OnboardingExperimentService = Depends(get_onboarding_experiment_service),
+) -> OnboardingMetricsResponse:
+    summary = experiment.summarize(telemetry.list_events())
+    variants = [
+        OnboardingVariantMetrics(**item)
+        for item in summary.get("variants", [])
+        if isinstance(item, dict)
+    ]
+    return OnboardingMetricsResponse(
+        total_assigned=int(summary.get("total_assigned", 0)),
+        total_completed=int(summary.get("total_completed", 0)),
+        overall_conversion_rate=summary.get("overall_conversion_rate"),
+        variants=variants,
+        unknown_assigned=int(summary.get("unknown_assigned", 0)),
+        unknown_completed=int(summary.get("unknown_completed", 0)),
     )
 
 

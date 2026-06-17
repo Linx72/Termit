@@ -84,6 +84,7 @@ import { WorkspaceFilePickerModal } from "./WorkspaceFilePickerModal";
 import { PromptInputModal } from "./PromptInputModal";
 import { PlanPanel } from "./PlanPanel";
 import { TerminalPanel } from "./TerminalPanel";
+import { getOrAssignOnboardingVariant } from "./onboardingExperiment";
 
 
 type AgentFolder = {
@@ -269,6 +270,8 @@ export function App() {
     return active?.blocks ?? [];
   });
   const chatLogRef = useRef<HTMLDivElement>(null);
+  const onboardingVariantRef = useRef<"A" | "B" | null>(null);
+  const onboardingAssignedRef = useRef(false);
   const [draft, setDraft] = useState("");
   const [tasks, setTasks] = useState<TaskStatusResponse[]>([]);
   const [taskDetail, setTaskDetail] = useState("Select a task.");
@@ -299,6 +302,7 @@ export function App() {
   const [composerMode, setComposerMode] = useState<"multi" | "component">("multi");
   const [composerPatchDetail, setComposerPatchDetail] = useState("Select a patch to preview (dry run).");
   const [showWizard, setShowWizard] = useState(() => !isFirstRunComplete());
+  const [onboardingVariant] = useState<"A" | "B">(() => getOrAssignOnboardingVariant());
   const [wizardHealth, setWizardHealth] = useState("");
   const [termitVersion, setTermitVersion] = useState("");
   const [missingOllamaModels, setMissingOllamaModels] = useState<string[]>([]);
@@ -390,6 +394,18 @@ export function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (!showWizard || !connected || onboardingAssignedRef.current) {
+      return;
+    }
+    onboardingVariantRef.current = onboardingVariant;
+    onboardingAssignedRef.current = true;
+    trackWorkflowEvent(client, {
+      event_type: "onboarding_variant_assigned",
+      metadata: { variant: onboardingVariant },
+    });
+  }, [showWizard, connected, client, onboardingVariant]);
 
   useEffect(() => {
     let sessions = loadChatSessions();
@@ -2143,6 +2159,7 @@ export function App() {
   };
 
   const finishFirstRunWizard = async () => {
+    const started = Date.now();
     await syncLauncherConfig();
     if (settings.autoStartServer && settings.repoRoot.trim()) {
       await desktopRuntime.ensureServer(settings.baseUrl);
@@ -2152,9 +2169,16 @@ export function App() {
     }
     markFirstRunComplete();
     setShowWizard(false);
+    trackWorkflowEvent(client, {
+      event_type: "onboarding_wizard_complete",
+      metadata: { variant: onboardingVariantRef.current ?? onboardingVariant },
+      duration_ms: Date.now() - started,
+      ok: true,
+    });
   };
 
   const quickStartWizard = async () => {
+    const started = Date.now();
     setConnecting(true);
     try {
       const launcher = await desktopRuntime.getLauncherConfig();
@@ -2173,6 +2197,12 @@ export function App() {
       await connect();
       markFirstRunComplete();
       setShowWizard(false);
+      trackWorkflowEvent(client, {
+        event_type: "onboarding_quick_start",
+        metadata: { variant: onboardingVariantRef.current ?? onboardingVariant },
+        duration_ms: Date.now() - started,
+        ok: true,
+      });
     } finally {
       setConnecting(false);
     }
@@ -2230,6 +2260,7 @@ export function App() {
           healthLine={wizardHealth}
           busy={connecting}
           locale={locale}
+          variant={onboardingVariant}
           missingOllamaModels={missingOllamaModels}
           pullingModel={pullingModel}
           onUpdate={updateSettings}

@@ -49,6 +49,9 @@ class DesktopWorkflowTelemetryService:
                 handle.write(json.dumps(row, ensure_ascii=True) + "\n")
         return row
 
+    def list_events(self, *, limit: int = 5000) -> list[dict[str, object]]:
+        return self._read_events(limit=limit)
+
     def _read_events(self, *, limit: int = 5000) -> list[dict[str, object]]:
         if not self._path.is_file():
             return []

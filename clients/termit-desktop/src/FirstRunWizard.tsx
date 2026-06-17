@@ -6,6 +6,7 @@ interface FirstRunWizardProps {
   healthLine: string;
   busy: boolean;
   locale: Locale;
+  variant: "A" | "B";
   missingOllamaModels: string[];
   pullingModel: string | null;
   onUpdate: (patch: Partial<StoredSettings>) => void;
@@ -23,6 +24,7 @@ export function FirstRunWizard({
   healthLine,
   busy,
   locale,
+  variant,
   missingOllamaModels,
   pullingModel,
   onUpdate,
@@ -36,26 +38,27 @@ export function FirstRunWizard({
 }: FirstRunWizardProps) {
   const canFinish = Boolean(settings.baseUrl.trim() && settings.workspace.trim());
   const canQuickStart = Boolean(settings.baseUrl.trim() && (settings.repoRoot.trim() || settings.workspace.trim()));
+  const quickStartBlock = (
+    <div className="wizard-quick-row">
+      <button
+        type="button"
+        className="primary"
+        disabled={!canQuickStart || busy}
+        onClick={() => void onQuickStart()}
+      >
+        {t(locale, "wizardQuickStart")}
+      </button>
+      <p className="hint muted">{t(locale, "wizardQuickStartHint")}</p>
+    </div>
+  );
 
   return (
     <div className="modal-backdrop wizard-backdrop" role="presentation">
       <div className="modal wizard-modal" role="dialog" aria-labelledby="first-run-title">
         <h2 id="first-run-title">{t(locale, "wizardTitle")}</h2>
         <p className="hint">{t(locale, "wizardIntro")}</p>
-
-        <div className="wizard-quick-row">
-          <button
-            type="button"
-            className="primary"
-            disabled={!canQuickStart || busy}
-            onClick={() => void onQuickStart()}
-          >
-            {t(locale, "wizardQuickStart")}
-          </button>
-          <p className="hint muted">{t(locale, "wizardQuickStartHint")}</p>
-        </div>
-
-        <hr className="wizard-divider" />
+        {variant === "A" ? quickStartBlock : null}
+        {variant === "A" ? <hr className="wizard-divider" /> : null}
 
         <div className="field">
           <label htmlFor="wizard-baseUrl">{t(locale, "wizardApiUrl")}</label>
@@ -143,6 +146,13 @@ export function FirstRunWizard({
         </div>
 
         {healthLine && <pre className="detail-box wizard-health">{healthLine}</pre>}
+
+        {variant === "B" ? (
+          <>
+            <hr className="wizard-divider" />
+            {quickStartBlock}
+          </>
+        ) : null}
 
         <div className="row">
           <button

@@ -1,6 +1,18 @@
 # Changelog
 
-## [0.4.8] - 2026-06-17
+## [0.4.9] - 2026-06-17
+
+### Added
+- Stability and product improvements for Termit 0.4.9.
+
+
+## [0.4.9] - 2026-06-17
+
+### Added
+- A/B onboarding: variant A (Quick Start first) vs B (wizard-first)
+- Onboarding telemetry events + `GET /api/desktop/onboarding-metrics`
+- Desktop `onboardingExperiment.ts` — stable device variant assignment
+
 
 ### Added
 - Plan → Build: `POST /api/orchestration/build-from-plan` enqueues agent run from plan

@@ -36,6 +36,7 @@ from app.services.memory_store import MemoryBackend, MemoryStore
 from app.services.metrics_snapshot_store import MetricsSnapshotStore
 from app.services.model_router import ModelRouter
 from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
+from app.services.onboarding_experiment_service import OnboardingExperimentService
 from app.services.plan_build_service import PlanBuildService
 from app.services.routing_policy_service import RoutingPolicyService
 from app.services.ops_service import OpsService
@@ -1161,6 +1162,15 @@ def _build_desktop_workflow_telemetry_service():
 
 def get_desktop_workflow_telemetry_service():
     return _build_desktop_workflow_telemetry_service()
+
+
+@lru_cache
+def _build_onboarding_experiment_service() -> OnboardingExperimentService:
+    return OnboardingExperimentService()
+
+
+def get_onboarding_experiment_service() -> OnboardingExperimentService:
+    return _build_onboarding_experiment_service()
 
 
 @lru_cache

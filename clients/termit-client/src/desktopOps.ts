@@ -144,3 +144,24 @@ export async function recordDesktopWorkflowEvent(
     body: JSON.stringify(payload),
   });
 }
+
+export interface OnboardingVariantMetrics {
+  variant: string;
+  assigned: number;
+  completed: number;
+  conversion_rate: number | null;
+  median_completion_ms: number | null;
+}
+
+export interface OnboardingMetricsResponse {
+  total_assigned: number;
+  total_completed: number;
+  overall_conversion_rate: number | null;
+  variants: OnboardingVariantMetrics[];
+  unknown_assigned: number;
+  unknown_completed: number;
+}
+
+export async function getOnboardingMetrics(client: TermitClient): Promise<OnboardingMetricsResponse> {
+  return client.requestDesktop<OnboardingMetricsResponse>("/api/desktop/onboarding-metrics");
+}
