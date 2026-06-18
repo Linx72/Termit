@@ -3,10 +3,9 @@
 **Последнее обновление:** 2026-06-18
 
 ## Сводка
-- Hosted beta: deploy_hosted_beta.sh, fix docker-compose volume /app/persist
-- hosted_smoke passed на :8080 (plan-status, onboarding-metrics OK)
+- do all: automatic + plan (~183s exit 0), hosted_smoke OK
+- do_all_automatic: шаг 8/8 hosted smoke при docker up
 
 ## Открытые задачи
-- [ ] 5+ beta пользователей для D30 cohort
-- [ ] OPENAI_COMPAT_API_KEY в GitHub Secrets
-- [ ] GPU real DPO
+- [ ] Finetune KPI стабильный post-train (delta>5%)
+- [ ] Beta cohort ≥5, OPENAI_COMPAT_API_KEY, GPU DPO
