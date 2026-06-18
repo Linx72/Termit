@@ -22,6 +22,17 @@ class OrchestrationApiTests(unittest.TestCase):
         self.assertIn("orchestration_tool_steps_total", body)
         self.assertIn("plan_build_enqueued_total", body)
 
+    def test_orchestration_config_endpoint(self) -> None:
+        client = TestClient(app)
+        response = client.get("/api/orchestration/config")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("tool_loop_execution_enabled", body)
+        self.assertIn("gate_tier", body)
+        self.assertIn("require_tool_loop", body)
+        self.assertIn("eval_fixture_coder_enabled", body)
+        self.assertIn("tool_loop_fallback_enabled", body)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -149,6 +149,10 @@ class Settings:
     eval_model_benchmark_scenarios_path: str = "./data/eval_scenarios_model_benchmark.json"
     eval_quality_judge_model: str = ""
     eval_benchmark_reference_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
+    eval_capability_baseline_path: str = "./data/eval_capability_baseline.json"
+    capability_regression_max_pass_gap_drop: float = 0.05
+    capability_regression_max_quality_gap_drop: float = 0.05
+    capability_regression_max_win_rate_drop: float = 0.10
     cloud_teacher_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
     fast_model: str = "ollama:qwen2.5-coder"
     frontier_fallback_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
@@ -156,6 +160,7 @@ class Settings:
     reasoning_critic_model: str = ""
     orchestration_openhands_contract_enabled: bool = False
     orchestration_tool_loop_execution_enabled: bool = False
+    orchestration_eval_fixture_coder_enabled: bool = False
     finetune_pipeline_stuck_timeout_seconds: int = 3600
     retrieval_enabled: bool = True
     retrieval_mode: str = "semantic"
@@ -177,6 +182,7 @@ class Settings:
     provider_retry_backoff_ms: int = 150
     degrade_empty_response_rate: float = 0.05
     degrade_fallback_rate: float = 0.35
+    max_cost_per_successful_task_usd: float = 1.0
     agent_alert_queue_utilization_percent: float = 80.0
     agent_alert_dead_letter_rate: float = 0.15
     agent_alert_min_worker_alive_ratio: float = 1.0
@@ -430,6 +436,22 @@ def get_settings() -> Settings:
             "TERMIT_EVAL_BENCHMARK_REFERENCE_MODEL",
             "openai_compat:deepseek-ai/DeepSeek-V3",
         ),
+        eval_capability_baseline_path=os.getenv(
+            "TERMIT_EVAL_CAPABILITY_BASELINE_PATH",
+            "./data/eval_capability_baseline.json",
+        ),
+        capability_regression_max_pass_gap_drop=max(
+            0.0,
+            float(os.getenv("TERMIT_CAP_REG_MAX_PASS_GAP_DROP", "0.05")),
+        ),
+        capability_regression_max_quality_gap_drop=max(
+            0.0,
+            float(os.getenv("TERMIT_CAP_REG_MAX_QUALITY_GAP_DROP", "0.05")),
+        ),
+        capability_regression_max_win_rate_drop=max(
+            0.0,
+            float(os.getenv("TERMIT_CAP_REG_MAX_WIN_RATE_DROP", "0.10")),
+        ),
         cloud_teacher_model=os.getenv(
             "TERMIT_CLOUD_TEACHER_MODEL",
             "openai_compat:deepseek-ai/DeepSeek-V3",
@@ -448,6 +470,11 @@ def get_settings() -> Settings:
         in {"1", "true", "yes"},
         orchestration_tool_loop_execution_enabled=os.getenv(
             "TERMIT_ORCH_TOOL_LOOP_EXECUTION_ENABLED",
+            "false",
+        ).lower()
+        in {"1", "true", "yes"},
+        orchestration_eval_fixture_coder_enabled=os.getenv(
+            "TERMIT_ORCH_EVAL_FIXTURE_CODER",
             "false",
         ).lower()
         in {"1", "true", "yes"},
@@ -479,6 +506,10 @@ def get_settings() -> Settings:
         provider_retry_backoff_ms=int(os.getenv("TERMIT_PROVIDER_RETRY_BACKOFF_MS", "150")),
         degrade_empty_response_rate=_parse_clamped_float_env("TERMIT_DEGRADE_EMPTY_RATE", 0.05),
         degrade_fallback_rate=_parse_clamped_float_env("TERMIT_DEGRADE_FALLBACK_RATE", 0.35),
+        max_cost_per_successful_task_usd=max(
+            0.0,
+            float(os.getenv("TERMIT_MAX_COST_PER_SUCCESSFUL_TASK_USD", "1.0")),
+        ),
         agent_alert_queue_utilization_percent=_parse_clamped_float_env(
             "TERMIT_AGENT_ALERT_QUEUE_UTILIZATION_PERCENT",
             80.0,

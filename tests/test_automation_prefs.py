@@ -77,6 +77,8 @@ class AutomationPrefsApiTests(unittest.TestCase):
         self.assertIn("toggles", payload)
         ids = {item["toggle_id"] for item in payload["toggles"]}
         self.assertIn("stage1_schedule", ids)
+        self.assertIn("training_loop_cron", ids)
+        self.assertIn("quarterly_capability_cron", ids)
 
     def test_patch_automation_updates_env(self) -> None:
         client = TestClient(app)

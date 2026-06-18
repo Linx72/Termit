@@ -15,20 +15,24 @@ CATEGORY="${TERMIT_EVAL_CATEGORY:-cursor_parity}"
 LIMIT="${TERMIT_EVAL_LIMIT:-20}"
 MAX_DROP="${TERMIT_EVAL_MAX_PASS_RATE_DROP:-0.05}"
 CURRENT_REPORT="/tmp/termit_eval_current_$$.json"
+GATE_OK=0
 
 cd "$ROOT"
 source .venv/bin/activate 2>/dev/null || true
 
-AUTH=()
-if [[ -n "$API_KEY" ]]; then
-  AUTH=(-H "X-API-Key: ${API_KEY}")
-fi
+curl_api() {
+  if [[ -n "${API_KEY}" ]]; then
+    curl -sf -H "X-API-Key: ${API_KEY}" "$@"
+  else
+    curl -sf "$@"
+  fi
+}
 
 echo "== Termit training loop (full) =="
 
 echo "== 1/5 Health check =="
 for i in $(seq 1 20); do
-  if curl -sf --max-time 3 "${AUTH[@]}" "$BASE_URL/health" >/dev/null; then
+  if curl_api --max-time 3 "${BASE_URL}/health" >/dev/null; then
     break
   fi
   if [[ "$i" -eq 20 ]]; then
@@ -38,20 +42,27 @@ for i in $(seq 1 20); do
   sleep 1
 done
 
+echo "== 1a/5 Normalize training signals =="
+python3 "$ROOT/scripts/normalize_training_signals.py" || true
+
 echo "== 2/5 Export dataset + finetune job (week2) =="
 "$ROOT/scripts/training_loop_week2.sh"
 
 echo ""
 echo "== 3/5 Eval suite (category=${CATEGORY}, limit=${LIMIT}) =="
-curl -sf "${AUTH[@]}" -X POST "$BASE_URL/api/eval/run-suite" \
+curl_api -X POST "$BASE_URL/api/eval/run-suite" \
   -H "Content-Type: application/json" \
   -d "{\"category\":\"${CATEGORY}\",\"limit\":${LIMIT},\"persist_report\":true}" \
   | tee "$CURRENT_REPORT" \
   | python3 -m json.tool | head -40
 
 echo ""
+echo "== 3b/5 Model-bound eval gate (tool scenarios) =="
+TERMIT_MODEL_BOUND_GATE_TIER="${TERMIT_MODEL_BOUND_GATE_TIER:-model_bound_ci}" \
+  "$ROOT/scripts/model_bound_eval_gate.py" || GATE_OK=1
+
+echo ""
 echo "== 4/5 Regression gate vs baseline =="
-GATE_OK=0
 if [[ ! -f "$BASELINE" ]]; then
   echo "Baseline missing: $BASELINE — skip regression gate." >&2
 else
@@ -74,15 +85,24 @@ if [[ "$GATE_OK" -eq 0 && "${TERMIT_EVAL_AUTO_PROMOTE_BASELINE:-false}" == "true
     --min-improvement "$MIN_IMPROVE"
 fi
 
-if [[ "$GATE_OK" -eq 0 && -f "$BASELINE" ]]; then
+if [[ "$GATE_OK" -eq 0 ]]; then
   echo ""
   echo "== 4c/5 Eval improvement KPI (+5% target) =="
   KPI_MIN="${TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT:-0.05}"
-  KPI_ARGS=(--baseline "$BASELINE" --current "$CURRENT_REPORT" --min-improvement "$KPI_MIN")
-  if [[ "${TERMIT_FINETUNE_KPI_STRICT:-false}" == "true" ]]; then
-    KPI_ARGS+=(--strict)
+  KPI_BASELINE="${TERMIT_EVAL_KPI_BASELINE:-$ROOT/data/eval_kpi_baseline.json}"
+  if [[ ! -f "${KPI_BASELINE}" ]]; then
+    KPI_BASELINE="${BASELINE}"
   fi
-  python3 "$ROOT/scripts/finetune_eval_kpi_gate.py" "${KPI_ARGS[@]}"
+  if [[ -f "${KPI_BASELINE}" ]]; then
+    KPI_OUT="${TERMIT_EVAL_KPI_LAST:-$ROOT/data/eval_kpi_last.json}"
+    KPI_ARGS=(--baseline "${KPI_BASELINE}" --current "$CURRENT_REPORT" --min-improvement "$KPI_MIN" --output "${KPI_OUT}")
+    if [[ "${TERMIT_FINETUNE_KPI_STRICT:-false}" == "true" ]]; then
+      KPI_ARGS+=(--strict)
+    fi
+    python3 "$ROOT/scripts/finetune_eval_kpi_gate.py" "${KPI_ARGS[@]}"
+  else
+    echo "Skip KPI gate: no baseline at ${KPI_BASELINE} or ${BASELINE}" >&2
+  fi
 fi
 
 if [[ "$GATE_OK" -ne 0 ]]; then
@@ -91,9 +111,9 @@ fi
 
 echo ""
 echo "== 5/5 Training dashboard + agent metrics =="
-curl -sf "${AUTH[@]}" "$BASE_URL/api/finetune/training/dashboard?limit=5" | python3 -m json.tool | head -40
+curl_api "$BASE_URL/api/finetune/training/dashboard?limit=5" | python3 -m json.tool | head -40
 echo ""
-curl -sf "${AUTH[@]}" "$BASE_URL/api/ops/agent-runs/metrics" | python3 -m json.tool | head -20
+curl_api "$BASE_URL/api/ops/agent-runs/metrics" | python3 -m json.tool | head -20
 
 echo ""
 echo "OK — training loop full complete."

@@ -15,7 +15,11 @@ source .venv/bin/activate
 pip install -q -r requirements.txt
 
 echo "== Python tests =="
-python -m unittest discover -s tests -q
+if [[ "${TERMIT_SKIP_SETUP_TESTS:-}" == "1" ]]; then
+  echo "Skipped (TERMIT_SKIP_SETUP_TESTS=1)."
+else
+  python -m unittest discover -s tests -q
+fi
 
 echo "== Ollama models (optional health check) =="
 if [[ "${TERMIT_SKIP_OLLAMA_CHECK:-}" != "1" ]]; then

@@ -12,6 +12,7 @@ from app.domain.schemas import (
     FinetuneDatasetExportResponse,
     FinetuneDpoExportRequest,
     FinetuneDpoExportResponse,
+    FinetuneDpoStatusResponse,
     FinetuneDpoValidateRequest,
     FinetuneDpoValidateResponse,
     FinetuneTrajectoryExportRequest,
@@ -121,6 +122,13 @@ async def validate_dpo_dataset(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FinetuneDpoValidateResponse(**result)
+
+
+@router.get("/dpo/status", response_model=FinetuneDpoStatusResponse)
+async def dpo_status(
+    service: FinetuneService = Depends(get_finetune_service),
+) -> FinetuneDpoStatusResponse:
+    return FinetuneDpoStatusResponse(**service.dpo_status())
 
 
 @router.get("/adapters/resolve")

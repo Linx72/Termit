@@ -138,6 +138,79 @@ class EvalService:
     def model_benchmark_scenario_ids(self) -> list[str]:
         return [item.id for item in self._model_benchmark_scenarios]
 
+    def model_bound_tool_scenario_ids(self) -> list[str]:
+        return [item.id for item in self._scenarios if item.category in ("humaneval", "mbpp")]
+
+    def model_bound_scenario_ids(self) -> list[str]:
+        return self.model_benchmark_scenario_ids() + self.model_bound_tool_scenario_ids()
+
+    def run_scenario_ids(
+        self,
+        scenario_ids: list[str],
+        *,
+        persist_report: bool = True,
+        category_filter: str | None = None,
+    ) -> dict[str, object]:
+        """Run an explicit list of scenario ids (model-bound / benchmark slices)."""
+        run_id = f"eval_{uuid4().hex[:12]}"
+        started_at = time.time()
+        selected: list[EvalScenario] = []
+        for scenario_id in scenario_ids:
+            selected.append(self._get_scenario(scenario_id))
+
+        results: list[dict[str, object]] = []
+        for scenario in selected:
+            results.append(self.run_scenario(scenario.id))
+
+        passed = sum(1 for item in results if item["status"] == "passed")
+        failed = len(results) - passed
+        finished_at = time.time()
+        metrics = self._telemetry.snapshot() if self._telemetry else None
+        durations = sorted(int(item.get("duration_ms", 0)) for item in results)
+        latency_p95_ms = self._percentile(durations, 95) if durations else 0
+        estimated_cost_usd = round(
+            sum(len(str(item.get("prompt", ""))) for item in results) * 0.000002,
+            6,
+        )
+
+        report = {
+            "run_id": run_id,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "total": len(results),
+            "passed": passed,
+            "failed": failed,
+            "pass_rate": round(passed / len(results), 4) if results else 0.0,
+            "latency_p95_ms": latency_p95_ms,
+            "estimated_cost_usd": estimated_cost_usd,
+            "category_filter": category_filter,
+            "scenario_ids": list(scenario_ids),
+            "results": results,
+            "metrics": metrics.model_dump() if metrics else None,
+        }
+        quality_scores = [
+            float(item["quality_score"])
+            for item in results
+            if item.get("quality_score") is not None
+        ]
+        judge_models = [
+            str(item.get("judge_model", "")).strip().lower()
+            for item in results
+            if item.get("judge_model") is not None
+        ]
+        cloud_judge_hits = sum(1 for name in judge_models if name and name != "heuristic")
+        cloud_judge_coverage = (
+            round(cloud_judge_hits / len(judge_models), 4)
+            if judge_models
+            else 0.0
+        )
+        report["cloud_judge_coverage"] = cloud_judge_coverage
+        if quality_scores and self._quality_judge is not None:
+            report.update(self._quality_judge.summarize_scores(quality_scores))
+        if persist_report and self._report_store is not None:
+            self._report_store.append_suite_report(report)
+        return report
+
     def _load_scenarios(self, scenarios_path: str) -> list[EvalScenario]:
         path = Path(scenarios_path)
         if not path.exists():

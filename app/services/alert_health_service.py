@@ -40,6 +40,19 @@ def evaluate_chat_health(
             f"{fallback_rate:.2%}/{thresholds.degrade_fallback_rate:.2%}."
         )
 
+    cost_per_success = float(summary.cost_per_successful_task_usd or 0.0)
+    max_cost = float(thresholds.max_cost_per_successful_task_usd or 0.0)
+    if max_cost > 0 and summary.task_completed > 0 and cost_per_success > max_cost:
+        degraded_reasons.append(
+            f"Cost per successful task is ${cost_per_success:.4f} "
+            f"(threshold ${max_cost:.4f})."
+        )
+    elif max_cost > 0 and summary.task_completed > 0 and cost_per_success > max_cost * 0.8:
+        warning_reasons.append(
+            f"Cost per successful task is near threshold: "
+            f"${cost_per_success:.4f}/${max_cost:.4f}."
+        )
+
     if degraded_reasons:
         return "degraded", degraded_reasons
     if warning_reasons:

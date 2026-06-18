@@ -77,3 +77,12 @@ class BuildWorkflowService:
             "---\n"
             f"Задача пользователя:\n{user_input.strip()}"
         )
+
+    @staticmethod
+    def extract_user_task(text: str) -> str:
+        """Return the original user task from builder-enriched agent input."""
+        marker = "Задача пользователя:\n"
+        stripped = (text or "").strip()
+        if marker in stripped:
+            return stripped.split(marker, 1)[1].strip()
+        return stripped

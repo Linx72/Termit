@@ -1,0 +1,42 @@
+[
+  {
+    "id": "HE1",
+    "category": "humaneval",
+    "title": "HumanEval: fix add function",
+    "prompt": "Fix add(a,b) so it returns sum, not difference.",
+    "runner": "tool_patch_verify",
+    "patch_path": "data/eval_fixtures/humaneval_add.py",
+    "patch_old": "    return a - b",
+    "patch_new": "    return a + b",
+    "verify_command": "python3 -c \"exec(open('data/eval_fixtures/humaneval_add.py').read()); assert add(2,3)==5\"",
+    "patch_dry_run": false,
+    "patch_confirmed": true
+  },
+  {
+    "id": "HE2",
+    "category": "humaneval",
+    "title": "HumanEval: compile add module",
+    "prompt": "Ensure humaneval add module compiles.",
+    "runner": "tool_exec",
+    "tool_command": "python3 -m py_compile data/eval_fixtures/humaneval_add.py",
+    "tool_dry_run": false
+  },
+  {
+    "id": "MBPP1",
+    "category": "mbpp",
+    "title": "MBPP: palindrome check",
+    "prompt": "Validate palindrome helper handles spaced text.",
+    "runner": "tool_exec",
+    "tool_command": "python3 -c \"exec(open('data/eval_fixtures/mbpp_palindrome.py').read()); assert is_palindrome('aba')\"",
+    "tool_dry_run": false
+  },
+  {
+    "id": "MBPP2",
+    "category": "mbpp",
+    "title": "MBPP: palindrome compile",
+    "prompt": "Compile palindrome helper module.",
+    "runner": "tool_exec",
+    "tool_command": "python3 -m py_compile data/eval_fixtures/mbpp_palindrome.py",
+    "tool_dry_run": false
+  }
+]

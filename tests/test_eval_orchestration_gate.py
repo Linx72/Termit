@@ -12,7 +12,11 @@ GATE_SCRIPT = ROOT / "scripts" / "eval_orchestration_gate.py"
 
 
 def _run_gate(report: dict[str, object], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    merged_env = os.environ.copy()
+    merged_env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("TERMIT_ORCH_")
+    }
     merged_env.update(env)
     return subprocess.run(
         ["python3", str(GATE_SCRIPT)],
@@ -53,7 +57,6 @@ class EvalOrchestrationGateTests(unittest.TestCase):
         result = _run_gate(
             report,
             {
-                "TERMIT_ORCH_GATE_TIER": "deep",
                 "TERMIT_ORCH_MIN_PASS_RATE": "0.5",
                 "TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE": "0.3",
                 "TERMIT_ORCH_MIN_TOTAL": "3",
@@ -71,7 +74,6 @@ class EvalOrchestrationGateTests(unittest.TestCase):
         result = _run_gate(
             report,
             {
-                "TERMIT_ORCH_GATE_TIER": "deep",
                 "TERMIT_ORCH_MIN_PASS_RATE": "0.5",
                 "TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE": "0.1",
                 "TERMIT_ORCH_MIN_TOTAL": "2",

@@ -17,7 +17,30 @@ SAMPLE_COUNT="$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['samp
 echo "Dataset: $DATASET_PATH ($SAMPLE_COUNT samples)"
 
 echo ""
-echo "== 2/4 Create + validate finetune job (dry run) =="
+echo "== 1b/5 DPO export + contract gate =="
+DPO_EXPORT_OK=0
+if [[ "${TERMIT_FINETUNE_AUTO_TRAIN_DPO:-false}" == "true" ]]; then
+  if "${ROOT}/scripts/dpo_gpu_train.sh"; then
+    DPO_EXPORT_OK=1
+    DPO_JSON="$(ls -t "${ROOT}"/data/finetune/datasets/*_dpo_*.jsonl 2>/dev/null | head -1 || true)"
+    if [[ -n "${DPO_JSON}" ]]; then
+      "${PYTHON:-python3}" "${ROOT}/scripts/eval_dpo_contract_gate.py" --dataset "${DPO_JSON}"
+    fi
+  else
+    echo "DPO GPU train path failed or skipped."
+  fi
+elif "${PYTHON:-python3}" "${ROOT}/scripts/finetune_dpo_pipeline.py" --name "${DATASET_NAME}-dpo"; then
+  DPO_EXPORT_OK=1
+  DPO_JSON="$(ls -t "${ROOT}"/data/finetune/datasets/*_dpo_*.jsonl 2>/dev/null | head -1 || true)"
+  if [[ -n "${DPO_JSON}" ]]; then
+    "${PYTHON:-python3}" "${ROOT}/scripts/eval_dpo_contract_gate.py" --dataset "${DPO_JSON}"
+  fi
+else
+  echo "DPO pipeline skipped (not enough preference pairs yet)."
+fi
+
+echo ""
+echo "== 2/5 Create + validate finetune job (dry run) =="
 python3 <<PY
 import json
 from pathlib import Path

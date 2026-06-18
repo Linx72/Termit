@@ -32,6 +32,73 @@ class FinetuneDpoExportTests(unittest.TestCase):
         pairs = build_dpo_pairs(negatives, positives, min_chosen_chars=8)
         self.assertEqual(pairs, [])
 
+    def test_uses_embedded_chosen_on_negative(self) -> None:
+        negatives = [
+            {
+                "instruction": "Revert patch",
+                "rejected": "User reverted the patch.",
+                "chosen": "Applied patch with tests and verify command.",
+            }
+        ]
+        pairs = build_dpo_pairs(negatives, [], min_chosen_chars=8)
+        self.assertEqual(len(pairs), 1)
+        self.assertIn("verify command", pairs[0]["chosen"])
+
+    def test_pairs_by_run_id(self) -> None:
+        negatives = [
+            {
+                "instruction": "Fix verify resolver",
+                "rejected": "verify failed due to cwd mismatch",
+                "run_id": "run-42",
+            }
+        ]
+        positives = [
+            {
+                "instruction": "Different wording",
+                "output": "Resolved verify command from project root.",
+                "run_id": "run-42",
+            }
+        ]
+        pairs = build_dpo_pairs(negatives, positives, min_chosen_chars=8)
+        self.assertEqual(len(pairs), 1)
+        self.assertIn("project root", pairs[0]["chosen"])
+
+    def test_pairs_by_instruction_token_overlap(self) -> None:
+        negatives = [
+            {
+                "instruction": "Fix middleware auth for admin routes",
+                "rejected": "Removed all auth checks entirely.",
+            }
+        ]
+        positives = [
+            {
+                "instruction": "Harden middleware auth on admin routes",
+                "output": "Added RBAC decorator for admin routes.",
+            }
+        ]
+        pairs = build_dpo_pairs(negatives, positives, min_chosen_chars=8)
+        self.assertEqual(len(pairs), 1)
+        self.assertIn("RBAC", pairs[0]["chosen"])
+
+    def test_category_fallback_pairs_tool_loop_negative(self) -> None:
+        negatives = [
+            {
+                "instruction": "Long builder prompt unrelated to positives",
+                "rejected": "Tool verify failed because cwd was wrong.",
+                "category": "tool_loop_negative",
+            }
+        ]
+        positives = [
+            {
+                "instruction": "Coding task",
+                "output": "Applied patch and resolved verify command from repo root.",
+                "category": "tool_loop",
+            }
+        ]
+        pairs = build_dpo_pairs(negatives, positives, min_chosen_chars=8)
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["source"], "dpo_category_fallback")
+
     def test_validate_dpo_rows_detects_invalid_pairs(self) -> None:
         contract = validate_dpo_rows(
             [

@@ -14,4 +14,21 @@ curl -sS -X POST "$BASE_URL/api/eval/run-suite" \
 echo "Export KPI snapshot"
 python3 "$ROOT/scripts/export_kpi_snapshot.py" || true
 
+echo "Capability quarterly review (benchmark history gates)"
+if curl -sf --max-time 5 "$BASE_URL/health" >/dev/null 2>&1; then
+  # Weekly loop uses CI tier; release tier is for quarterly_capability.sh / pre-release.
+  TERMIT_CAP_GATE_TIER="${TERMIT_CAP_GATE_TIER:-ci}" \
+  TERMIT_CAP_REVIEW_LIMIT="${TERMIT_CAP_REVIEW_LIMIT:-12}" \
+    TERMIT_EVAL_CAPABILITY_BASELINE_PATH="${TERMIT_EVAL_CAPABILITY_BASELINE_PATH:-$ROOT/data/eval_capability_baseline.json}" \
+    TERMIT_CAP_REFRESH_BASELINE="${TERMIT_CAP_REFRESH_BASELINE:-0}" \
+    "$ROOT/scripts/capability_quarterly_review.sh"
+  if [[ "${TERMIT_CAP_REFRESH_BASELINE:-0}" == "1" || "${TERMIT_CAP_REFRESH_BASELINE:-0}" == "true" ]]; then
+    echo "Refreshing capability baseline"
+    TERMIT_EVAL_CAPABILITY_BASELINE_PATH="${TERMIT_EVAL_CAPABILITY_BASELINE_PATH:-$ROOT/data/eval_capability_baseline.json}" \
+      "$ROOT/scripts/capability_baseline_refresh.sh"
+  fi
+else
+  echo "Skip capability review: server unreachable at $BASE_URL"
+fi
+
 echo "Done — compare with previous weekly run in data/metrics/"

@@ -45,6 +45,7 @@ async def metrics_thresholds(
         chat=MetricsActiveThresholds(
             degrade_empty_response_rate=settings.degrade_empty_response_rate,
             degrade_fallback_rate=settings.degrade_fallback_rate,
+            max_cost_per_successful_task_usd=settings.max_cost_per_successful_task_usd,
         ),
         agent=AgentAlertThresholds(
             queue_utilization_percent=settings.agent_alert_queue_utilization_percent,
@@ -63,6 +64,7 @@ async def metrics_summary(
     thresholds = MetricsActiveThresholds(
         degrade_empty_response_rate=settings.degrade_empty_response_rate,
         degrade_fallback_rate=settings.degrade_fallback_rate,
+        max_cost_per_successful_task_usd=settings.max_cost_per_successful_task_usd,
     )
     summary = telemetry.snapshot()
     health_status, health_reasons = evaluate_chat_health(summary, thresholds)
@@ -302,6 +304,7 @@ async def metrics_prometheus(
         ("openhands_contract_actions_total", "Captured OpenHands action/observation pairs."),
         ("orchestration_tool_loop_runs_total", "Runs where orchestrator tool-loop executed."),
         ("orchestration_tool_steps_total", "Tool steps executed by orchestrator tool-loop."),
+        ("orchestration_tool_loop_fallback_total", "Tool-loop runs that used default list_files fallback."),
         ("plan_build_enqueued_total", "Agent runs enqueued from Plan → Build."),
     ):
         lines.append(f"# HELP termit_{key} {help_text}")
@@ -311,6 +314,7 @@ async def metrics_prometheus(
         ("avg_coder_attempts", "Average coder attempts per orchestration run."),
         ("coder_retry_run_rate", "Share of runs that required retry."),
         ("coder_retry_success_rate", "Retry success ratio among retried runs."),
+        ("orchestration_tool_loop_fallback_rate", "Share of orchestration runs using tool-loop fallback."),
     ):
         lines.append(f"# HELP termit_{key} {help_text}")
         lines.append(f"# TYPE termit_{key} gauge")

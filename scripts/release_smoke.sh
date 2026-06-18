@@ -39,6 +39,7 @@ if "${PYTHON_BIN}" -c "import fastapi" >/dev/null 2>&1 && curl -sf --max-time 2 
     ./scripts/smoke_http_core.sh
   else
     ./scripts/smoke_http_extended.sh
+    ./scripts/orchestration_tool_loop_smoke.sh
   fi
 else
   echo "Skip smoke_http: fastapi missing or server is unreachable at $BASE_URL."
@@ -61,6 +62,25 @@ if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
       -d '{"persist_report":false}' \
       | TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-0.95}" \
         "${PYTHON_BIN}" scripts/eval_ci_gate.py
+
+    echo "== Model-bound eval gate (CI tier) =="
+    TERMIT_MODEL_BOUND_GATE_TIER=model_bound_ci "${PYTHON_BIN}" scripts/model_bound_eval_gate.py
+
+    echo "== Orchestration tool-loop smoke =="
+    ./scripts/orchestration_tool_loop_smoke.sh
+
+    echo "== Local orchestration preflight =="
+    TERMIT_ORCH_LOCAL_SKIP_SPIKE=true ./scripts/run_local_orchestration_gate.sh
+
+    echo "== DPO GPU train (dry-run if no GPU) =="
+    ./scripts/dpo_gpu_train.sh || true
+
+    echo "== Capability quarterly review =="
+    TERMIT_CAP_GATE_TIER="${TERMIT_CAP_GATE_TIER:-ci}" \
+      ./scripts/capability_quarterly_review.sh
+
+    echo "== Shadow traffic gate =="
+    "${PYTHON_BIN}" scripts/shadow_traffic_gate.py --base-url "$BASE_URL" || true
   fi
 elif [[ "${TERMIT_SMOKE_REQUIRE_SERVER:-}" == "1" ]]; then
   echo "TERMIT_SMOKE_REQUIRE_SERVER=1 but server not reachable at $BASE_URL" >&2

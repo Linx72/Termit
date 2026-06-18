@@ -19,6 +19,16 @@ class FinetuneTrainingDashboardApiTests(unittest.TestCase):
         self.assertIn("training_signals_count", payload)
         self.assertIn("eval_trend", payload)
         self.assertIn("tuning_report", payload)
+        self.assertIn("eval_improvement_kpi", payload)
+
+    def test_dpo_status_endpoint(self) -> None:
+        client = TestClient(app)
+        response = client.get("/api/finetune/dpo/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("pair_count_estimate", payload)
+        self.assertIn("contract_valid", payload)
+        self.assertIn("signals_file", payload)
 
     def test_tuning_report_endpoint(self) -> None:
         client = TestClient(app)

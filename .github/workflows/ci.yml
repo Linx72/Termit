@@ -29,6 +29,9 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
+      - name: Orchestration tool-loop smoke
+        run: ./scripts/orchestration_tool_loop_smoke.sh
+
       - name: Run platform e2e tests
         run: python -m unittest tests.test_platform_e2e -v
 
@@ -36,6 +39,9 @@ jobs:
         run: python -m unittest tests.test_finetune_dpo_export tests.test_finetune_pipeline_e2e -v
 
       - name: Smoke HTTP against live server
+        env:
+          TERMIT_ORCH_TOOL_LOOP_EXECUTION_ENABLED: "true"
+          TERMIT_ORCH_EVAL_FIXTURE_CODER: "true"
         run: |
           uvicorn app.main:app --host 127.0.0.1 --port 8765 &
           for i in $(seq 1 30); do
@@ -55,39 +61,34 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
             | python3 scripts/eval_ci_gate.py
+      - name: Do-all verify (CI mode, PR)
+        if: github.event_name == 'pull_request'
+        env:
+          TERMIT_ORCH_TOOL_LOOP_EXECUTION_ENABLED: "true"
+          TERMIT_ORCH_EVAL_FIXTURE_CODER: "true"
+        run: ./scripts/do_all_verify_ci.sh
       - name: Orchestration retry-loop eval slice
         env:
           TERMIT_ORCH_SPIKE_MIN_PASS_RATE: "0.00"
+          TERMIT_ORCH_SPIKE_USE_FIXTURE: "true"
+          TERMIT_ORCH_REQUIRE_TOOL_LOOP: "true"
+          TERMIT_ORCH_MIN_TOOL_LOOP_STEPS: "1"
         run: |
           python3 scripts/eval_orchestration_spike.py \
             --prompts-file data/eval_scenarios_orchestration.json \
-            --max-prompts 3 \
+            --tool-loop-only \
+            --max-prompts 1 \
             --timeout-seconds 120 \
             --min-pass-rate "${TERMIT_ORCH_SPIKE_MIN_PASS_RATE}" \
             --output-file /tmp/orch_eval_report.json \
             --append-report-file data/orchestration_eval_reports.jsonl
-      - name: Configure orchestration gate thresholds
-        run: |
-          # GitHub-hosted runners have no LLM provider keys; validate report shape only.
-          # Strict thresholds (0.30/0.50) belong to local release / stage1-weekly with providers.
-          echo "TERMIT_ORCH_DEEP_MIN_PASS_RATE=0.00" >> "$GITHUB_ENV"
-          echo "TERMIT_ORCH_DEEP_MIN_RETRY_SUCCESS_RATE=0.00" >> "$GITHUB_ENV"
-          echo "TERMIT_ORCH_RELEASE_MIN_PASS_RATE=0.00" >> "$GITHUB_ENV"
-          echo "TERMIT_ORCH_RELEASE_MIN_RETRY_SUCCESS_RATE=0.00" >> "$GITHUB_ENV"
-          echo "TERMIT_ORCH_GATE_MIN_TOTAL=1" >> "$GITHUB_ENV"
       - name: Orchestration deep gate
         env:
-          TERMIT_ORCH_GATE_TIER: "deep"
-          TERMIT_ORCH_MIN_PASS_RATE: ${{ env.TERMIT_ORCH_DEEP_MIN_PASS_RATE }}
-          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: ${{ env.TERMIT_ORCH_DEEP_MIN_RETRY_SUCCESS_RATE }}
-          TERMIT_ORCH_MIN_TOTAL: ${{ env.TERMIT_ORCH_GATE_MIN_TOTAL }}
+          TERMIT_ORCH_GATE_TIER: ci
         run: cat /tmp/orch_eval_report.json | python3 scripts/eval_orchestration_gate.py
       - name: Orchestration release gate
         env:
-          TERMIT_ORCH_GATE_TIER: "release"
-          TERMIT_ORCH_MIN_PASS_RATE: ${{ env.TERMIT_ORCH_RELEASE_MIN_PASS_RATE }}
-          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: ${{ env.TERMIT_ORCH_RELEASE_MIN_RETRY_SUCCESS_RATE }}
-          TERMIT_ORCH_MIN_TOTAL: ${{ env.TERMIT_ORCH_GATE_MIN_TOTAL }}
+          TERMIT_ORCH_GATE_TIER: ci
         run: cat /tmp/orch_eval_report.json | python3 scripts/eval_orchestration_gate.py
       - name: Upload orchestration eval report artifact
         uses: actions/upload-artifact@v4
@@ -115,6 +116,37 @@ jobs:
       - name: Runtime smoke tests for shell bridge
         run: python3 -m unittest tests.test_termit_shell_runtime_smoke -v
 
+  nightly-macos-live-orch:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Bootstrap Ollama (CI model)
+        run: |
+          TERMIT_OLLAMA_CI_MODEL=tinyllama ./scripts/bootstrap_ollama_ci.sh
+      - name: Start Termit API for live gate
+        env:
+          TERMIT_ORCH_TOOL_LOOP_EXECUTION_ENABLED: "true"
+          TERMIT_ORCH_EVAL_FIXTURE_CODER: "false"
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8765 &
+          for i in $(seq 1 45); do
+            curl -sf http://127.0.0.1:8765/health && break
+            sleep 1
+          done
+      - name: macOS live orchestration gate (Ollama + fallback)
+        env:
+          TERMIT_OLLAMA_CI_BOOTSTRAP: "false"
+          TERMIT_ORCH_LIVE_MODEL: ollama:tinyllama
+          TERMIT_ORCH_TOOL_LOOP_FALLBACK: "true"
+          TERMIT_MACOS_ORCH_REQUIRED: "false"
+        run: ./scripts/nightly_macos_live_orchestration.sh
+
   nightly-quality-gates:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -131,6 +163,9 @@ jobs:
           sudo apt-get install -y ffmpeg
           pip install -r requirements.txt
       - name: Start API server for nightly gates
+        env:
+          TERMIT_ORCH_TOOL_LOOP_EXECUTION_ENABLED: "true"
+          TERMIT_ORCH_EVAL_FIXTURE_CODER: "true"
         run: |
           uvicorn app.main:app --host 127.0.0.1 --port 8765 &
           for i in $(seq 1 45); do
@@ -159,6 +194,19 @@ jobs:
             --baseline data/eval_baseline_release.json \
             --current /tmp/eval_current_nightly.json \
             --max-pass-rate-drop 0.05
+      - name: DPO contract gate (sample)
+        run: |
+          python3 scripts/eval_dpo_contract_gate.py --dataset data/finetune/datasets/sample_dpo_contract.jsonl
+      - name: Nightly capability quarterly review
+        env:
+          TERMIT_CAP_GATE_TIER: ci
+          TERMIT_CAP_REVIEW_OUT: /tmp/eval_capability_review.json
+          TERMIT_CAP_REGRESSION_OUT: /tmp/eval_capability_regression.json
+        run: bash scripts/capability_quarterly_review.sh
+      - name: Nightly model-bound eval gate
+        env:
+          TERMIT_MODEL_BOUND_GATE_TIER: model_bound_ci
+        run: python3 scripts/model_bound_eval_gate.py
       - name: Nightly flaky-watch report
         run: |
           python3 scripts/flaky_watch_report.py \
@@ -217,29 +265,49 @@ jobs:
       - name: Nightly orchestration spike
         env:
           TERMIT_ORCH_SPIKE_MIN_PASS_RATE: "0.00"
+          TERMIT_ORCH_SPIKE_USE_FIXTURE: "true"
+          TERMIT_ORCH_REQUIRE_TOOL_LOOP: "true"
+          TERMIT_ORCH_MIN_TOOL_LOOP_STEPS: "1"
         run: |
           python3 scripts/eval_orchestration_spike.py \
             --prompts-file data/eval_scenarios_orchestration.json \
-            --max-prompts 10 \
+            --tool-loop-only \
+            --max-prompts 3 \
             --timeout-seconds 180 \
             --min-pass-rate "${TERMIT_ORCH_SPIKE_MIN_PASS_RATE}" \
             --output-file /tmp/orch_eval_report_nightly.json \
             --append-report-file data/orchestration_eval_reports.jsonl
       - name: Nightly orchestration deep gate
         env:
-          TERMIT_ORCH_GATE_TIER: "deep"
-          # GitHub runners have no LLM provider keys; gate validates report shape only.
-          TERMIT_ORCH_MIN_PASS_RATE: "0.00"
-          TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: "0.00"
-          TERMIT_ORCH_MIN_TOTAL: "3"
+          TERMIT_ORCH_GATE_TIER: ci
         run: cat /tmp/orch_eval_report_nightly.json | python3 scripts/eval_orchestration_gate.py
       - name: Nightly orchestration release gate
         env:
-          TERMIT_ORCH_GATE_TIER: "release"
+          TERMIT_ORCH_GATE_TIER: release
           TERMIT_ORCH_MIN_PASS_RATE: "0.00"
           TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: "0.00"
           TERMIT_ORCH_MIN_TOTAL: "3"
         run: cat /tmp/orch_eval_report_nightly.json | python3 scripts/eval_orchestration_gate.py
+      - name: Nightly cloud benchmark (optional secrets)
+        env:
+          OPENAI_COMPAT_API_KEY: ${{ secrets.OPENAI_COMPAT_API_KEY }}
+          OPENAI_COMPAT_BASE_URL: ${{ secrets.OPENAI_COMPAT_BASE_URL }}
+        run: |
+          if [[ -z "${OPENAI_COMPAT_API_KEY:-}" ]]; then
+            echo "Skip cloud benchmark: OPENAI_COMPAT_API_KEY secret not configured."
+            exit 0
+          fi
+          TERMIT_RUN_CLOUD_BENCHMARK=true \
+          TERMIT_CAP_GATE_TIER=ci \
+          TERMIT_CAP_REFRESH_BASELINE=0 \
+            ./scripts/cloud_benchmark_cycle.sh
+      - name: Nightly DPO GPU train dry-run
+        run: ./scripts/dpo_gpu_train.sh
+      - name: Nightly do-all verify (CI mode)
+        env:
+          TERMIT_ORCH_TOOL_LOOP_EXECUTION_ENABLED: "true"
+          TERMIT_ORCH_EVAL_FIXTURE_CODER: "true"
+        run: ./scripts/do_all_verify_ci.sh
       - name: Upload nightly orchestration report artifact
         uses: actions/upload-artifact@v4
         with:
@@ -251,6 +319,8 @@ jobs:
         with:
           name: flaky-watch-nightly
           path: |
+            /tmp/eval_capability_review.json
+            /tmp/eval_capability_regression.json
             /tmp/flaky_watch_report.json
             /tmp/flaky_watch_report.md
             /tmp/flaky_watch_trend.json

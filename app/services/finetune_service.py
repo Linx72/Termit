@@ -290,6 +290,56 @@ class FinetuneService:
         contract = validate_dpo_rows(rows, min_text_chars=min_text_chars)
         return {"dataset_path": str(path), **contract}
 
+    def dpo_status(self, *, min_pairs: int = 1, min_chosen_chars: int = 12) -> dict[str, object]:
+        """Estimate DPO export readiness without writing a dataset file."""
+        import os
+
+        negatives = self._training_signal_store.load_dpo_samples(limit=5000)
+        positives = [
+            row
+            for row in self._training_signal_store.load_samples(limit=5000)
+            if str(row.get("origin", "")) not in {"tool_step_negative", "patch_revert"}
+        ]
+        pairs = build_dpo_pairs(
+            negatives,
+            positives,
+            min_chosen_chars=min_chosen_chars,
+        )
+        contract_valid = False
+        if pairs:
+            contract = validate_dpo_rows(
+                [dict(item) for item in pairs],
+                min_text_chars=min_chosen_chars,
+            )
+            contract_valid = bool(contract.get("valid", False))
+        dpo_files = sorted(
+            self.datasets_dir.glob("*_dpo_*.jsonl"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        latest = dpo_files[0] if dpo_files else None
+        latest_pair_count = 0
+        if latest is not None:
+            latest_pair_count = sum(
+                1 for line in latest.read_text(encoding="utf-8").splitlines() if line.strip()
+            )
+        normalize_flag = os.getenv("TERMIT_NORMALIZE_SIGNALS_BEFORE_DPO", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        return {
+            "negative_count": len(negatives),
+            "positive_pool": len(positives),
+            "pair_count_estimate": len(pairs),
+            "contract_valid": contract_valid and len(pairs) >= min_pairs,
+            "contract_version": DPO_CONTRACT_VERSION,
+            "latest_dpo_dataset": latest.name if latest else None,
+            "latest_dpo_pair_count": latest_pair_count,
+            "signals_file": str(self._training_signal_store.file_path),
+            "normalize_before_export": normalize_flag,
+        }
+
     def train_dpo_dataset(
         self,
         *,
@@ -805,7 +855,20 @@ class FinetuneService:
             "regression_gate_enabled": self._regression_gate_enabled,
             "shadow_traffic_percent": self._shadow_traffic_percent,
             "tuning_report": self.tuning_report(),
+            "eval_improvement_kpi": self._load_eval_improvement_kpi(),
         }
+
+    def _load_eval_improvement_kpi(self) -> dict[str, object] | None:
+        """Latest post-train KPI summary from data/eval_kpi_last.json if present."""
+        data_dir = self.eval_report_file_path.parent
+        last_path = data_dir / "eval_kpi_last.json"
+        if not last_path.is_file():
+            return None
+        try:
+            payload = json.loads(last_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        return payload if isinstance(payload, dict) else None
 
     def tuning_report(self, *, event_limit: int = 5000) -> dict[str, object]:
         return build_tool_loop_tuning_report(

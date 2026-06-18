@@ -82,6 +82,29 @@ class AlertHealthServiceTests(unittest.TestCase):
         self.assertEqual(status, "warning")
         self.assertTrue(any("near threshold" in item for item in reasons))
 
+    def test_evaluate_chat_health_degraded_on_high_cost_per_success(self) -> None:
+        summary = MetricsSummaryResponse(
+            chat_requests_total=10,
+            chat_success_total=10,
+            chat_cache_hits_total=0,
+            chat_cache_miss_total=10,
+            chat_success_rate=1.0,
+            chat_cache_hit_rate=0.0,
+            chat_latency_p50_ms=100,
+            chat_latency_p95_ms=200,
+            task_total=5,
+            task_completed=5,
+            task_failed=0,
+            task_success_rate=1.0,
+            automation_rate=1.0,
+            estimated_cost_total_usd=7.5,
+            cost_per_successful_task_usd=1.5,
+        )
+        thresholds = MetricsActiveThresholds(max_cost_per_successful_task_usd=1.0)
+        status, reasons = evaluate_chat_health(summary, thresholds)
+        self.assertEqual(status, "degraded")
+        self.assertTrue(any("Cost per successful task" in item for item in reasons))
+
     def test_evaluate_agent_health_degraded_on_queue_and_dead_letter(self) -> None:
         metrics = AgentRunsMetricsResponse(
             queue_size=85,

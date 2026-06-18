@@ -306,6 +306,7 @@ class OrchestrationRunRequest(BaseModel):
     repo_profile: Optional[str] = None
     routing_policy: str = Field(default="benchmark", pattern="^(default|benchmark)$")
     plan_only: bool = False
+    eval_fixture: bool = False
 
 
 class OrchestrationPhaseResult(BaseModel):
@@ -344,7 +345,18 @@ class OrchestrationMetricsResponse(BaseModel):
     openhands_contract_actions_total: float = 0
     orchestration_tool_loop_runs_total: float = 0
     orchestration_tool_steps_total: float = 0
+    orchestration_tool_loop_fallback_total: float = 0
+    orchestration_tool_loop_fallback_rate: float = 0.0
     plan_build_enqueued_total: float = 0
+
+
+class OrchestrationConfigResponse(BaseModel):
+    tool_loop_execution_enabled: bool = False
+    eval_fixture_coder_enabled: bool = False
+    gate_tier: str = "ci"
+    require_tool_loop: bool = False
+    min_tool_loop_steps: int = 0
+    tool_loop_fallback_enabled: bool = True
 
 
 class BuildFromPlanRequest(BaseModel):
@@ -530,6 +542,7 @@ class AgentAlertThresholds(BaseModel):
 class MetricsActiveThresholds(BaseModel):
     degrade_empty_response_rate: float = 0.05
     degrade_fallback_rate: float = 0.35
+    max_cost_per_successful_task_usd: float = 1.0
 
 
 class AlertThresholdsResponse(BaseModel):
@@ -837,6 +850,57 @@ class EvalBenchmarkResponse(BaseModel):
     reference_quality_mean: float
     rows: list[dict[str, object]] = Field(default_factory=list)
     routing_sync: Optional[dict[str, object]] = None
+
+
+class EvalCapabilityReviewPoint(BaseModel):
+    benchmark_id: str
+    timestamp: str = ""
+    termit_pass_rate: float = 0.0
+    reference_pass_rate: float = 0.0
+    pass_rate_gap: float = 0.0
+    termit_quality_mean: float = 0.0
+    reference_quality_mean: float = 0.0
+    quality_gap: float = 0.0
+
+
+class EvalCapabilityReviewResponse(BaseModel):
+    total_reports: int = 0
+    window: int = 0
+    latest_benchmark_id: Optional[str] = None
+    latest_timestamp: Optional[str] = None
+    trend_direction: str = "no_data"
+    mean_pass_gap: float = 0.0
+    mean_quality_gap: float = 0.0
+    termit_win_rate: float = 0.0
+    reports: list[EvalCapabilityReviewPoint] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class EvalCapabilityRegressionResponse(BaseModel):
+    baseline_total_reports: int = 0
+    current_total_reports: int = 0
+    required_min_reports: int = 1
+    baseline_mean_pass_gap: float = 0.0
+    current_mean_pass_gap: float = 0.0
+    mean_pass_gap_delta: float = 0.0
+    max_pass_gap_drop: float = 0.0
+    baseline_mean_quality_gap: float = 0.0
+    current_mean_quality_gap: float = 0.0
+    mean_quality_gap_delta: float = 0.0
+    max_quality_gap_drop: float = 0.0
+    baseline_termit_win_rate: float = 0.0
+    current_termit_win_rate: float = 0.0
+    termit_win_rate_delta: float = 0.0
+    max_win_rate_drop: float = 0.0
+    current_trend_direction: str = "no_data"
+    allowed_trend_directions: list[str] = Field(default_factory=lambda: ["flat", "improving"])
+    gate_passed: bool = False
+    notes: list[str] = Field(default_factory=list)
+
+
+class EvalCapabilityBaselineRefreshResponse(BaseModel):
+    baseline_path: str
+    baseline: dict[str, object] = Field(default_factory=dict)
 
 
 class RoutingBenchmarkSyncRequest(BaseModel):
@@ -1338,6 +1402,19 @@ class FinetuneTrainingDashboardResponse(BaseModel):
     regression_gate_enabled: bool = True
     shadow_traffic_percent: float = 10.0
     tuning_report: dict[str, object] = Field(default_factory=dict)
+    eval_improvement_kpi: Optional[dict[str, object]] = None
+
+
+class FinetuneDpoStatusResponse(BaseModel):
+    negative_count: int = 0
+    positive_pool: int = 0
+    pair_count_estimate: int = 0
+    contract_valid: bool = False
+    contract_version: str = "1.0"
+    latest_dpo_dataset: Optional[str] = None
+    latest_dpo_pair_count: int = 0
+    signals_file: str = ""
+    normalize_before_export: bool = True
 
 
 class FinetuneTuningReportResponse(BaseModel):

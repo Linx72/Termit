@@ -10,7 +10,6 @@ import time
 from typing import Optional
 from uuid import uuid4
 
-from app.services.agent_outcome_service import classify_agent_outcome
 from app.domain.schemas import (
     AgentProfileCreateRequest,
     AgentProfileResponse,
@@ -49,6 +48,7 @@ from app.services.agent_loop_service import (
     build_tool_arguments,
 )
 from app.services.agent_memory_store import AgentMemoryStore
+from app.services.agent_outcome_service import classify_agent_outcome
 from app.services.agent_run_notifier import AgentRunNotifier
 from app.services.build_workflow_service import BuildWorkflowService
 from app.services.ssh_workspace_service import SshWorkspaceConfig, SshWorkspaceService
@@ -64,7 +64,7 @@ from app.services.skill_store import SkillStore
 from app.services.skill_selector_service import SkillSelectorService, SkillSelectionResult
 from app.services.tooling_service import ToolingService
 from app.services.trace_span_store import TraceSpanStore
-from app.services.training_signal_store import TrainingSignalStore
+from app.services.training_signal_store import TrainingSignalStore, normalize_capture_instruction
 from app.services.patch_outcome_store import PatchOutcomeStore
 from app.services.agent_tool_schema import build_openai_tools
 from app.services.loop_step_budget import resolve_loop_step_budget
@@ -770,6 +770,15 @@ class AgentService:
                 updated_profile = profile.model_copy(update={"allow_online": True})
         return updated_profile, updated_payload
 
+    @staticmethod
+    def _capture_instruction(payload: AgentRunRequest) -> str:
+        """Short task text for training-signal capture (not builder/system prompt)."""
+        objective = (payload.online_objective or "").strip()
+        if objective:
+            return normalize_capture_instruction(objective)
+        task = BuildWorkflowService.extract_user_task(payload.input)
+        return normalize_capture_instruction(task)
+
     def _apply_run_mode(
         self,
         profile: AgentProfileResponse,
@@ -1297,7 +1306,7 @@ class AgentService:
                             run_id=run_id,
                             rel_path=patch_path,
                             root_path=str(self._tooling.root),
-                            instruction=payload.input,
+                            instruction=self._capture_instruction(payload),
                             chosen_patch=chosen_patch,
                         )
                     if verified:
@@ -1307,7 +1316,7 @@ class AgentService:
                             action=step.action,
                             tool=step.tool,
                             observation=obs_text,
-                            instruction=payload.input,
+                            instruction=self._capture_instruction(payload),
                             verified=True,
                         )
                 elif step.action == "tool" and step.tool == "execute_command" and verified:
@@ -1317,7 +1326,7 @@ class AgentService:
                         action=step.action,
                         tool=step.tool,
                         observation=obs_text,
-                        instruction=payload.input,
+                        instruction=self._capture_instruction(payload),
                         verified=True,
                     )
                 else:
@@ -1333,7 +1342,7 @@ class AgentService:
                             action=step.action,
                             tool=step.tool,
                             observation=obs_text,
-                            instruction=payload.input,
+                            instruction=self._capture_instruction(payload),
                             reason=reason,
                         )
 
@@ -2005,7 +2014,7 @@ class AgentService:
                         )
                         self._training_signals.try_capture_agent_run(
                             run_id=run_id,
-                            instruction=payload.input,
+                            instruction=self._capture_instruction(payload),
                             response=current.response,
                             session_id=current.session_id,
                             trajectory=trajectory,

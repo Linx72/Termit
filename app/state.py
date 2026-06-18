@@ -822,6 +822,7 @@ def _build_multi_agent_orchestrator() -> MultiAgentOrchestrator:
         code_retrieval=_build_code_retrieval_service(),
         openhands_contract_enabled=settings.orchestration_openhands_contract_enabled,
         tool_loop_execution_enabled=settings.orchestration_tool_loop_execution_enabled,
+        eval_fixture_coder_enabled=settings.orchestration_eval_fixture_coder_enabled,
     )
 
 

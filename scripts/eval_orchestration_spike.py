@@ -23,20 +23,36 @@ DEFAULT_PROMPTS = [
 ]
 
 
-def _load_prompts_from_file(path: Path) -> list[str]:
+def _load_scenarios_from_file(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
-    prompts: list[str] = []
+    scenarios: list[dict[str, Any]] = []
     if isinstance(raw, list):
         for item in raw:
             if isinstance(item, dict):
                 prompt = str(item.get("prompt", "")).strip()
                 if prompt:
-                    prompts.append(prompt)
+                    scenarios.append(
+                        {
+                            "id": str(item.get("id", "")).strip(),
+                            "prompt": prompt,
+                            "expect_tool_loop": bool(item.get("expect_tool_loop", False)),
+                        }
+                    )
             elif isinstance(item, str) and item.strip():
-                prompts.append(item.strip())
-    return prompts
+                scenarios.append(
+                    {
+                        "id": "",
+                        "prompt": item.strip(),
+                        "expect_tool_loop": False,
+                    }
+                )
+    return scenarios
+
+
+def _load_prompts_from_file(path: Path) -> list[str]:
+    return [str(item["prompt"]) for item in _load_scenarios_from_file(path)]
 
 
 def _post_json(url: str, payload: dict[str, Any], *, timeout_seconds: int) -> dict[str, Any]:
@@ -90,6 +106,11 @@ def main() -> int:
         help="JSON array of prompts or scenario objects with `prompt` field",
     )
     parser.add_argument("--max-prompts", type=int, default=3)
+    parser.add_argument(
+        "--tool-loop-only",
+        action="store_true",
+        help="Run only scenarios marked expect_tool_loop in prompts-file",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=90)
     parser.add_argument("--min-pass-rate", type=float, default=0.0)
     parser.add_argument(
@@ -104,10 +125,31 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    file_prompts = _load_prompts_from_file(Path(args.prompts_file))
-    prompts = args.prompts or file_prompts or list(DEFAULT_PROMPTS)
+    use_fixture = os.getenv("TERMIT_ORCH_SPIKE_USE_FIXTURE", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    file_scenarios = _load_scenarios_from_file(Path(args.prompts_file))
+    if args.prompts:
+        scenarios = [
+            {"id": "", "prompt": prompt, "expect_tool_loop": False}
+            for prompt in args.prompts
+        ]
+    elif file_scenarios:
+        scenarios = file_scenarios
+    else:
+        scenarios = [
+            {"id": "", "prompt": prompt, "expect_tool_loop": False}
+            for prompt in DEFAULT_PROMPTS
+        ]
+    if args.tool_loop_only:
+        scenarios = [item for item in scenarios if item.get("expect_tool_loop")]
+        if not scenarios:
+            print(json.dumps({"error": "no_tool_loop_scenarios"}, indent=2))
+            return 1
     max_prompts = max(1, args.max_prompts)
-    prompts = prompts[:max_prompts]
+    scenarios = scenarios[:max_prompts]
     timeout_seconds = max(10, args.timeout_seconds)
     metrics_before = _get_json(
         f"{args.base_url}/api/orchestration/metrics",
@@ -115,13 +157,22 @@ def main() -> int:
     )
     results: list[dict[str, Any]] = []
 
-    for prompt in prompts:
+    for scenario in scenarios:
+        prompt = str(scenario["prompt"])
+        scenario_id = str(scenario.get("id", "")).strip()
+        eval_fixture = use_fixture and bool(scenario.get("expect_tool_loop", False))
+        live_model = os.getenv("TERMIT_ORCH_LIVE_MODEL", "").strip()
+        routing_policy = os.getenv("TERMIT_ORCH_ROUTING_POLICY", "default").strip() or "default"
         try:
             payload = {
                 "input": prompt,
                 "task_type": "coding",
                 "use_retrieval": False,
+                "eval_fixture": eval_fixture,
+                "routing_policy": routing_policy,
             }
+            if live_model:
+                payload["model"] = live_model
             result = _post_json(
                 f"{args.base_url}/api/orchestration/run",
                 payload,
@@ -129,7 +180,9 @@ def main() -> int:
             )
             results.append(
                 {
+                    "scenario_id": scenario_id,
                     "prompt": prompt,
+                    "eval_fixture": eval_fixture,
                     "status": result.get("status"),
                     "run_id": result.get("run_id"),
                     "phase_count": len(result.get("phases", [])),
@@ -139,7 +192,9 @@ def main() -> int:
         except (urllib.error.HTTPError, TimeoutError) as exc:
             results.append(
                 {
+                    "scenario_id": scenario_id,
                     "prompt": prompt,
+                    "eval_fixture": eval_fixture,
                     "status": "failed",
                     "error": f"http_{exc.code}" if isinstance(exc, urllib.error.HTTPError) else "timeout",
                 }
@@ -163,6 +218,16 @@ def main() -> int:
                 metrics_before,
                 "orchestration_runs_total",
             ),
+            "orchestration_tool_loop_runs_total": _delta(
+                metrics_after,
+                metrics_before,
+                "orchestration_tool_loop_runs_total",
+            ),
+            "orchestration_tool_steps_total": _delta(
+                metrics_after,
+                metrics_before,
+                "orchestration_tool_steps_total",
+            ),
             "coder_retry_runs_total": _delta(
                 metrics_after,
                 metrics_before,
@@ -174,6 +239,11 @@ def main() -> int:
                 "coder_retry_success_runs_total",
             ),
             "reviewer_reject_total": _delta(metrics_after, metrics_before, "reviewer_reject_total"),
+            "orchestration_tool_loop_fallback_total": _delta(
+                metrics_after,
+                metrics_before,
+                "orchestration_tool_loop_fallback_total",
+            ),
             "avg_coder_attempts_after": float(metrics_after.get("avg_coder_attempts", 0.0)),
             "coder_retry_success_rate_after": float(
                 metrics_after.get("coder_retry_success_rate", 0.0)
@@ -187,7 +257,48 @@ def main() -> int:
         report_with_ts = {"timestamp": datetime.now(timezone.utc).isoformat(), **report}
         _append_jsonl(Path(args.append_report_file), report_with_ts)
     min_pass_rate = min(1.0, max(0.0, float(args.min_pass_rate)))
-    return 0 if report["pass_rate"] + 1e-9 >= min_pass_rate else 1
+    if report["pass_rate"] + 1e-9 < min_pass_rate:
+        return 1
+
+    require_tool_loop = os.getenv("TERMIT_ORCH_REQUIRE_TOOL_LOOP", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    min_tool_steps = max(0, int(os.getenv("TERMIT_ORCH_MIN_TOOL_LOOP_STEPS", "1")))
+    tool_steps_delta = float(report["delta"].get("orchestration_tool_steps_total", 0.0))
+    if require_tool_loop and tool_steps_delta + 1e-9 < min_tool_steps:
+        print(
+            json.dumps(
+                {
+                    "gate": "tool_loop",
+                    "passed": False,
+                    "tool_steps_delta": tool_steps_delta,
+                    "required_min": min_tool_steps,
+                },
+                indent=2,
+            )
+        )
+        return 1
+
+    max_fallback_raw = os.getenv("TERMIT_ORCH_MAX_TOOL_LOOP_FALLBACK_DELTA", "").strip()
+    if max_fallback_raw:
+        fallback_delta = float(report["delta"].get("orchestration_tool_loop_fallback_total", 0.0))
+        max_fallback = max(0.0, float(max_fallback_raw))
+        if fallback_delta - 1e-9 > max_fallback:
+            print(
+                json.dumps(
+                    {
+                        "gate": "tool_loop_fallback",
+                        "passed": False,
+                        "fallback_delta": fallback_delta,
+                        "max_allowed": max_fallback,
+                    },
+                    indent=2,
+                )
+            )
+            return 1
+    return 0
 
 
 if __name__ == "__main__":

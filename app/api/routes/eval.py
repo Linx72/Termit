@@ -1,8 +1,14 @@
+import json
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.schemas import (
     EvalBenchmarkRequest,
     EvalBenchmarkResponse,
+    EvalCapabilityBaselineRefreshResponse,
+    EvalCapabilityRegressionResponse,
+    EvalCapabilityReviewResponse,
     EvalDashboardResponse,
     EvalReportSummaryResponse,
     EvalRunRequest,
@@ -14,7 +20,14 @@ from app.domain.schemas import (
     RoutingBenchmarkSyncResponse,
 )
 from app.services.eval_benchmark_service import EvalBenchmarkService
-from app.services.eval_ci_gate import DEEP_GATE, FAST_GATE, RELEASE_GATE, evaluate_tier_gate
+from app.services.eval_ci_gate import (
+    DEEP_GATE,
+    FAST_GATE,
+    MODEL_BOUND_CI_GATE,
+    MODEL_BOUND_RELEASE_GATE,
+    RELEASE_GATE,
+    evaluate_tier_gate,
+)
 from app.services.eval_service import EvalService
 from app.services.routing_benchmark_sync_service import RoutingBenchmarkSyncService
 from app.state import get_eval_service, get_routing_policy_service, get_settings
@@ -172,6 +185,51 @@ async def run_suite_tier(
     )
 
 
+@router.post("/run-suite/model-bound/{tier}", response_model=EvalSuiteRunResponse)
+async def run_model_bound_suite(
+    tier: str,
+    service: EvalService = Depends(get_eval_service),
+) -> EvalSuiteRunResponse:
+    gate_map = {
+        "model_bound_ci": MODEL_BOUND_CI_GATE,
+        "model_bound_release": MODEL_BOUND_RELEASE_GATE,
+    }
+    selected = gate_map.get(tier.strip().lower())
+    if selected is None:
+        raise HTTPException(status_code=404, detail=f"Unknown model-bound eval tier: {tier}")
+    if selected.name == MODEL_BOUND_CI_GATE.name:
+        scenario_ids = service.model_bound_tool_scenario_ids()
+    else:
+        scenario_ids = service.model_bound_scenario_ids()
+    if not scenario_ids:
+        raise HTTPException(status_code=404, detail="No model-bound scenarios configured")
+    report = service.run_scenario_ids(
+        scenario_ids,
+        persist_report=True,
+        category_filter="model_bound",
+    )
+    ok, detail = evaluate_tier_gate(
+        tier=selected,
+        pass_rate=float(report["pass_rate"]),
+        total=int(report["total"]),
+        quality_median=float(report.get("quality_median", 0.0) or 0.0) or None,
+        cloud_judge_coverage=float(report.get("cloud_judge_coverage", 0.0) or 0.0),
+    )
+    if not ok:
+        raise HTTPException(status_code=412, detail=detail)
+    return EvalSuiteRunResponse(
+        run_id=str(report["run_id"]),
+        started_at=float(report["started_at"]),
+        finished_at=float(report["finished_at"]),
+        total=int(report["total"]),
+        passed=int(report["passed"]),
+        failed=int(report["failed"]),
+        pass_rate=float(report["pass_rate"]),
+        category_filter=str(report["category_filter"]) if report.get("category_filter") else None,
+        results=[_to_run_response(item) for item in report["results"]],
+    )
+
+
 @router.post("/benchmark/baselines", response_model=EvalBenchmarkResponse)
 async def run_benchmark_baselines(
     payload: EvalBenchmarkRequest,
@@ -211,6 +269,86 @@ async def run_benchmark_baselines(
         reference_quality_mean=float(report["reference_quality_mean"]),
         rows=list(report.get("rows", [])),
         routing_sync=routing_sync,
+    )
+
+
+@router.get("/benchmark/capability-review", response_model=EvalCapabilityReviewResponse)
+async def benchmark_capability_review(limit: int = 6) -> EvalCapabilityReviewResponse:
+    settings = get_settings()
+    benchmark = EvalBenchmarkService(
+        report_file_path=settings.eval_report_file_path,
+        termit_model=settings.code_model,
+        reference_model=settings.eval_benchmark_reference_model,
+    )
+    payload = benchmark.build_capability_review(limit=max(1, min(limit, 52)))
+    return EvalCapabilityReviewResponse(**payload)
+
+
+@router.get("/benchmark/capability-regression", response_model=EvalCapabilityRegressionResponse)
+async def benchmark_capability_regression(
+    limit: int = 6,
+    baseline_path: str | None = None,
+    max_pass_gap_drop: float | None = None,
+    max_quality_gap_drop: float | None = None,
+    max_win_rate_drop: float | None = None,
+) -> EvalCapabilityRegressionResponse:
+    settings = get_settings()
+    baseline_file = Path((baseline_path or settings.eval_capability_baseline_path).strip())
+    if not baseline_file.exists():
+        raise HTTPException(status_code=404, detail=f"Capability baseline not found: {baseline_file}")
+    try:
+        baseline_payload = json.loads(baseline_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid capability baseline JSON: {baseline_file}") from exc
+    if not isinstance(baseline_payload, dict):
+        raise HTTPException(status_code=400, detail=f"Capability baseline must be JSON object: {baseline_file}")
+
+    benchmark = EvalBenchmarkService(
+        report_file_path=settings.eval_report_file_path,
+        termit_model=settings.code_model,
+        reference_model=settings.eval_benchmark_reference_model,
+    )
+    payload = benchmark.build_capability_regression(
+        baseline=baseline_payload,
+        limit=max(1, min(limit, 52)),
+        max_pass_gap_drop=(
+            settings.capability_regression_max_pass_gap_drop
+            if max_pass_gap_drop is None
+            else max(0.0, float(max_pass_gap_drop))
+        ),
+        max_quality_gap_drop=(
+            settings.capability_regression_max_quality_gap_drop
+            if max_quality_gap_drop is None
+            else max(0.0, float(max_quality_gap_drop))
+        ),
+        max_win_rate_drop=(
+            settings.capability_regression_max_win_rate_drop
+            if max_win_rate_drop is None
+            else max(0.0, float(max_win_rate_drop))
+        ),
+    )
+    return EvalCapabilityRegressionResponse(**payload)
+
+
+@router.post("/benchmark/capability-baseline/refresh", response_model=EvalCapabilityBaselineRefreshResponse)
+async def refresh_capability_baseline(
+    limit: int = 12,
+    baseline_path: str | None = None,
+) -> EvalCapabilityBaselineRefreshResponse:
+    settings = get_settings()
+    target_path = (baseline_path or settings.eval_capability_baseline_path).strip()
+    benchmark = EvalBenchmarkService(
+        report_file_path=settings.eval_report_file_path,
+        termit_model=settings.code_model,
+        reference_model=settings.eval_benchmark_reference_model,
+    )
+    baseline = benchmark.refresh_capability_baseline(
+        baseline_file_path=target_path,
+        limit=max(1, min(limit, 52)),
+    )
+    return EvalCapabilityBaselineRefreshResponse(
+        baseline_path=target_path,
+        baseline=baseline,
     )
 
 

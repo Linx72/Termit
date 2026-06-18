@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -88,8 +89,8 @@ TOGGLE_SPECS: tuple[AutomationToggleSpec, ...] = (
         env_key="",
         label_ru="Weekly eval (crontab)",
         label_en="Weekly eval (crontab)",
-        description_ru="Внешний cron из do_all_automatic (пн 04:00).",
-        description_en="External cron from do_all_automatic (Mon 04:00).",
+        description_ru="Внешний cron: weekly closed loop (пн 04:00) — eval + shadow + orch gates.",
+        description_en="External cron: weekly closed loop (Mon 04:00) — eval, shadow, orch gates.",
         cron_marker="# termit-weekly-eval",
     ),
     AutomationToggleSpec(
@@ -100,6 +101,24 @@ TOGGLE_SPECS: tuple[AutomationToggleSpec, ...] = (
         description_ru="Внешний cron из do_all_automatic (02:05).",
         description_en="External cron from do_all_automatic (02:05).",
         cron_marker="# termit-daily-improvement",
+    ),
+    AutomationToggleSpec(
+        toggle_id="training_loop_cron",
+        env_key="",
+        label_ru="Training loop (crontab)",
+        label_en="Training loop (crontab)",
+        description_ru="Внешний cron: training_loop_weekly.sh (вс 04:00).",
+        description_en="External cron: training_loop_weekly.sh (Sun 04:00).",
+        cron_marker="# termit-training-loop-weekly",
+    ),
+    AutomationToggleSpec(
+        toggle_id="quarterly_capability_cron",
+        env_key="",
+        label_ru="Quarterly capability (crontab)",
+        label_en="Quarterly capability (crontab)",
+        description_ru="Внешний cron: quarterly_capability.sh (1-е Jan/Apr/Jul/Oct 05:00).",
+        description_en="External cron: quarterly_capability.sh (1st Jan/Apr/Jul/Oct 05:00).",
+        cron_marker="# termit-quarterly-capability",
     ),
 )
 
@@ -269,18 +288,33 @@ class AutomationControlService:
     def _install_cron_for(self, spec: AutomationToggleSpec) -> bool:
         root = os.path.abspath(self._root)
         venv = f"{root}/.venv/bin/activate"
+        log_dir = "$HOME/Library/Logs" if sys.platform == "darwin" else "$HOME"
         if spec.toggle_id == "weekly_eval_cron":
             cmd = (
-                f"cd {root} && source {venv} && {root}/scripts/weekly_eval.sh "
-                f">> $HOME/Library/Logs/termit-weekly-eval.log 2>&1"
+                f"cd {root} && source {venv} && {root}/scripts/weekly_closed_loop.sh "
+                f">> {log_dir}/termit-weekly-closed-loop.log 2>&1"
             )
             return _install_cron_line(spec.cron_marker or "", "0 4 * * 1", cmd)
         if spec.toggle_id == "daily_improvement_cron":
             cmd = (
                 f"cd {root} && source {venv} && {root}/scripts/daily_improvement.sh "
-                f">> $HOME/Library/Logs/termit-daily-improvement.log 2>&1"
+                f">> {log_dir}/termit-daily-improvement.log 2>&1"
             )
             return _install_cron_line(spec.cron_marker or "", "5 2 * * *", cmd)
+        if spec.toggle_id == "training_loop_cron":
+            cmd = (
+                f"cd {root} && source {venv} && "
+                f"TERMIT_WEEKLY_TRAINING_LOOP=true TERMIT_EVAL_AUTO_PROMOTE_BASELINE=true "
+                f"{root}/scripts/training_loop_weekly.sh "
+                f">> {log_dir}/termit-training-loop-weekly.cron.log 2>&1"
+            )
+            return _install_cron_line(spec.cron_marker or "", "0 4 * * 0", cmd)
+        if spec.toggle_id == "quarterly_capability_cron":
+            cmd = (
+                f"cd {root} && source {venv} && {root}/scripts/quarterly_capability.sh "
+                f">> {log_dir}/termit-quarterly-capability.log 2>&1"
+            )
+            return _install_cron_line(spec.cron_marker or "", "0 5 1 1,4,7,10 *", cmd)
         return False
 
     def _apply_runtime(self, toggle_id: str, enabled: bool) -> None:

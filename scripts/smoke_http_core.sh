@@ -23,5 +23,7 @@ check /api/metrics/thresholds
 check /api/ops/readiness
 check /api/ops/agent-runs/metrics
 check /api/eval/dashboard
+check "/api/eval/benchmark/capability-review?limit=6"
+check "/api/eval/benchmark/capability-regression?limit=6"
 
 echo "OK"

@@ -108,3 +108,192 @@ class EvalBenchmarkService:
             duration_ms=int(result.get("duration_ms", 0) or 0),
             detail=str(result.get("message", ""))[:300],
         )
+
+    def list_recent_benchmarks(self, *, limit: int = 6) -> list[dict[str, object]]:
+        cap = max(1, min(limit, 52))
+        if not self._report_file_path.exists():
+            return []
+        rows: list[dict[str, object]] = []
+        for line in self._report_file_path.read_text(encoding="utf-8").splitlines():
+            payload_raw = line.strip()
+            if not payload_raw:
+                continue
+            try:
+                payload = json.loads(payload_raw)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(payload, dict)
+                and payload.get("benchmark_id")
+                and isinstance(payload.get("rows"), list)
+            ):
+                rows.append(payload)
+        return rows[-cap:]
+
+    def build_capability_review(self, *, limit: int = 6) -> dict[str, object]:
+        reports = self.list_recent_benchmarks(limit=limit)
+        if not reports:
+            return {
+                "total_reports": 0,
+                "window": max(1, min(limit, 52)),
+                "latest_benchmark_id": None,
+                "latest_timestamp": None,
+                "trend_direction": "no_data",
+                "mean_pass_gap": 0.0,
+                "mean_quality_gap": 0.0,
+                "termit_win_rate": 0.0,
+                "reports": [],
+                "notes": ["No benchmark history found. Run /api/eval/benchmark/baselines first."],
+            }
+        points: list[dict[str, object]] = []
+        pass_gaps: list[float] = []
+        quality_gaps: list[float] = []
+        wins = 0
+        for item in reports:
+            termit_pass = float(item.get("termit_pass_rate", 0.0) or 0.0)
+            reference_pass = float(item.get("reference_pass_rate", 0.0) or 0.0)
+            termit_quality = float(item.get("termit_quality_mean", 0.0) or 0.0)
+            reference_quality = float(item.get("reference_quality_mean", 0.0) or 0.0)
+            pass_gap = round(termit_pass - reference_pass, 4)
+            quality_gap = round(termit_quality - reference_quality, 4)
+            if pass_gap > 0:
+                wins += 1
+            pass_gaps.append(pass_gap)
+            quality_gaps.append(quality_gap)
+            points.append(
+                {
+                    "benchmark_id": str(item.get("benchmark_id", "")),
+                    "timestamp": str(item.get("timestamp", "")),
+                    "termit_pass_rate": termit_pass,
+                    "reference_pass_rate": reference_pass,
+                    "pass_rate_gap": pass_gap,
+                    "termit_quality_mean": termit_quality,
+                    "reference_quality_mean": reference_quality,
+                    "quality_gap": quality_gap,
+                }
+            )
+
+        trend_direction = "flat"
+        if len(pass_gaps) >= 2:
+            if pass_gaps[-1] > pass_gaps[0]:
+                trend_direction = "improving"
+            elif pass_gaps[-1] < pass_gaps[0]:
+                trend_direction = "regressing"
+
+        return {
+            "total_reports": len(points),
+            "window": max(1, min(limit, 52)),
+            "latest_benchmark_id": str(points[-1]["benchmark_id"]) if points else None,
+            "latest_timestamp": str(points[-1]["timestamp"]) if points else None,
+            "trend_direction": trend_direction,
+            "mean_pass_gap": round(sum(pass_gaps) / len(pass_gaps), 4),
+            "mean_quality_gap": round(sum(quality_gaps) / len(quality_gaps), 4),
+            "termit_win_rate": round(wins / len(pass_gaps), 4) if pass_gaps else 0.0,
+            "reports": points,
+            "notes": [
+                "pass_rate_gap > 0 means Termit beats reference by task success.",
+                "quality_gap > 0 means Termit output quality beats reference.",
+            ],
+        }
+
+    def build_capability_regression(
+        self,
+        *,
+        baseline: dict[str, object],
+        limit: int = 6,
+        max_pass_gap_drop: float = 0.05,
+        max_quality_gap_drop: float = 0.05,
+        max_win_rate_drop: float = 0.10,
+    ) -> dict[str, object]:
+        current = self.build_capability_review(limit=limit)
+
+        baseline_pass_gap = float(baseline.get("mean_pass_gap", 0.0) or 0.0)
+        current_pass_gap = float(current.get("mean_pass_gap", 0.0) or 0.0)
+        baseline_quality_gap = float(baseline.get("mean_quality_gap", 0.0) or 0.0)
+        current_quality_gap = float(current.get("mean_quality_gap", 0.0) or 0.0)
+        baseline_win_rate = float(baseline.get("termit_win_rate", 0.0) or 0.0)
+        current_win_rate = float(current.get("termit_win_rate", 0.0) or 0.0)
+
+        pass_gap_delta = round(current_pass_gap - baseline_pass_gap, 4)
+        quality_gap_delta = round(current_quality_gap - baseline_quality_gap, 4)
+        win_rate_delta = round(current_win_rate - baseline_win_rate, 4)
+
+        baseline_reports = int(baseline.get("total_reports", 0) or 0)
+        current_reports = int(current.get("total_reports", 0) or 0)
+        min_reports = max(1, baseline_reports)
+        trend = str(current.get("trend_direction", "no_data")).strip().lower()
+        allowed_trends = ["flat", "improving"]
+
+        gate_passed = (
+            current_reports >= min_reports
+            and pass_gap_delta + 1e-9 >= -abs(max_pass_gap_drop)
+            and quality_gap_delta + 1e-9 >= -abs(max_quality_gap_drop)
+            and win_rate_delta + 1e-9 >= -abs(max_win_rate_drop)
+            and trend in {"flat", "improving"}
+        )
+
+        notes: list[str] = []
+        if current_reports < min_reports:
+            notes.append(f"Not enough reports: {current_reports} < {min_reports}.")
+        if pass_gap_delta + 1e-9 < -abs(max_pass_gap_drop):
+            notes.append(
+                f"mean_pass_gap regression {pass_gap_delta:.4f} exceeds allowed drop {max_pass_gap_drop:.4f}."
+            )
+        if quality_gap_delta + 1e-9 < -abs(max_quality_gap_drop):
+            notes.append(
+                "mean_quality_gap regression "
+                f"{quality_gap_delta:.4f} exceeds allowed drop {max_quality_gap_drop:.4f}."
+            )
+        if win_rate_delta + 1e-9 < -abs(max_win_rate_drop):
+            notes.append(
+                f"termit_win_rate regression {win_rate_delta:.4f} exceeds allowed drop {max_win_rate_drop:.4f}."
+            )
+        if trend not in {"flat", "improving"}:
+            notes.append(f"trend_direction '{trend}' is outside allowed values {allowed_trends}.")
+        if not notes:
+            notes.append("Capability regression gate passed.")
+
+        return {
+            "baseline_total_reports": baseline_reports,
+            "current_total_reports": current_reports,
+            "required_min_reports": min_reports,
+            "baseline_mean_pass_gap": baseline_pass_gap,
+            "current_mean_pass_gap": current_pass_gap,
+            "mean_pass_gap_delta": pass_gap_delta,
+            "max_pass_gap_drop": max(0.0, float(max_pass_gap_drop)),
+            "baseline_mean_quality_gap": baseline_quality_gap,
+            "current_mean_quality_gap": current_quality_gap,
+            "mean_quality_gap_delta": quality_gap_delta,
+            "max_quality_gap_drop": max(0.0, float(max_quality_gap_drop)),
+            "baseline_termit_win_rate": baseline_win_rate,
+            "current_termit_win_rate": current_win_rate,
+            "termit_win_rate_delta": win_rate_delta,
+            "max_win_rate_drop": max(0.0, float(max_win_rate_drop)),
+            "current_trend_direction": trend,
+            "allowed_trend_directions": allowed_trends,
+            "gate_passed": gate_passed,
+            "notes": notes,
+        }
+
+    def refresh_capability_baseline(
+        self,
+        *,
+        baseline_file_path: str,
+        limit: int = 12,
+    ) -> dict[str, object]:
+        review = self.build_capability_review(limit=max(1, min(limit, 52)))
+        payload = {
+            "total_reports": int(review.get("total_reports", 0) or 0),
+            "mean_pass_gap": float(review.get("mean_pass_gap", 0.0) or 0.0),
+            "mean_quality_gap": float(review.get("mean_quality_gap", 0.0) or 0.0),
+            "termit_win_rate": float(review.get("termit_win_rate", 0.0) or 0.0),
+            "trend_direction": str(review.get("trend_direction", "no_data")),
+            "latest_benchmark_id": review.get("latest_benchmark_id"),
+            "latest_timestamp": review.get("latest_timestamp"),
+            "window": int(review.get("window", 0) or 0),
+            "note": "Auto-refreshed from capability review history.",
+        }
+        target = Path(baseline_file_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        return payload

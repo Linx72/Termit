@@ -7,6 +7,40 @@ from threading import Lock
 from typing import Optional
 
 
+def normalize_capture_instruction(text: str, *, max_chars: int = 400) -> str:
+    """Store task-focused instruction instead of full builder/system prompts."""
+    stripped = str(text or "").strip()
+    if not stripped:
+        return ""
+    skip_prefixes = (
+        "ты termit",
+        "you are",
+        "you're",
+        "system:",
+        "role:",
+    )
+    for line in stripped.splitlines():
+        candidate = line.strip()
+        if len(candidate) < 4:
+            continue
+        lowered = candidate.lower()
+        if any(lowered.startswith(prefix) for prefix in skip_prefixes):
+            continue
+        if any(
+            marker in lowered
+            for marker in (
+                "cursor-like one-window",
+                "отчитывайся",
+                "report after each",
+                "по фазам",
+                "выполни задачу",
+            )
+        ):
+            continue
+        return candidate[:max_chars]
+    return stripped[:max_chars]
+
+
 class TrainingSignalStore:
     """Append-only capture of high-quality task/agent outputs for finetune export."""
 
@@ -37,7 +71,7 @@ class TrainingSignalStore:
         if not self._enabled:
             return False
         output = response.strip()
-        prompt = instruction.strip()
+        prompt = normalize_capture_instruction(instruction)
         if len(output) < self._min_output_chars or len(prompt) < 4:
             return False
         signal_id = f"run:{run_id}"
@@ -90,7 +124,7 @@ class TrainingSignalStore:
             "signal_id": signal_id,
             "source": "training_signal",
             "origin": "tool_step",
-            "instruction": instruction.strip(),
+            "instruction": normalize_capture_instruction(instruction),
             "input": json.dumps(
                 {
                     "step": step,
@@ -171,7 +205,7 @@ class TrainingSignalStore:
             "signal_id": signal_id,
             "source": "training_signal",
             "origin": "tool_step_negative",
-            "instruction": instruction.strip(),
+            "instruction": normalize_capture_instruction(instruction),
             "input": json.dumps(
                 {
                     "step": step,
@@ -215,7 +249,7 @@ class TrainingSignalStore:
             "signal_id": signal_id,
             "source": "training_signal",
             "origin": "patch_revert",
-            "instruction": instruction.strip() or f"Apply patch to {path}",
+            "instruction": normalize_capture_instruction(instruction) or f"Apply patch to {path}",
             "input": json.dumps(
                 {"path": path, "original_hash": original_hash, "new_hash": new_hash},
                 ensure_ascii=False,
@@ -379,6 +413,50 @@ class TrainingSignalStore:
             rows.append(sample)
         rows.reverse()
         return rows
+
+    def normalize_existing_instructions(
+        self,
+        *,
+        preserve_full: bool = True,
+        dry_run: bool = False,
+    ) -> dict[str, int]:
+        """Backfill short task instructions for legacy builder prompts in JSONL."""
+        if not self.file_path.exists():
+            return {"total": 0, "updated": 0, "skipped": 0}
+        lines = self.file_path.read_text(encoding="utf-8").splitlines()
+        updated_rows: list[str] = []
+        stats = {"total": 0, "updated": 0, "skipped": 0}
+        for line in lines:
+            if not line.strip():
+                continue
+            stats["total"] += 1
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                updated_rows.append(line)
+                stats["skipped"] += 1
+                continue
+            if not isinstance(row, dict):
+                updated_rows.append(line)
+                stats["skipped"] += 1
+                continue
+            instruction = str(row.get("instruction", ""))
+            normalized = normalize_capture_instruction(instruction)
+            if normalized and normalized != instruction.strip():
+                if preserve_full and "instruction_full" not in row:
+                    row["instruction_full"] = instruction[:4000]
+                row["instruction"] = normalized
+                stats["updated"] += 1
+            updated_rows.append(json.dumps(row, ensure_ascii=False))
+        if not dry_run and stats["updated"] > 0:
+            backup = self.file_path.with_suffix(self.file_path.suffix + ".bak")
+            backup.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+            self.file_path.write_text(
+                "\n".join(updated_rows) + ("\n" if updated_rows else ""),
+                encoding="utf-8",
+            )
+            self._known_ids = None
+        return stats
 
     def _append(self, row: dict[str, object]) -> bool:
         line = json.dumps(row, ensure_ascii=False)
