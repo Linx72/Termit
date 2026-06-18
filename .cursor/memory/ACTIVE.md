@@ -3,9 +3,8 @@
 **Последнее обновление:** 2026-06-18
 
 ## Сводка
-- do all: exit 0 (~161s), hosted smoke OK, plan do_all_plan OK
-- Finetune KPI: false (delta -33% post-train vs baseline)
+- do all: exit 0 (~159s), verify + plan + hosted smoke OK
 
 ## Открытые задачи
-- [ ] Стабильный finetune KPI (+5%)
+- [ ] Finetune KPI стабильный (+5%)
 - [ ] Beta cohort, cloud key, GPU DPO
