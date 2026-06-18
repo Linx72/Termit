@@ -515,7 +515,10 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Следующий этап (0.4.24): Product KPI из beta telemetry
 
 - [ ] Hosted beta deploy + 5+ пользователей
+- [x] `scripts/deploy_hosted_beta.sh` — compose up + hosted_smoke + plan snapshot
+- [x] docker-compose: volume `/app/persist` (fix shadowing app code on `/app`)
 - [x] `scripts/seed_beta_cohort_dev.py` — synthetic cohort (TERMIT_BETA_DEV_SEED, dev only)
+- [x] BETA_ONBOARDING + HOSTED_DEPLOYMENT: deploy_hosted_beta, plan-status
 - [ ] Product gates green на staging с реальной telemetry
 
 **DoD:** cohort_size_d30 ≥5; desktop_kpi_gates overall_passed на beta/staging.

@@ -33,7 +33,7 @@ Caddy obtains certificates automatically for `TERMIT_PUBLIC_DOMAIN`. Local-only 
 - `TERMIT_API_KEYS=<key>:<quota>:<role>:<team>`
 - `TERMIT_TEAM_QUOTAS=core:10000,beta:3000`
 - Mount `./data` for feedback, finetune artifacts, and seed JSON
-- Persist SQLite DB files on a volume (`termit-sqlite` volume in compose)
+- Persist SQLite DB files on volume `termit-sqlite` mounted at `/app/persist` (not `/app` — that shadows app code).
 
 ## Fine-tune pipeline (MVP)
 
@@ -52,6 +52,12 @@ Caddy obtains certificates automatically for `TERMIT_PUBLIC_DOMAIN`. Local-only 
 - Incident drill: `POST /api/ops/incident-drill` (admin key)
 
 ## Hosted beta smoke (post-deploy)
+
+One-command deploy + smoke:
+
+```bash
+./scripts/deploy_hosted_beta.sh
+```
 
 After `docker compose up --build -d`:
 

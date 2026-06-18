@@ -50,7 +50,6 @@ echo "  cd clients/termit-client && npm install && npm run build && npm test"
 echo "  cd ../vscode-extension && npm install && npm run build"
 echo "  cd ../termit-desktop && npm install && npm run build"
 echo "== Optional: hosted beta =="
-echo "  cp deploy/docker.env.example .env && docker compose up --build -d"
-echo "  ./scripts/hosted_smoke.sh"
+echo "  ./scripts/deploy_hosted_beta.sh"
 
 echo "Done."

@@ -3,12 +3,10 @@
 **Последнее обновление:** 2026-06-18
 
 ## Сводка
-- do all: do_all_automatic + do_all_plan (exit 0, ~206s).
-- Коммит 5759ec0: Grafana plan, weekly CI, seed_beta_cohort_dev, cloud auto-verify.
-- Этапы 0.4.23–0.4.25 в PROJECT_TASK_PROMPT_RU.md.
+- Hosted beta: deploy_hosted_beta.sh, fix docker-compose volume /app/persist
+- hosted_smoke passed на :8080 (plan-status, onboarding-metrics OK)
 
 ## Открытые задачи
-- [ ] git push origin main
+- [ ] 5+ beta пользователей для D30 cohort
 - [ ] OPENAI_COMPAT_API_KEY в GitHub Secrets
-- [ ] Hosted beta deploy
 - [ ] GPU real DPO

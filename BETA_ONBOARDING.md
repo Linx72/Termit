@@ -33,12 +33,18 @@ See [`clients/CLIENT_UX.md`](clients/CLIENT_UX.md). With auth enabled, set `term
 ## Hosted beta (Docker)
 
 ```bash
-cp deploy/docker.env.example .env   # or cp .env.example .env
+./scripts/deploy_hosted_beta.sh
+# или вручную:
+cp deploy/docker.env.example .env   # или cp .env.example .env
 docker compose up --build -d
 ./scripts/hosted_smoke.sh
 # With auth profile:
 TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.sh
 ```
+
+**Plan status (фаза 5):** `GET http://localhost:8080/api/ops/plan-status` после deploy.
+
+**Локальная отладка beta cohort (не prod):** `TERMIT_BETA_DEV_SEED=true ./scripts/seed_beta_cohort_dev.py --force`
 
 See [`HOSTED_DEPLOYMENT.md`](HOSTED_DEPLOYMENT.md).
 

@@ -5,9 +5,17 @@ services:
       - "8765"
     env_file:
       - .env
+    environment:
+      # SQLite volumes — не монтировать на /app (перекрывает код из image).
+      TERMIT_MEMORY_SQLITE_PATH: /app/persist/termit_memory.db
+      TERMIT_QUOTA_SQLITE_PATH: /app/persist/termit_quota.db
+      TERMIT_TASK_SQLITE_PATH: /app/persist/termit_tasks.db
+      TERMIT_AGENT_RUN_SQLITE_PATH: /app/persist/termit_agent_runs.db
+      TERMIT_AGENT_MEMORY_SQLITE_PATH: /app/persist/termit_agent_memory.db
+      TERMIT_RESPONSE_CACHE_SQLITE_PATH: /app/persist/termit_response_cache.db
     volumes:
       - ./data:/app/data
-      - termit-sqlite:/app
+      - termit-sqlite:/app/persist
     restart: unless-stopped
     healthcheck:
       test:
