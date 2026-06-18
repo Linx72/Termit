@@ -156,6 +156,18 @@ if [[ "${TERMIT_DO_ALL_PLAN:-false}" == "true" ]]; then
     "${ROOT}/scripts/do_all_plan.sh"
 fi
 
+if [[ "${TERMIT_DO_ALL_SKIP_HOSTED:-false}" != "true" ]] && docker info >/dev/null 2>&1; then
+  echo ""
+  echo "== 8/8 Hosted smoke (Caddy :8080) =="
+  if curl -sf --max-time 3 "${TERMIT_HOSTED_BASE_URL:-http://127.0.0.1:8080}/health" >/dev/null 2>&1; then
+    TERMIT_HOSTED_BASE_URL="${TERMIT_HOSTED_BASE_URL:-http://127.0.0.1:8080}" \
+      "${ROOT}/scripts/hosted_smoke.sh" \
+      || echo "WARN: hosted smoke failed (non-blocking)."
+  else
+    echo "Skip — hosted proxy down (./scripts/deploy_hosted_beta.sh)"
+  fi
+fi
+
 echo ""
 echo "== Scheduler status =="
 curl -sf "http://127.0.0.1:8765/api/finetune/pipeline/stage1-scheduler/status" \
@@ -187,6 +199,7 @@ echo "  Do-all verify:   scripts/do_all_verify.sh"
 echo "  Do-all CI:       scripts/do_all_verify_ci.sh"
 echo "  Do-all full:     scripts/do_all_verify_full.sh"
 echo "  Do-all plan:     scripts/do_all_plan.sh"
+echo "  Deploy hosted:   scripts/deploy_hosted_beta.sh"
 echo "  Plan status:     scripts/plan_status_check.py"
 echo "  DPO contract:    scripts/do_all_dpo_contract.sh"
 echo "  macOS live orch: scripts/nightly_macos_live_orchestration.sh"
