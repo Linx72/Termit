@@ -3,9 +3,9 @@
 **Последнее обновление:** 2026-06-18
 
 ## Сводка
-- do all: automatic + plan (~183s exit 0), hosted_smoke OK
-- do_all_automatic: шаг 8/8 hosted smoke при docker up
+- do all: exit 0 (~161s), hosted smoke OK, plan do_all_plan OK
+- Finetune KPI: false (delta -33% post-train vs baseline)
 
 ## Открытые задачи
-- [ ] Finetune KPI стабильный post-train (delta>5%)
-- [ ] Beta cohort ≥5, OPENAI_COMPAT_API_KEY, GPU DPO
+- [ ] Стабильный finetune KPI (+5%)
+- [ ] Beta cohort, cloud key, GPU DPO
