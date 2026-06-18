@@ -15,17 +15,45 @@ class PlanStatusCheckTests(unittest.TestCase):
     def test_collect_plan_status_structure(self) -> None:
         from scripts.plan_status_check import collect_plan_status
 
-        with patch("scripts.plan_status_check._curl_json", return_value={"status": "ok"}), patch(
-            "scripts.plan_status_check._run_probe",
-            side_effect=[
-                {"gpu_available": False, "backend": "none", "devices": []},
-                {"ready": False, "reason": "missing_api_key"},
-            ],
-        ):
+        def fake_curl(url: str, api_key: str = "") -> dict | None:
+            if url.endswith("/health"):
+                return {"status": "ok"}
+            if url.endswith("/api/ops/plan-status"):
+                return None
+            return None
+
+        with patch("scripts.plan_status_check._curl_json", side_effect=fake_curl), patch(
+            "app.services.plan_status_service.build_plan_status_service"
+        ) as build_mock:
+            build_mock.return_value.collect.return_value = {
+                "phase": "5_production_kpi",
+                "plan_code_complete": True,
+                "infra_ok": True,
+                "warnings": [],
+                "blockers": [],
+                "blocker_count": 0,
+                "warning_count": 0,
+            }
             payload = collect_plan_status()
         self.assertEqual(payload["phase"], "5_production_kpi")
         self.assertTrue(payload["plan_code_complete"])
-        self.assertIn("warnings", payload)
+        build_mock.return_value.collect.assert_called_once_with(external_api_ok=True)
+
+    def test_collect_prefers_api_plan_status(self) -> None:
+        from scripts.plan_status_check import collect_plan_status
+
+        plan_payload = {"phase": "5_production_kpi", "infra_ok": True, "from_api": True}
+
+        def fake_curl(url: str, api_key: str = "") -> dict | None:
+            if url.endswith("/health"):
+                return {"status": "ok"}
+            if url.endswith("/api/ops/plan-status"):
+                return plan_payload
+            return None
+
+        with patch("scripts.plan_status_check._curl_json", side_effect=fake_curl):
+            payload = collect_plan_status()
+        self.assertTrue(payload.get("from_api"))
 
     def test_script_runs(self) -> None:
         python_bin = ROOT / ".venv/bin/python"

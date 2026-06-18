@@ -476,6 +476,20 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Coding task scenarios в benchmark дают разные pass_rate по model.
 
+### Следующий этап (0.4.21): Фаза 5 — оркестратор plan + API plan-status
+
+- [x] `scripts/do_all_plan.sh` — verify_ci → training_loop → DPO probe → live orch → plan status
+- [x] `scripts/plan_status_check.py` — CLI + JSON-отчёт blockers/warnings
+- [x] `GET /api/ops/plan-status` — тот же отчёт из API (viewer)
+- [x] `PlanStatusService` — in-process сбор KPI/GPU/cloud без self-HTTP
+- [x] Fix beta cohort: `cohort_size_d30` (не `cohort_size`)
+- [x] `do_all_automatic`: opt-in `TERMIT_DO_ALL_PLAN=true`
+- [x] smoke extended: `/api/ops/plan-status`
+
+**DoD:** `./scripts/do_all_plan.sh` exit 0; `/api/ops/plan-status` HTTP 200; finetune KPI MB1–MB3 измеряется pre/post train.
+
+**Остаётся (measurement, вне кода):** product KPI gates (beta cohort ≥5), cloud API key, DPO на GPU.
+
 ---
 
 ## Порядок выполнения

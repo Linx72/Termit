@@ -15,6 +15,7 @@ from app.domain.schemas import (
     OpsIncidentDrillResponse,
     OpsReadinessResponse,
     BetaMetricsResponse,
+    PlanStatusResponse,
     QuotaResetRequest,
     QuotaResetResponse,
     AgentRuntimePolicyResponse,
@@ -96,6 +97,14 @@ async def beta_metrics(
     payload = service.build_metrics()
     payload["feedback_total"] = feedback_store.summarize().get("total", 0)
     return BetaMetricsResponse(**payload)
+
+
+@router.get("/plan-status", response_model=PlanStatusResponse)
+async def plan_status() -> PlanStatusResponse:
+    from app.services.plan_status_service import build_plan_status_service
+
+    payload = build_plan_status_service().collect(from_running_api=True)
+    return PlanStatusResponse.model_validate(payload)
 
 
 @router.post("/incident-drill", response_model=OpsIncidentDrillResponse)

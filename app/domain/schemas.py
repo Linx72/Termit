@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -765,6 +765,29 @@ class BetaMetricsResponse(BaseModel):
     tracked_actors: int = 0
     feedback_total: int = 0
     target_d30_retention: float = 0.35
+
+
+class PlanStatusItem(BaseModel):
+    id: str
+    message: str
+
+
+class PlanStatusResponse(BaseModel):
+    phase: str = "5_production_kpi"
+    plan_code_complete: bool = True
+    infra_ok: bool = False
+    overall_ok: bool = False
+    automatic_mode_enabled: Optional[bool] = None
+    gpu: dict[str, Any] = Field(default_factory=dict)
+    cloud_benchmark: dict[str, Any] = Field(default_factory=dict)
+    finetune_eval_kpi: Optional[dict[str, Any]] = None
+    desktop_kpi_gates: Optional[dict[str, Any]] = None
+    beta_metrics: Optional[dict[str, Any]] = None
+    d30_retention: Optional[float] = None
+    blockers: list[PlanStatusItem] = Field(default_factory=list)
+    warnings: list[PlanStatusItem] = Field(default_factory=list)
+    blocker_count: int = 0
+    warning_count: int = 0
 
 
 class EvalScenarioResponse(BaseModel):

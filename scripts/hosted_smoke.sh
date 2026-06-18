@@ -99,6 +99,7 @@ expect_code /api/desktop/kpi-gates 200
 expect_code /api/desktop/onboarding-metrics 200
 expect_code /api/desktop/mcp-metrics 200
 expect_code /api/ops/beta-metrics 200
+expect_code /api/ops/plan-status 200
 expect_code /api/platform/mcp/servers 200
 expect_post_json /api/orchestration/build-from-plan 200 '{"plan_text":"1. Smoke step"}'
 

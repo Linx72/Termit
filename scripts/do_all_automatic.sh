@@ -149,6 +149,13 @@ echo ""
 echo "== 6/6 Do-all verify (CI mode) =="
 TERMIT_DO_ALL_CI=true "${ROOT}/scripts/do_all_verify_ci.sh"
 
+if [[ "${TERMIT_DO_ALL_PLAN:-false}" == "true" ]]; then
+  echo ""
+  echo "== 7/7 Do-all plan (фаза 5) =="
+  TERMIT_PLAN_TRY_STRICT_LIVE="${TERMIT_PLAN_TRY_STRICT_LIVE:-false}" \
+    "${ROOT}/scripts/do_all_plan.sh"
+fi
+
 echo ""
 echo "== Scheduler status =="
 curl -sf "http://127.0.0.1:8765/api/finetune/pipeline/stage1-scheduler/status" \

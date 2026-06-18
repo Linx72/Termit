@@ -27,6 +27,7 @@ check_ext /api/desktop/journeys
 check_ext /api/desktop/kpi-gates
 check_ext /api/desktop/policy-presets
 check_ext /api/ops/automation
+check_ext /api/ops/plan-status
 
 if [[ -n "$API_KEY" ]]; then
   code="$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' -d '{"event_type":"smoke_ping","journey_id":"local_feature"}' "$BASE_URL/api/desktop/workflow-events")"
