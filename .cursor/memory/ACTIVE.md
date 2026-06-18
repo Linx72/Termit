@@ -3,8 +3,7 @@
 **Последнее обновление:** 2026-06-18
 
 ## Сводка
-- do all: exit 0 (~159s), verify + plan + hosted smoke OK
+- do all: exit 0 (~236s), verify + plan + hosted smoke OK
 
 ## Открытые задачи
-- [ ] Finetune KPI стабильный (+5%)
-- [ ] Beta cohort, cloud key, GPU DPO
+- [ ] Finetune KPI +5%, beta cohort, cloud key, GPU DPO
