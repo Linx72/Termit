@@ -40,37 +40,54 @@ else
 fi
 
 echo ""
-echo "== 2/5 Create + validate finetune job (dry run) =="
+echo "== 2/5 Create + validate finetune job =="
 python3 <<PY
 import json
-from pathlib import Path
+import os
 import sys
-sys.path.insert(0, "$ROOT")
-from app.core.config import get_settings
-from app.services.finetune_service import FinetuneService
 
-settings = get_settings()
-service = FinetuneService(
-    datasets_dir=settings.finetune_datasets_dir,
-    jobs_path=settings.finetune_jobs_path,
-    adapters_path=settings.finetune_adapters_path,
-    feedback_file_path=settings.feedback_file_path,
-    task_sqlite_path=settings.task_sqlite_path,
-    agent_run_sqlite_path=settings.agent_run_sqlite_path,
-    repo_profiles_path=settings.repo_model_profiles_path,
-    memory_sqlite_path=settings.memory_sqlite_path,
-    eval_report_file_path=settings.eval_report_file_path,
-    training_signals_path=settings.finetune_training_signals_path,
-)
+sys.path.insert(0, "$ROOT")
+from app.state import get_finetune_service
+
+service = get_finetune_service()
 job = service.create_job(
     name="$DATASET_NAME",
     dataset_path="$DATASET_PATH",
     sample_count=int("$SAMPLE_COUNT"),
-    base_model="ollama:deepseek-coder",
+    base_model=os.getenv("TERMIT_STAGE1_BASE_MODEL", "ollama:deepseek-coder"),
     notes="training_loop_week2.sh",
 )
 completed = service.run_job(job.job_id)
-print(json.dumps({"job_id": completed.job_id, "status": completed.status}, indent=2))
+payload: dict[str, object] = {
+    "job_id": completed.job_id,
+    "status": completed.status,
+    "train": None,
+}
+auto_train = os.getenv("TERMIT_FINETUNE_AUTO_TRAIN", "false").lower() in {"1", "true", "yes"}
+if auto_train:
+    output_model = os.getenv("TERMIT_FINETUNE_OUTPUT_MODEL", "termit-core-ft")
+    trainer_mode = os.getenv("TERMIT_FINETUNE_TRAINER", "ollama")
+    auto_register = os.getenv("TERMIT_FINETUNE_AUTO_REGISTER_AFTER_TRAIN", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    repo_profile = os.getenv("TERMIT_FINETUNE_REPO_PROFILE_ID", "termit-core")
+    train_result = service.train_job(
+        completed.job_id,
+        output_model=output_model,
+        trainer_mode=trainer_mode,
+        auto_register_adapter=auto_register,
+        adapter_name="${DATASET_NAME}-ft",
+        adapter_model=f"ollama:{output_model}",
+        repo_profile_id=repo_profile,
+    )
+    payload["train"] = train_result
+print(json.dumps(payload, indent=2))
+if auto_train and isinstance(payload.get("train"), dict):
+    status = str(payload["train"].get("status", ""))
+    if status not in {"completed", "skipped"}:
+        sys.exit(1)
 PY
 
 echo ""

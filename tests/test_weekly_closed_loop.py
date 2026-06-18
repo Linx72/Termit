@@ -59,6 +59,22 @@ class WeeklyClosedLoopScriptTests(unittest.TestCase):
         script = (ROOT / "scripts" / "weekly_full_cycle.sh").read_text(encoding="utf-8")
         self.assertIn("capture_eval_kpi_baseline.sh", script)
 
+    def test_full_cycle_skips_cursor_kpi_when_auto_train(self) -> None:
+        script = (ROOT / "scripts" / "weekly_full_cycle.sh").read_text(encoding="utf-8")
+        self.assertIn("TERMIT_FINETUNE_AUTO_TRAIN", script)
+        self.assertIn("model KPI baseline in training_loop_full", script)
+
+    def test_strict_live_gate_script_has_retry_loop(self) -> None:
+        script = (ROOT / "scripts" / "run_strict_live_orchestration_gate.sh").read_text(encoding="utf-8")
+        self.assertIn("TERMIT_ORCH_STRICT_LIVE_RETRIES", script)
+        self.assertIn("run_live_orchestration_gate.sh", script)
+
+    def test_training_loop_week2_wires_auto_train(self) -> None:
+        script = (ROOT / "scripts" / "training_loop_week2.sh").read_text(encoding="utf-8")
+        self.assertIn("TERMIT_FINETUNE_AUTO_TRAIN", script)
+        self.assertIn("get_finetune_service", script)
+        self.assertIn("train_job", script)
+
     def test_bash_syntax(self) -> None:
         for name in (
             "weekly_closed_loop.sh",

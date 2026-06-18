@@ -38,6 +38,37 @@ class FinetuneTrainingDashboardApiTests(unittest.TestCase):
         self.assertIn("recommendations", payload)
         self.assertIn("event_stats", payload)
 
+    def test_load_eval_improvement_kpi_merges_baseline_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            (data_dir / "eval_kpi_last.json").write_text(
+                json.dumps({"kpi_passed": False, "current_pass_rate": 0.5}),
+                encoding="utf-8",
+            )
+            (data_dir / "eval_kpi_baseline.json").write_text(
+                json.dumps(
+                    {
+                        "pass_rate": 1.0,
+                        "eval_model": "ollama:deepseek-coder",
+                        "scenario_ids": ["MB1", "MB2"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = FinetuneService(
+                datasets_dir=str(root / "datasets"),
+                jobs_path=str(root / "jobs.json"),
+                adapters_path=str(root / "adapters.json"),
+                eval_report_file_path=str(data_dir / "eval_reports.jsonl"),
+            )
+            kpi = service._load_eval_improvement_kpi()
+            assert kpi is not None
+            self.assertEqual(kpi.get("baseline_eval_model"), "ollama:deepseek-coder")
+            self.assertEqual(kpi.get("baseline_pass_rate"), 1.0)
+            self.assertEqual(kpi.get("scenario_ids"), ["MB1", "MB2"])
+
     def test_export_includes_verified_tool_step_sft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

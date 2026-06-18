@@ -1,7 +1,9 @@
 import asyncio
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.domain.schemas import ChatMessage, ChatRequest, OrchestrationRunRequest, TaskType
 from app.services.chat_service import ChatService
@@ -217,6 +219,44 @@ class MultiAgentOrchestratorTests(unittest.IsolatedAsyncioTestCase):
                     model="ollama:test",
                 )
             )
+            self.assertEqual(result.status, "completed")
+            metrics = orchestrator.metrics_snapshot()
+            self.assertGreaterEqual(metrics["orchestration_tool_steps_total"], 1)
+            self.assertEqual(metrics["orchestration_tool_loop_fallback_total"], 0.0)
+
+    async def test_strict_mode_retries_when_reviewer_approves_without_tool_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "README.md").write_text("strict retry path", encoding="utf-8")
+            router = build_router()
+            providers: dict[str, BaseProvider] = {
+                "ollama": SequencedProvider(
+                    [
+                        "Summary without JSON tool actions.",
+                        "APPROVED: looks fine.",
+                        '{"tool_actions":[{"tool":"list_files","path":".","pattern":"*.md"}]}',
+                        "APPROVED: tool loop executed.",
+                    ]
+                ),
+                "openai_compat": StubProvider(response="fallback"),
+            }
+            chat = ChatService(router, providers, MemoryStore(), cache_ttl_seconds=0)
+            tasks = TaskService(ToolingService(root_path="."), InMemoryTaskStore(), max_attempts=2)
+            orchestrator = MultiAgentOrchestrator(
+                tasks,
+                chat,
+                tooling=ToolingService(root_path=tmp),
+                tool_loop_execution_enabled=True,
+                eval_fixture_coder_enabled=False,
+            )
+            with patch.dict(os.environ, {"TERMIT_ORCH_TOOL_LOOP_FALLBACK": "false"}, clear=False):
+                result = await orchestrator.run(
+                    OrchestrationRunRequest(
+                        input="Inspect markdown files via tool actions",
+                        task_type=TaskType.coding,
+                        use_retrieval=False,
+                        model="ollama:test",
+                    )
+                )
             self.assertEqual(result.status, "completed")
             metrics = orchestrator.metrics_snapshot()
             self.assertGreaterEqual(metrics["orchestration_tool_steps_total"], 1)

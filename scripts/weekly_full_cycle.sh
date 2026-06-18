@@ -14,11 +14,14 @@ source "${ROOT}/.venv/bin/activate" 2>/dev/null || true
 
 echo "== Termit weekly full cycle =="
 
-if [[ "${TERMIT_CAPTURE_KPI_BASELINE:-true}" == "true" ]]; then
-  echo "== 0/4 Capture eval KPI baseline (pre-train) =="
+AUTO_TRAIN="${TERMIT_FINETUNE_AUTO_TRAIN:-false}"
+if [[ "${TERMIT_CAPTURE_KPI_BASELINE:-true}" == "true" && "${AUTO_TRAIN}" != "true" ]]; then
+  echo "== 0/4 Capture eval KPI baseline (pre-train, cursor_parity) =="
   TERMIT_EVAL_KPI_BASELINE="${TERMIT_EVAL_KPI_BASELINE:-${ROOT}/data/eval_kpi_baseline.json}" \
     TERMIT_EVAL_LIMIT="${TERMIT_EVAL_LIMIT:-20}" \
     "${ROOT}/scripts/capture_eval_kpi_baseline.sh"
+elif [[ "${AUTO_TRAIN}" == "true" ]]; then
+  echo "== 0/4 Skip cursor_parity KPI capture (model KPI baseline in training_loop_full) =="
 fi
 
 echo "== 1/4 Normalize training signals =="

@@ -59,6 +59,11 @@ class AutomationScriptTests(unittest.TestCase):
             "capture_eval_kpi_baseline.sh",
             "run_strict_live_orchestration_gate.sh",
             "weekly_full_cycle.sh",
+            "post_train_model_eval.py",
+            "training_loop_week2.sh",
+            "stage1_full_loop.sh",
+            "do_all_plan.sh",
+            "plan_status_check.py",
             "gpu_probe.py",
         ):
             if name.endswith(".sh"):

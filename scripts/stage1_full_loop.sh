@@ -32,15 +32,23 @@ if [[ "$POST_RC" -ne 0 ]]; then
 fi
 
 EVAL_REPORT="${ROOT}/data/reports/stage1_post_eval_${RUN_ID}.json"
+KPI_BASELINE="${TERMIT_EVAL_KPI_BASELINE:-${ROOT}/data/eval_kpi_baseline.json}"
 BASELINE="${TERMIT_EVAL_BASELINE:-${ROOT}/data/eval_baseline_release.json}"
 MIN_IMPROVE="${TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT:-0.05}"
 
-if [[ -f "${EVAL_REPORT}" && -f "${BASELINE}" ]]; then
+if [[ -f "${EVAL_REPORT}" ]]; then
   echo "[stage1_full_loop] eval KPI gate (min improvement ${MIN_IMPROVE})..."
-  KPI_ARGS=(--baseline "${BASELINE}" --current "${EVAL_REPORT}" --min-improvement "${MIN_IMPROVE}")
+  KPI_ARGS=(--current "${EVAL_REPORT}" --min-improvement "${MIN_IMPROVE}")
+  if [[ -f "${KPI_BASELINE}" ]]; then
+    KPI_ARGS=(--baseline "${KPI_BASELINE}" "${KPI_ARGS[@]}")
+  elif [[ -f "${BASELINE}" ]]; then
+    KPI_ARGS=(--baseline "${BASELINE}" "${KPI_ARGS[@]}")
+  fi
   if [[ "${TERMIT_FINETUNE_KPI_STRICT:-false}" == "true" ]]; then
     KPI_ARGS+=(--strict)
   fi
+  KPI_OUT="${TERMIT_EVAL_KPI_LAST:-${ROOT}/data/eval_kpi_last.json}"
+  KPI_ARGS+=(--output "${KPI_OUT}")
   "${ROOT}/.venv/bin/python" "${ROOT}/scripts/finetune_eval_kpi_gate.py" "${KPI_ARGS[@]}" || exit $?
 fi
 

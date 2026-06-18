@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Full training loop: signals → dataset → job → eval → regression gate → KPI dashboard.
+# Полный training loop: signals → dataset → job → eval → regression gate → KPI dashboard.
 #
-# Requires Termit API on :8765 with eval endpoints enabled.
-# Usage:
+# Требуется Termit API на :8765 с включёнными eval endpoints.
+# Примеры:
 #   ./scripts/training_loop_full.sh
 #   TERMIT_EVAL_CATEGORY=cursor_parity TERMIT_EVAL_LIMIT=20 ./scripts/training_loop_full.sh
 set -euo pipefail
@@ -45,16 +45,45 @@ done
 echo "== 1a/5 Normalize training signals =="
 python3 "$ROOT/scripts/normalize_training_signals.py" || true
 
+USE_MODEL_KPI=false
+if [[ "${TERMIT_FINETUNE_AUTO_TRAIN:-false}" == "true" ]]; then
+  USE_MODEL_KPI=true
+  echo ""
+  echo "== 1b/5 Model KPI baseline (pre-train, MB1-MB3) =="
+  PRE_TRAIN_MODEL="${TERMIT_EVAL_PRE_TRAIN_MODEL:-ollama:deepseek-coder}"
+  KPI_BASELINE_PATH="${TERMIT_EVAL_KPI_BASELINE:-$ROOT/data/eval_kpi_baseline.json}"
+  python3 "$ROOT/scripts/post_train_model_eval.py" \
+    --model "${PRE_TRAIN_MODEL}" \
+    --output "${KPI_BASELINE_PATH}"
+fi
+
 echo "== 2/5 Export dataset + finetune job (week2) =="
 "$ROOT/scripts/training_loop_week2.sh"
 
+if [[ "${USE_MODEL_KPI}" == "true" && "${TERMIT_FINETUNE_AUTO_TRAIN_DPO:-false}" == "true" ]]; then
+  echo ""
+  echo "== 2c/5 DPO train path (GPU probe) =="
+  "${ROOT}/scripts/dpo_gpu_train.sh" || echo "WARN: DPO train path skipped or failed (non-blocking)."
+fi
+
 echo ""
-echo "== 3/5 Eval suite (category=${CATEGORY}, limit=${LIMIT}) =="
-curl_api -X POST "$BASE_URL/api/eval/run-suite" \
-  -H "Content-Type: application/json" \
-  -d "{\"category\":\"${CATEGORY}\",\"limit\":${LIMIT},\"persist_report\":true}" \
-  | tee "$CURRENT_REPORT" \
-  | python3 -m json.tool | head -40
+if [[ "${USE_MODEL_KPI}" == "true" ]]; then
+  echo "== 3/5 Post-train model eval (MB1-MB3) =="
+  POST_TRAIN_MODEL="${TERMIT_FINETUNE_OUTPUT_MODEL:-termit-core-ft}"
+  POST_TRAIN_MODEL="${POST_TRAIN_MODEL#ollama:}"
+  python3 "$ROOT/scripts/post_train_model_eval.py" \
+    --model "ollama:${POST_TRAIN_MODEL}" \
+    --output "$CURRENT_REPORT" \
+    --persist-report
+  python3 -m json.tool "$CURRENT_REPORT" | head -30
+else
+  echo "== 3/5 Eval suite (category=${CATEGORY}, limit=${LIMIT}) =="
+  curl_api -X POST "$BASE_URL/api/eval/run-suite" \
+    -H "Content-Type: application/json" \
+    -d "{\"category\":\"${CATEGORY}\",\"limit\":${LIMIT},\"persist_report\":true}" \
+    | tee "$CURRENT_REPORT" \
+    | python3 -m json.tool | head -40
+fi
 
 echo ""
 echo "== 3b/5 Model-bound eval gate (tool scenarios) =="
@@ -63,7 +92,9 @@ TERMIT_MODEL_BOUND_GATE_TIER="${TERMIT_MODEL_BOUND_GATE_TIER:-model_bound_ci}" \
 
 echo ""
 echo "== 4/5 Regression gate vs baseline =="
-if [[ ! -f "$BASELINE" ]]; then
+if [[ "${USE_MODEL_KPI}" == "true" ]]; then
+  echo "Skip release regression gate (model KPI mode uses MB1-MB3 pre/post reports)."
+elif [[ ! -f "$BASELINE" ]]; then
   echo "Baseline missing: $BASELINE — skip regression gate." >&2
 else
   if ! python3 "$ROOT/scripts/eval_regression_report.py" \
@@ -74,7 +105,7 @@ else
   fi
 fi
 
-if [[ "$GATE_OK" -eq 0 && "${TERMIT_EVAL_AUTO_PROMOTE_BASELINE:-false}" == "true" && -f "$BASELINE" ]]; then
+if [[ "$GATE_OK" -eq 0 && "${USE_MODEL_KPI}" != "true" && "${TERMIT_EVAL_AUTO_PROMOTE_BASELINE:-false}" == "true" && -f "$BASELINE" ]]; then
   echo ""
   echo "== 4b/5 Promote baseline (gate green) =="
   MIN_IMPROVE="${TERMIT_EVAL_MIN_IMPROVEMENT_FOR_PROMOTE:-0.0}"

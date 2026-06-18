@@ -1,0 +1,68 @@
+---
+description: Всегда коммитить после правок — сообщения целиком на русском
+alwaysApply: true
+---
+
+# Коммиты в Termit — всегда, подробно, только на русском
+
+## Обязательно
+
+После **любых** изменений кода, конфигов, скриптов или тестов — **создавай git commit** в конце задачи. Не жди явной просьбы «закоммить».
+
+## Язык — только русский
+
+**Весь** текст коммита — на русском:
+
+- **Заголовок (subject)** — русский, без `feat:` / `fix:` / `chore:` и других английских префиксов.
+- **Тело (body)** — русский; пункты «что / зачем / как проверено».
+- **Исключения:** имена файлов, путей, env-переменных, API, JSON-ключей, команд shell — как в коде.
+
+### ❌ Нельзя
+
+```
+feat(phase5): do_all_plan + model KPI loop
+fix: orchestrator strict retry
+backup: 2026-06-18
+```
+
+### ✅ Нужно
+
+```
+фаза 5: оркестратор do_all_plan, KPI до/после обучения, strict retry оркестрации
+
+Исправление: strict retry оркестратора без fallback при approve без tool JSON
+
+резервная копия: 2026-06-18
+```
+
+## Формат
+
+- Заголовок ≤72 символа, суть изменения.
+- Пустая строка + тело списком через `-`.
+- В конце блок «Проверено: …» с фактическими командами и результатом.
+
+## Пример
+
+```
+фаза 5: оркестратор do_all_plan и KPI pre/post train
+
+- scripts/do_all_plan.sh: verify_ci → training_loop → DPO probe → live orch → plan status
+- scripts/plan_status_check.py: отчёт infra/KPI/blockers (GPU, cloud, product gates)
+- training_loop_full: baseline MB1–MB3 до train, post-train eval, skip regression в model KPI mode
+- multi_agent_orchestrator: strict retry без fallback при approve без tool JSON
+- run_strict_live_orchestration_gate: до 5 попыток с restart API
+- тесты: plan_status, post_train_model_eval, orchestrator strict retry
+
+Проверено: .venv/bin/python -m unittest tests.test_plan_status_check -q; ./scripts/do_all_plan.sh (exit 0)
+```
+
+## Запреты
+
+- Не коммить `.env`, ключи, секреты.
+- Не `--no-verify` без явной просьбы пользователя.
+- Не amend после push без запроса.
+
+## Связанные правила
+
+- Комментарии и echo в коде — русский: `russian-in-project-ru.mdc`
+- Ответы в чате — русский: `respond-in-russian.mdc`

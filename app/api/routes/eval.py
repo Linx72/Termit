@@ -114,6 +114,7 @@ async def run_suite(
         category=payload.category,
         limit=payload.limit,
         persist_report=payload.persist_report,
+        model=payload.model,
     )
     return EvalSuiteRunResponse(
         run_id=str(report["run_id"]),

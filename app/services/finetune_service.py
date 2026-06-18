@@ -868,7 +868,22 @@ class FinetuneService:
             payload = json.loads(last_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             return None
-        return payload if isinstance(payload, dict) else None
+        if not isinstance(payload, dict):
+            return None
+        baseline_path = data_dir / "eval_kpi_baseline.json"
+        if baseline_path.is_file():
+            try:
+                baseline_report = json.loads(baseline_path.read_text(encoding="utf-8"))
+                if isinstance(baseline_report, dict):
+                    if baseline_report.get("eval_model"):
+                        payload["baseline_eval_model"] = baseline_report.get("eval_model")
+                    if baseline_report.get("scenario_ids"):
+                        payload["scenario_ids"] = baseline_report.get("scenario_ids")
+                    if payload.get("baseline_pass_rate") is None and "pass_rate" in baseline_report:
+                        payload["baseline_pass_rate"] = baseline_report.get("pass_rate")
+            except (json.JSONDecodeError, OSError):
+                pass
+        return payload
 
     def tuning_report(self, *, event_limit: int = 5000) -> dict[str, object]:
         return build_tool_loop_tuning_report(

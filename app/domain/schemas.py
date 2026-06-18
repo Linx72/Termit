@@ -799,6 +799,7 @@ class EvalSuiteRunRequest(BaseModel):
     category: Optional[str] = None
     limit: Optional[int] = Field(default=None, ge=1, le=100)
     persist_report: bool = True
+    model: Optional[str] = Field(default=None, max_length=200)
 
 
 class EvalSuiteRunResponse(BaseModel):

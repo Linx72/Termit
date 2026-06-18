@@ -645,6 +645,25 @@ class MultiAgentOrchestrator:
                 )
                 if fallback_response:
                     executor_response = fallback_response
+                if (
+                    self._tool_loop_execution_enabled
+                    and not payload.eval_fixture
+                    and self._tooling is not None
+                    and not self._tool_loop_fallback_enabled()
+                    and tool_loop_steps <= 0
+                    and attempt < self._max_coder_attempts
+                ):
+                    feedback = (
+                        "Tool-loop required: reviewer approved but no tool_actions executed. "
+                        "Respond ONLY with JSON: "
+                        '{"tool_actions":[{"tool":"list_files","path":".","pattern":"*.md"}]}'
+                    )
+                    self._append_contract_item(
+                        contract,
+                        action=f"tool_loop.strict_retry_{attempt}",
+                        observation=feedback,
+                    )
+                    continue
                 return (
                     executor_response,
                     session_id,
@@ -682,6 +701,13 @@ class MultiAgentOrchestrator:
             {"runs": tool_loop_runs, "steps": tool_loop_steps},
         )
 
+    def _tool_loop_fallback_enabled(self) -> bool:
+        return os.getenv("TERMIT_ORCH_TOOL_LOOP_FALLBACK", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+
     async def _apply_tool_loop_fallback_if_needed(
         self,
         payload: OrchestrationRunRequest,
@@ -698,11 +724,7 @@ class MultiAgentOrchestrator:
             or self._tooling is None
         ):
             return tool_loop_runs, tool_loop_steps, None
-        if os.getenv("TERMIT_ORCH_TOOL_LOOP_FALLBACK", "true").lower() not in {
-            "1",
-            "true",
-            "yes",
-        }:
+        if not self._tool_loop_fallback_enabled():
             return tool_loop_runs, tool_loop_steps, None
         tool_output, executed_steps = await asyncio.to_thread(
             self._run_tool_actions_from_response,

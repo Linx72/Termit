@@ -150,6 +150,7 @@ class EvalService:
         *,
         persist_report: bool = True,
         category_filter: str | None = None,
+        model: Optional[str] = None,
     ) -> dict[str, object]:
         """Run an explicit list of scenario ids (model-bound / benchmark slices)."""
         run_id = f"eval_{uuid4().hex[:12]}"
@@ -160,7 +161,7 @@ class EvalService:
 
         results: list[dict[str, object]] = []
         for scenario in selected:
-            results.append(self.run_scenario(scenario.id))
+            results.append(self.run_scenario(scenario.id, model=model))
 
         passed = sum(1 for item in results if item["status"] == "passed")
         failed = len(results) - passed
@@ -184,6 +185,7 @@ class EvalService:
             "latency_p95_ms": latency_p95_ms,
             "estimated_cost_usd": estimated_cost_usd,
             "category_filter": category_filter,
+            "eval_model": model.strip() if model else None,
             "scenario_ids": list(scenario_ids),
             "results": results,
             "metrics": metrics.model_dump() if metrics else None,
@@ -345,6 +347,7 @@ class EvalService:
         category: Optional[str] = None,
         limit: Optional[int] = None,
         persist_report: bool = True,
+        model: Optional[str] = None,
     ) -> dict[str, object]:
         run_id = f"eval_{uuid4().hex[:12]}"
         started_at = time.time()
@@ -356,7 +359,7 @@ class EvalService:
 
         results: list[dict[str, object]] = []
         for scenario in selected:
-            results.append(self.run_scenario(scenario.id))
+            results.append(self.run_scenario(scenario.id, model=model))
 
         passed = sum(1 for item in results if item["status"] == "passed")
         failed = len(results) - passed
@@ -380,6 +383,7 @@ class EvalService:
             "latency_p95_ms": latency_p95_ms,
             "estimated_cost_usd": estimated_cost_usd,
             "category_filter": category,
+            "eval_model": model.strip() if model else None,
             "results": results,
             "metrics": metrics.model_dump() if metrics else None,
         }
