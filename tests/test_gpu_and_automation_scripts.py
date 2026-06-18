@@ -65,6 +65,7 @@ class AutomationScriptTests(unittest.TestCase):
             "do_all_plan.sh",
             "plan_status_check.py",
             "capture_plan_status_snapshot.sh",
+            "seed_beta_cohort_dev.py",
             "gpu_probe.py",
         ):
             if name.endswith(".sh"):

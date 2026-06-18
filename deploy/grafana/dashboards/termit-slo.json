@@ -142,6 +142,32 @@
       ],
       "title": "MCP usage counters",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 38 },
+      "id": 13,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "expr": "termit_plan_status_overall_ok", "legendFormat": "overall ok", "refId": "A" },
+        { "expr": "termit_plan_finetune_kpi_passed", "legendFormat": "finetune KPI", "refId": "B" }
+      ],
+      "title": "Plan phase 5 (overall + finetune KPI)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 38 },
+      "id": 14,
+      "targets": [
+        { "expr": "termit_plan_status_warning_count", "legendFormat": "warnings", "refId": "A" },
+        { "expr": "termit_plan_status_blocker_count", "legendFormat": "blockers", "refId": "B" },
+        { "expr": "termit_desktop_kpi_gates_passed", "legendFormat": "product gates", "refId": "C" }
+      ],
+      "title": "Plan status warnings & product KPI gates",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

@@ -106,6 +106,11 @@ if curl -sf --max-time 5 "${BASE_URL}/health" >/dev/null 2>&1; then
     echo "== 9/9 Cloud benchmark cycle (probe-gated) =="
     TERMIT_RUN_CLOUD_BENCHMARK=true TERMIT_CAP_GATE_TIER="${TERMIT_CAP_GATE_TIER:-release}" \
       ./scripts/cloud_benchmark_cycle.sh
+  elif [[ -n "${OPENAI_COMPAT_API_KEY:-}" || -n "${OPENAI_API_KEY:-}" ]]; then
+    echo ""
+    echo "== 9/9 Cloud benchmark cycle (auto: API key в env) =="
+    TERMIT_RUN_CLOUD_BENCHMARK=true TERMIT_CAP_GATE_TIER="${TERMIT_CAP_GATE_TIER:-ci}" \
+      ./scripts/cloud_benchmark_cycle.sh || echo "WARN: cloud benchmark failed (non-blocking)."
   fi
 else
   echo "Server not reachable at ${BASE_URL} — skip HTTP/gate steps."

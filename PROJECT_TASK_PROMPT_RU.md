@@ -502,6 +502,31 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Prometheus экспортирует plan metrics; KPI export и web/desktop показывают plan status.
 
+### Следующий этап (0.4.23): Learning loop — real train + cloud benchmark
+
+- [ ] GPU runner или облако → real DPO (`TERMIT_DPO_GPU_REQUIRED=true`)
+- [ ] `OPENAI_COMPAT_API_KEY` в CI secrets → cloud benchmark green
+- [ ] Post-DPO eval на HE1/HE2/MBPP + delta ≥5%
+- [x] Grafana SLO dashboard: row plan phase 5
+- [x] `.github/workflows/weekly-do-all-plan.yml`
+
+**DoD:** cloud `ready=true`; model-bound eval после real train; weekly CI artifact plan-status.
+
+### Следующий этап (0.4.24): Product KPI из beta telemetry
+
+- [ ] Hosted beta deploy + 5+ пользователей
+- [x] `scripts/seed_beta_cohort_dev.py` — synthetic cohort (TERMIT_BETA_DEV_SEED, dev only)
+- [ ] Product gates green на staging с реальной telemetry
+
+**DoD:** cohort_size_d30 ≥5; desktop_kpi_gates overall_passed на beta/staging.
+
+### Следующий этап (0.4.25): Production hardening (Day 90)
+
+- [ ] Push + tagged release
+- [ ] TERMIT_PLAN_STATUS_STRICT в release gate (после beta)
+- [ ] Task success ≥75% на agent runs (не только eval)
+- [ ] D30 retention ≥35% на prod beta
+
 ---
 
 ## Порядок выполнения
