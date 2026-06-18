@@ -490,6 +490,18 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **Остаётся (measurement, вне кода):** product KPI gates (beta cohort ≥5), cloud API key, DPO на GPU.
 
+### Следующий этап (0.4.22): Plan status observability + UI
+
+- [x] Prometheus: `termit_plan_status_*`, `termit_plan_finetune_kpi_passed`
+- [x] `export_kpi_dashboard.py` — bundle включает `plan_status`
+- [x] `data/plan_status_last.json` — автосохранение при GET /api/ops/plan-status
+- [x] `scripts/capture_plan_status_snapshot.sh` + monthly crontab
+- [x] Web ops: панель plan status + refresh
+- [x] Desktop HealthDashboard: строка plan status (RU/EN i18n)
+- [x] termit-client: `getPlanStatus` / `planOps.ts`
+
+**DoD:** Prometheus экспортирует plan metrics; KPI export и web/desktop показывают plan status.
+
 ---
 
 ## Порядок выполнения

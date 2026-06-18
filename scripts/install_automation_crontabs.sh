@@ -56,4 +56,9 @@ _install_crontab_line \
   "5 2 * * * cd ${ROOT} && source ${ROOT}/.venv/bin/activate && ${ROOT}/scripts/daily_improvement.sh >> ${LOG_DIR}/termit-daily-improvement.log 2>&1 # termit-daily-improvement" \
   "daily improvement"
 
+_install_crontab_line \
+  "# termit-plan-status-monthly" \
+  "0 6 1 * * cd ${ROOT} && source ${ROOT}/.venv/bin/activate && ${ROOT}/scripts/capture_plan_status_snapshot.sh >> ${LOG_DIR}/termit-plan-status.log 2>&1 # termit-plan-status-monthly" \
+  "monthly plan status snapshot"
+
 echo "OK — automation crontabs installed."

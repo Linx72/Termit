@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.services.plan_status_service import PlanStatusService
@@ -41,6 +43,27 @@ class PlanStatusServiceTests(unittest.TestCase):
         )
         payload = service.collect(from_running_api=True)
         self.assertTrue(any(item["id"] == "beta_cohort" for item in payload["warnings"]))
+
+
+    def test_persist_snapshot_on_api_collect(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "data").mkdir()
+            service = PlanStatusService(
+                project_root=root,
+                kpi_gate_service=MagicMock(evaluate_gates=MagicMock(return_value={})),
+                beta_service=MagicMock(build_metrics=MagicMock(return_value={"cohort_size_d30": 10})),
+                automation_service=MagicMock(snapshot=MagicMock(return_value={"automatic_mode_enabled": True})),
+                gpu_probe=lambda: {"gpu_available": True},
+                cloud_probe=lambda: {"ready": True},
+            )
+            service.collect(from_running_api=True)
+            snapshot_path = root / "data" / "plan_status_last.json"
+            self.assertTrue(snapshot_path.is_file())
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["phase"], "5_production_kpi")
 
 
 class PlanStatusApiTests(unittest.TestCase):

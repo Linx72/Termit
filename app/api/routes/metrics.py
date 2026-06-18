@@ -372,4 +372,28 @@ async def metrics_prometheus(
                 _prom_line("termit_beta_cohort_size_d30", int(beta_metrics.get("cohort_size_d30", 0))),
             ]
         )
+    from app.services.plan_status_service import build_plan_status_service
+
+    plan_status = build_plan_status_service().collect(from_running_api=True)
+    finetune_kpi = plan_status.get("finetune_eval_kpi") or {}
+    finetune_passed = 1.0 if finetune_kpi.get("kpi_passed") else 0.0
+    lines.extend(
+        [
+            "# HELP termit_plan_status_overall_ok 1 if plan phase 5 has no blockers or warnings.",
+            "# TYPE termit_plan_status_overall_ok gauge",
+            _prom_line("termit_plan_status_overall_ok", 1.0 if plan_status.get("overall_ok") else 0.0),
+            "# HELP termit_plan_status_infra_ok 1 if Termit infra checks pass in plan status.",
+            "# TYPE termit_plan_status_infra_ok gauge",
+            _prom_line("termit_plan_status_infra_ok", 1.0 if plan_status.get("infra_ok") else 0.0),
+            "# HELP termit_plan_status_blocker_count Plan status blocker count (phase 5).",
+            "# TYPE termit_plan_status_blocker_count gauge",
+            _prom_line("termit_plan_status_blocker_count", int(plan_status.get("blocker_count", 0))),
+            "# HELP termit_plan_status_warning_count Plan status warning count (phase 5).",
+            "# TYPE termit_plan_status_warning_count gauge",
+            _prom_line("termit_plan_status_warning_count", int(plan_status.get("warning_count", 0))),
+            "# HELP termit_plan_finetune_kpi_passed 1 if finetune eval KPI (+5%) is met.",
+            "# TYPE termit_plan_finetune_kpi_passed gauge",
+            _prom_line("termit_plan_finetune_kpi_passed", finetune_passed),
+        ]
+    )
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")

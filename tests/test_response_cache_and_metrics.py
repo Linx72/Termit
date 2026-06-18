@@ -382,6 +382,8 @@ class MetricsApiTests(unittest.TestCase):
         self.assertIn("termit_mcp_inject_rate", resp.text)
         self.assertIn("termit_mcp_adoption_rate", resp.text)
         self.assertIn("termit_mcp_tool_calls_total", resp.text)
+        self.assertIn("termit_plan_status_overall_ok", resp.text)
+        self.assertIn("termit_plan_finetune_kpi_passed", resp.text)
 
 
 if __name__ == "__main__":

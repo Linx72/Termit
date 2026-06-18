@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TermitClient } from "@termit/client";
-import { getBetaMetrics } from "@termit/client";
+import { getBetaMetrics, getPlanStatus } from "@termit/client";
 import { t, type Locale } from "./i18n";
 
 interface HealthDashboardProps {
@@ -44,6 +44,9 @@ interface HealthSnapshot {
   betaD7Rate: number | null;
   betaActiveUsers7d: number;
   betaFeedbackTotal: number;
+  planOverallOk: boolean | null;
+  planWarningCount: number;
+  planFinetuneKpiPassed: boolean | null;
 }
 
 interface LifecycleSummary {
@@ -107,13 +110,14 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
     }
     setError("");
     try {
-      const [metrics, stats, readiness, training, evalDash, beta] = await Promise.all([
+      const [metrics, stats, readiness, training, evalDash, beta, plan] = await Promise.all([
         client.getAgentRunsMetrics(),
         client.getRetrievalStats(),
         client.getOpsReadiness(),
         client.getFinetuneTrainingDashboard(5),
         client.getEvalDashboard(1),
         getBetaMetrics(client),
+        getPlanStatus(client),
       ]);
       const passRate = evalDash.pass_rate ?? null;
       const recommendations = training.tuning_report?.recommendations;
@@ -157,6 +161,9 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
         betaD7Rate: beta.d7_retention_rate,
         betaActiveUsers7d: beta.active_users_7d,
         betaFeedbackTotal: beta.feedback_total,
+        planOverallOk: plan.overall_ok ?? null,
+        planWarningCount: plan.warning_count ?? 0,
+        planFinetuneKpiPassed: plan.finetune_eval_kpi?.kpi_passed ?? null,
       });
     } catch (err) {
       const text = err instanceof Error ? err.message : String(err);
@@ -211,6 +218,18 @@ export function HealthDashboard({ client, connected, locale }: HealthDashboardPr
                 <li>
                   {t(locale, "kpiToolLoop")}: {formatRate(snapshot.toolLoopSuccessRate)} · {t(locale, "kpiCompletion")}{" "}
                   {formatRate(snapshot.toolLoopCompletionRate)}
+                </li>
+                <li>
+                  {t(locale, "kpiPlanStatus")}:{" "}
+                  <span className={`health-tag ${snapshot.planOverallOk ? "ok" : "degraded"}`}>
+                    {snapshot.planOverallOk ? "OK" : "WARN"}
+                  </span>{" "}
+                  · {t(locale, "kpiPlanWarnings")} {snapshot.planWarningCount} · {t(locale, "kpiPlanFinetuneKpi")}{" "}
+                  {snapshot.planFinetuneKpiPassed == null
+                    ? "—"
+                    : snapshot.planFinetuneKpiPassed
+                      ? "OK"
+                      : "FAIL"}
                 </li>
                 <li>
                   {t(locale, "kpiBetaGrowth")}: {t(locale, "kpiBetaD30")}{" "}

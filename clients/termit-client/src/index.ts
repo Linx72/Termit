@@ -49,4 +49,5 @@ export * from "./desktopOps";
 export * from "./opsAutomation";
 export * from "./mediaOps";
 export * from "./feedbackOps";
+export * from "./planOps";
 export * from "./orchestrationOps";

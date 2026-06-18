@@ -55,6 +55,7 @@ def main() -> int:
             "beta_metrics": fetch_json(f"{base}/api/ops/beta-metrics", api_key=args.api_key),
             "feedback_summary": fetch_json(f"{base}/api/feedback/summary", api_key=args.api_key),
             "kpi_gates": fetch_json(f"{base}/api/desktop/kpi-gates", api_key=args.api_key),
+            "plan_status": fetch_json(f"{base}/api/ops/plan-status", api_key=args.api_key),
         }
     except HTTPError as exc:
         print(f"HTTP error: {exc.code} {exc.reason}", file=sys.stderr)

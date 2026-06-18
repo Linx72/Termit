@@ -405,6 +405,8 @@
       </div>
       <button id="refreshBetaGrowthBtn" data-tip="refreshBetaGrowthBtn">Refresh beta growth</button>
       <div id="betaGrowthPanel" class="meta" style="margin:0.5rem 0;font-weight:600;"></div>
+      <button id="refreshPlanStatusBtn" data-tip="refreshPlanStatusBtn">Refresh plan status</button>
+      <div id="planStatusPanel" class="meta" style="margin:0.5rem 0;font-weight:600;"></div>
       <div id="betaKpiGrid" class="dashboard-grid" style="margin-top:0.5rem;">
         <div class="dash-card ok">
           <h4>D30 retention</h4>
@@ -1961,10 +1963,34 @@
         }
       }
 
+      async function refreshPlanStatus() {
+        const panel = document.getElementById("planStatusPanel");
+        if (!panel) {
+          return;
+        }
+        try {
+          const plan = await (await fetch("/api/ops/plan-status", { headers: authHeaders() })).json();
+          const finetune = plan.finetune_eval_kpi || {};
+          const finetuneLabel =
+            finetune.kpi_passed == null ? "—" : finetune.kpi_passed ? "OK" : "FAIL";
+          const delta =
+            finetune.delta != null ? `${Math.round(Number(finetune.delta) * 1000) / 10}%` : "—";
+          panel.textContent =
+            `Plan phase 5: overall ${plan.overall_ok ? "OK" : "WARN"} · warnings ${plan.warning_count || 0} · blockers ${plan.blocker_count || 0} · finetune KPI ${finetuneLabel} (Δ ${delta}) · automation ${plan.automatic_mode_enabled ? "on" : "off"}`;
+        } catch {
+          panel.textContent = "Plan status: unavailable";
+        }
+      }
+
       const refreshBetaGrowthBtn = document.getElementById("refreshBetaGrowthBtn");
       if (refreshBetaGrowthBtn) {
         refreshBetaGrowthBtn.addEventListener("click", () => void refreshBetaGrowth());
       }
+      const refreshPlanStatusBtn = document.getElementById("refreshPlanStatusBtn");
+      if (refreshPlanStatusBtn) {
+        refreshPlanStatusBtn.addEventListener("click", () => void refreshPlanStatus());
+      }
+      void refreshPlanStatus();
 
       async function refreshEvalPassRate() {
         if (!evalPassRatePanel) {

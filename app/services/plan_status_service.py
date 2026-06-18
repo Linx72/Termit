@@ -139,7 +139,7 @@ class PlanStatusService:
         infra_ok = from_running_api or bool(external_api_ok)
         overall_ok = infra_ok and len(blockers) == 0 and len(warnings) == 0
 
-        return {
+        payload = {
             "phase": "5_production_kpi",
             "plan_code_complete": True,
             "infra_ok": infra_ok,
@@ -158,6 +158,18 @@ class PlanStatusService:
             "blocker_count": len(blockers),
             "warning_count": len(warnings),
         }
+        if from_running_api:
+            self._persist_snapshot(payload)
+        return payload
+
+    def _persist_snapshot(self, payload: dict[str, Any]) -> None:
+        """Сохранить последний plan status в data/plan_status_last.json."""
+        path = self._root / "data" / "plan_status_last.json"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except OSError:
+            pass
 
     def _load_kpi_gates(self) -> dict[str, Any] | None:
         if self._kpi_gate_service is not None:
