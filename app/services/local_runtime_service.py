@@ -44,10 +44,19 @@ class LocalRuntimeService:
         code_model: str,
         analysis_model: str,
         retrieval_embed_model: str,
+        fast_model: str = "",
+        code_fallback_model: str = "",
     ) -> list[str]:
         names: list[str] = []
         seen: set[str] = set()
-        for raw in (default_model, code_model, analysis_model, retrieval_embed_model):
+        for raw in (
+            default_model,
+            code_model,
+            analysis_model,
+            retrieval_embed_model,
+            fast_model,
+            code_fallback_model,
+        ):
             candidate = raw.strip()
             if not candidate:
                 continue

@@ -688,6 +688,8 @@ def _build_local_runtime_service() -> LocalRuntimeService:
         code_model=settings.code_model,
         analysis_model=settings.analysis_model,
         retrieval_embed_model=settings.retrieval_embed_model,
+        fast_model=settings.fast_model,
+        code_fallback_model=settings.code_fallback_model,
     )
     from app.core.model_roles import teacher_ollama_model_names
 

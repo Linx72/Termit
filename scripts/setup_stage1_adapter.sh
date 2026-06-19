@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODELFILE="${ROOT}/data/finetune/recipes/termit-core-ft.Modelfile"
 MODEL_NAME="termit-core-ft"
 OLLAMA_MODEL="ollama:${MODEL_NAME}"
+BASE_MODEL="${TERMIT_MODEL_LADDER_BASE:-qwen2.5-coder:14b}"
 BASE_URL="${TERMIT_BASE_URL:-http://127.0.0.1:8765}"
 ENV_FILE="${ROOT}/deploy/schedulers/stage1-weekly.env"
 
@@ -42,10 +43,10 @@ fi
 
 OLLAMA_BIN=""
 if OLLAMA_BIN="$(find_ollama)"; then
-  echo "==> Creating Ollama model ${MODEL_NAME} (requires base model deepseek-coder pulled)"
-  if ! "${OLLAMA_BIN}" list 2>/dev/null | grep -q "deepseek-coder"; then
-    echo "==> Pulling deepseek-coder..."
-    "${OLLAMA_BIN}" pull deepseek-coder
+  echo "==> Creating Ollama model ${MODEL_NAME} (base: ${BASE_MODEL})"
+  if ! "${OLLAMA_BIN}" list 2>/dev/null | grep -qF "${BASE_MODEL}"; then
+    echo "==> Pulling ${BASE_MODEL}..."
+    "${OLLAMA_BIN}" pull "${BASE_MODEL}"
   fi
   "${OLLAMA_BIN}" create "${MODEL_NAME}" -f "${MODELFILE}"
   echo "==> Ollama model ready: ${OLLAMA_MODEL}"

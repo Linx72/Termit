@@ -44,6 +44,7 @@ TERMIT_INSTALL_LAUNCH_AGENT=1 ./scripts/do_all_setup.sh
 ```bash
 ./scripts/start_ollama_local.sh   # или системный ollama serve
 ollama pull termit-core-ft
+# Рекомендуемая ladder (14B base): ./scripts/upgrade_model_ladder_phase_a.sh
 # Teacher (stage-1 finetune only):
 ollama pull deepseek-coder
 ollama pull nomic-embed-text      # для semantic retrieval
@@ -89,6 +90,15 @@ TERMIT_RETRIEVAL_EMBED_MODEL=nomic-embed-text
 ```
 
 Переиндекс: UI или `POST /api/retrieval/reindex`. Без Ollama embeddings — fallback на keyword.
+
+## 6a. Model ladder (coding)
+
+Док: [`docs/MODEL_LADDER_RU.md`](docs/MODEL_LADDER_RU.md).
+
+```bash
+./scripts/upgrade_model_ladder_phase_a.sh   # pull 14B + recreate termit-core-ft
+# В .env: TERMIT_DUAL_PASS_ENABLED=true, OPENAI_COMPAT_API_KEY для cloud validator
+```
 
 ## 7. Кроссплатформа (iOS / macOS / Windows / Android)
 
