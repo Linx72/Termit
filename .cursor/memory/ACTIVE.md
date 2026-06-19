@@ -1,16 +1,17 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-19T09:55:00Z
+**Последнее обновление:** 2026-06-19T10:00:00Z
 
 ## Сводка
 
-- Colima запущен, **hosted beta** на `:8080` — smoke OK
-- Ollama warm on startup + `POST /api/local/models/warm`
-- Chat KPI: rolling `chat_latency_p95_recent_ms` (окно 50)
-- Agent run success gate (пред. коммит)
+- do all ~201s: verify_ci, plan, **hosted smoke 8/8 OK**
+- Colima + hosted beta `:8080` стабильны
+- Tool loop KPI: rolling 7d (`TERMIT_TOOL_LOOP_METRICS_RECENT_DAYS`)
+- finetune_kpi warning ушёл после plan (delta +33%)
 
-## Открытые задачи (фаза 5)
+## Открытые задачи
 
-- [ ] GPU + cloud API key
+- [ ] OPENAI_COMPAT_API_KEY
+- [ ] GPU real DPO
 - [ ] Beta cohort ≥5
-- [ ] Product KPI gates green
+- [ ] product_kpi (tool_loop, chat p95, mcp, local_only)

@@ -243,6 +243,7 @@ def _build_agent_service() -> AgentService:
         policy_preset_service=_build_agent_policy_preset_service(),
         media_generation_service=_build_media_generation_service(),
         reasoning_orchestrator=_build_reasoning_orchestrator_service(),
+        tool_loop_metrics_recent_days=settings.tool_loop_metrics_recent_days,
     )
 
 

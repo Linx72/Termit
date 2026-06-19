@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Optional, Protocol
 
@@ -37,7 +37,7 @@ class AgentRunStore(Protocol):
     def count_runs_by_state(self) -> dict[str, int]:
         ...
 
-    def tool_loop_event_metrics(self) -> dict[str, object]:
+    def tool_loop_event_metrics(self, recent_days: int | None = None) -> dict[str, object]:
         ...
 
     def mcp_usage_metrics(self) -> dict[str, object]:
@@ -115,7 +115,10 @@ class InMemoryAgentRunStore:
             counts[key] = counts.get(key, 0) + 1
         return counts
 
-    def tool_loop_event_metrics(self) -> dict[str, object]:
+    def tool_loop_event_metrics(self, recent_days: int | None = None) -> dict[str, object]:
+        cutoff: datetime | None = None
+        if recent_days is not None and recent_days > 0:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=recent_days)
         with self._lock:
             rows: list[tuple[str, str, str]] = []
             completed_run_ids: set[str] = set()
@@ -124,6 +127,13 @@ class InMemoryAgentRunStore:
                 if run and run.state == AgentRunState.completed:
                     completed_run_ids.add(run_id)
                 for event in events:
+                    if cutoff is not None:
+                        try:
+                            event_dt = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
+                            if event_dt < cutoff:
+                                continue
+                        except ValueError:
+                            continue
                     rows.append((run_id, event.event_type, event.message))
         if not rows:
             return empty_tool_loop_metrics()

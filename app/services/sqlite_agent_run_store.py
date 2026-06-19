@@ -236,16 +236,35 @@ class SQLiteAgentRunStore:
             ).fetchall()
         return {str(row["state"]): int(row["c"]) for row in rows}
 
-    def tool_loop_event_metrics(self) -> dict[str, object]:
+    def tool_loop_event_metrics(self, recent_days: int | None = None) -> dict[str, object]:
+        cutoff_iso: str | None = None
+        if recent_days is not None and recent_days > 0:
+            from datetime import datetime, timedelta, timezone
+
+            cutoff_iso = (
+                datetime.now(timezone.utc) - timedelta(days=recent_days)
+            ).isoformat()
         with self._lock, closing(self._connect()) as conn:
-            event_rows = conn.execute(
-                """
-                SELECT run_id, event_type, message
-                FROM agent_run_events
-                WHERE event_type LIKE 'tool_loop_%'
-                   OR event_type = 'verify_retry_scheduled'
-                """
-            ).fetchall()
+            if cutoff_iso:
+                event_rows = conn.execute(
+                    """
+                    SELECT run_id, event_type, message
+                    FROM agent_run_events
+                    WHERE (event_type LIKE 'tool_loop_%'
+                       OR event_type = 'verify_retry_scheduled')
+                      AND timestamp >= ?
+                    """,
+                    (cutoff_iso,),
+                ).fetchall()
+            else:
+                event_rows = conn.execute(
+                    """
+                    SELECT run_id, event_type, message
+                    FROM agent_run_events
+                    WHERE event_type LIKE 'tool_loop_%'
+                       OR event_type = 'verify_retry_scheduled'
+                    """
+                ).fetchall()
             completed_rows = conn.execute(
                 """
                 SELECT run_id FROM agent_runs WHERE state = ?
