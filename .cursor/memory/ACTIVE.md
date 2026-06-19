@@ -14,7 +14,7 @@ TERMIT_SKIP_OLLAMA_CHECK=1 TERMIT_DO_ALL_PLAN=true ./scripts/do_all_automatic.sh
 |----------|-----------|
 | Итог | **exit 0**, ~112 с |
 | verify_ci + plan | OK |
-| Hosted smoke `:8080` | OK |
+| Hosted smoke `:8080` | **пропущен** (docker down, :8080 недоступен) |
 | `automatic_mode_enabled` | **true** |
 | Finetune KPI (после) | **failed** delta **-33%** |
 | `overall_ok` | **false** (5 warnings) |
