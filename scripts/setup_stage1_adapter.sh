@@ -66,7 +66,7 @@ REGISTER_PAYLOAD="$(cat <<EOF
 {
   "name": "${MODEL_NAME}",
   "model": "${OLLAMA_MODEL}",
-  "base_model": "ollama:deepseek-coder",
+  "base_model": "ollama:${BASE_MODEL}",
   "repo_profile_id": "termit-core",
   "description": "Stage1 weekly-stage1 run ftpbg_ca1f99373af1 (174 samples, baseline 70.8%)"
 }

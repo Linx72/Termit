@@ -28,6 +28,7 @@ from app.services.llm_caller_service import LlmCallerService
 from app.services.mcp_registry_service import McpRegistryService
 from app.services.search_provider import StubSearchProvider
 from app.services.agent_tool_schema import TOOL_DEFINITIONS
+from app.services.symbol_index_service import SymbolIndexService
 from app.services.task_service import TaskService
 from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingError, ToolingService
@@ -101,6 +102,7 @@ class EvalService:
         report_store: Optional[EvalReportStore] = None,
         web_fetcher: Optional[Callable[[str, int], tuple[int, str, str]]] = None,
         retrieval_service: Optional[CodeRetrievalService] = None,
+        symbol_index_service: Optional[SymbolIndexService] = None,
         extra_scenarios_path: Optional[str] = None,
         extra_scenarios_paths: Optional[list[str]] = None,
         quality_judge: Optional[EvalQualityJudgeService] = None,
@@ -124,6 +126,7 @@ class EvalService:
         self._report_store = report_store
         self._web_fetcher = web_fetcher
         self._retrieval = retrieval_service
+        self._symbol_index = symbol_index_service
         self._quality_judge = quality_judge
         self._llm_caller = llm_caller
         self._model_benchmark_scenarios: list[EvalScenario] = []
@@ -501,6 +504,8 @@ class EvalService:
             return self._run_web_scenario(scenario)
         if runner == "retrieval":
             return self._run_retrieval_scenario(scenario)
+        if runner == "symbol_graph":
+            return self._run_symbol_graph_scenario(scenario)
         if runner == "platform_web_search":
             return self._run_platform_web_search(scenario)
         if runner == "platform_mcp":
@@ -881,6 +886,25 @@ class EvalService:
         matched_paths = [hit.path for hit in hits if expect in hit.path.replace("\\", "/")]
         passed = len(matched_paths) > 0
         ref = matched_paths[0] if matched_paths else (hits[0].path if hits else query)
+        return ref, passed, None if passed else "verification_error", 1, "semi-auto"
+
+    def _run_symbol_graph_scenario(
+        self, scenario: EvalScenario
+    ) -> tuple[str, bool, Optional[str], int, str]:
+        if self._symbol_index is None:
+            raise RuntimeError("Symbol index is not configured for eval runs.")
+        query = scenario.retrieval_query or scenario.prompt
+        expect = scenario.retrieval_expect.strip()
+        if not expect:
+            raise ValueError("symbol_graph runner requires retrieval_expect.")
+        hits = self._symbol_index.search(query, limit=8)
+        matched = [hit for hit in hits if expect in hit.path.replace("\\", "/")]
+        passed = len(matched) > 0
+        ref = matched[0].path if matched else (hits[0].path if hits else query)
+        if passed and matched:
+            graph = self._symbol_index.graph_context_for(matched[0].name, limit=5)
+            if graph:
+                ref = f"{ref} | {graph.splitlines()[0]}"
         return ref, passed, None if passed else "verification_error", 1, "semi-auto"
 
     def _run_platform_web_search(

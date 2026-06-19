@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.domain.schemas import AgentProfileResponse, AgentRunRequest, ChatMessage, ChatRequest
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.context_packing_service import ContextPackingService
@@ -34,6 +36,23 @@ class ContextEnrichmentService:
         self._repo_map_enabled = repo_map_enabled
         self._context_packing_enabled = context_packing_enabled
 
+    @staticmethod
+    def _infer_symbol_query(message: str) -> str | None:
+        text = message.strip()
+        if not text:
+            return None
+        match = re.search(
+            r"(?:where is|where's|find|locate|где)\s+[`'\"]?([A-Za-z_][\w]*)[`'\"]?",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
+        at_match = re.search(r"@([A-Za-z_][\w]*)", text)
+        if at_match:
+            return at_match.group(1)
+        return None
+
     def build_system_messages(
         self,
         payload: ChatRequest,
@@ -61,7 +80,13 @@ class ContextEnrichmentService:
             if cursor_block:
                 messages.append(ChatMessage(role="system", content=cursor_block))
 
-        use_enrichment = payload.use_retrieval or payload.use_repo_map or payload.use_context_packing
+        use_enrichment = (
+            payload.use_retrieval
+            or payload.use_repo_map
+            or payload.use_context_packing
+            or payload.symbol_query
+            or self._infer_symbol_query(payload.message)
+        )
         if not use_enrichment:
             return messages
 
@@ -81,6 +106,22 @@ class ContextEnrichmentService:
                 for item in hits:
                     lines.append(f"- {item.kind} {item.name} @ {item.path}:{item.line}")
                 messages.append(ChatMessage(role="system", content="\n".join(lines)))
+                for item in hits[:2]:
+                    graph = self._symbol_index.graph_context_for(item.name, limit=5)
+                    if graph:
+                        messages.append(ChatMessage(role="system", content=graph))
+        elif self._symbol_index is not None:
+            inferred = self._infer_symbol_query(payload.message)
+            if inferred:
+                hits = self._symbol_index.search(inferred, limit=5, path_prefix=prefix)
+                if hits:
+                    lines = ["[Symbol matches (inferred)]"]
+                    for item in hits:
+                        lines.append(f"- {item.kind} {item.name} @ {item.path}:{item.line}")
+                    messages.append(ChatMessage(role="system", content="\n".join(lines)))
+                    graph = self._symbol_index.graph_context_for(hits[0].name, limit=5)
+                    if graph:
+                        messages.append(ChatMessage(role="system", content=graph))
 
         if payload.use_context_packing and self._context_packing_enabled and self._context_packing is not None:
             packed = self._context_packing.pack(
@@ -127,7 +168,7 @@ class ContextEnrichmentService:
             retrieval_path_prefix=payload.retrieval_path_prefix or profile.retrieval_path_prefix or "",
             changed_files=list(payload.changed_files),
             project_id=payload.project_id,
-            symbol_query=payload.input if "@" in payload.input else None,
+            symbol_query=payload.input if "@" in payload.input else self._infer_symbol_query(payload.input),
         )
         return [message.content for message in self.build_system_messages(chat_payload, include_skills=False)]
 

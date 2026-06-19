@@ -627,6 +627,7 @@ def _build_eval_service() -> EvalService:
         telemetry=_build_telemetry_store(),
         report_store=EvalReportStore(file_path=settings.eval_report_file_path),
         retrieval_service=_build_code_retrieval_service(),
+        symbol_index_service=_build_symbol_index_service(),
         extra_scenarios_path=settings.media_eval_scenarios_path,
         extra_scenarios_paths=[
             settings.eval_iq_scenarios_path,

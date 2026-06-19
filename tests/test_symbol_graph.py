@@ -25,6 +25,22 @@ class SymbolGraphTests(unittest.TestCase):
             self.assertEqual(len(callers), 1)
             self.assertEqual(callers[0].caller_name, "main")
 
+    def test_graph_context_for_symbol(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = Path(tmp) / "sample.py"
+            sample.write_text(
+                "def helper():\n"
+                "    return 1\n\n"
+                "def main():\n"
+                "    return helper()\n",
+                encoding="utf-8",
+            )
+            service = SymbolIndexService(root_path=tmp)
+            service.reindex()
+            block = service.graph_context_for("main")
+            self.assertIn("Symbol graph: main", block)
+            self.assertIn("helper", block)
+
 
 if __name__ == "__main__":
     unittest.main()

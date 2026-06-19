@@ -72,6 +72,33 @@ class Phase2Tests(unittest.TestCase):
             self.assertIn("Always run tests", messages[0].content)
             self.assertIn("Reply in Russian", messages[0].content)
 
+    def test_context_enrichment_infers_symbol_and_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "auth.py").write_text(
+                "def check_quota():\n    return True\n\n"
+                "def middleware():\n    return check_quota()\n",
+                encoding="utf-8",
+            )
+            enrichment = ContextEnrichmentService(
+                repo_map_enabled=False,
+                symbol_index=SymbolIndexService(str(root)),
+            )
+            enrichment._symbol_index.reindex()
+            messages = enrichment.build_system_messages(
+                ChatRequest(
+                    message="Where is middleware?",
+                    task_type=TaskType.coding,
+                    project_id="demo",
+                    use_retrieval=False,
+                    use_repo_map=False,
+                    use_context_packing=False,
+                )
+            )
+            combined = "\n".join(m.content for m in messages)
+            self.assertIn("middleware", combined)
+            self.assertIn("Symbol graph", combined)
+
     def test_agent_templates_list(self) -> None:
         from app.services.agent_templates_store import AgentTemplatesStore
 

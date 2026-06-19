@@ -145,6 +145,28 @@ class SymbolIndexService:
                 break
         return neighbors[:limit]
 
+    def graph_context_for(self, symbol_name: str, *, limit: int = 5) -> str:
+        """Callers/callees для system prompt (symbol graph MVP)."""
+        name = symbol_name.strip()
+        if not name:
+            return ""
+        callers = self.callers_of(name, limit=limit)
+        callees = self.callees_of(name, limit=limit)
+        if not callers and not callees:
+            return ""
+        lines = [f"[Symbol graph: {name}]"]
+        if callers:
+            lines.append("Callers:")
+            for edge in callers:
+                lines.append(
+                    f"  - {edge.caller_name} @ {edge.caller_path}:{edge.caller_line}"
+                )
+        if callees:
+            lines.append("Callees:")
+            for edge in callees:
+                lines.append(f"  - {edge.callee_name} @ {edge.path}:{edge.line}")
+        return "\n".join(lines)
+
     def _module_path_index(self) -> dict[str, list[str]]:
         mapping: dict[str, list[str]] = {}
         for file_path in self._iter_files():

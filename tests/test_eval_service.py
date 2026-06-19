@@ -5,6 +5,7 @@ from pathlib import Path
 from app.services.browser_workflow_service import BrowserWorkflowService
 from app.services.eval_report_store import EvalReportStore
 from app.services.eval_service import EvalService
+from app.services.symbol_index_service import SymbolIndexService
 from app.services.task_store import InMemoryTaskStore
 from app.services.task_service import TaskService
 from app.services.tooling_service import ToolingService
@@ -28,12 +29,13 @@ class EvalServiceTests(unittest.TestCase):
             tooling_service=tooling,
             report_store=EvalReportStore(report_path),
             retrieval_service=_RetrievalStub(),
+            symbol_index_service=SymbolIndexService(root_path="."),
         )
 
     def test_lists_74_scenarios_from_file(self) -> None:
         service = self._build_service("./data/eval_scenarios.json", "./data/test_eval_reports.jsonl")
         scenarios = service.list_scenarios()
-        self.assertEqual(len(scenarios), 77)
+        self.assertEqual(len(scenarios), 78)
 
     def test_run_coding_scenario_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -119,12 +121,20 @@ class EvalServiceTests(unittest.TestCase):
                 result = service.run_scenario(scenario_id)
                 self.assertEqual(result["status"], "passed", msg=scenario_id)
 
+    def test_run_symbol_graph_scenario_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = str(Path(tmp) / "reports.jsonl")
+            service = self._build_service("./data/eval_scenarios.json", report_path)
+            result = service.run_scenario("R1b")
+            self.assertEqual(result["status"], "passed")
+            self.assertIn("auth_quota", str(result.get("execution_ref", "")))
+
     def test_full_suite_all_pass(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             report_path = str(Path(tmp) / "reports.jsonl")
             service = self._build_service("./data/eval_scenarios.json", report_path)
             report = service.run_suite(persist_report=False)
-            self.assertEqual(report["total"], 77)
+            self.assertEqual(report["total"], 78)
             self.assertEqual(report["failed"], 0)
             self.assertEqual(report["pass_rate"], 1.0)
 
