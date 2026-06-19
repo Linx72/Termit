@@ -26,6 +26,7 @@ import { FirstRunWizard } from "./FirstRunWizard";
 import { HealthDashboard } from "./HealthDashboard";
 import { KpiGatePanel } from "./KpiGatePanel";
 import { BetaFeedbackPanel } from "./BetaFeedbackPanel";
+import { applyBetaDeepLink, parseBetaDeepLink, scrollToBetaPanel } from "./betaDeepLink";
 import { WorkflowHubPanel } from "./WorkflowHubPanel";
 import { AgentObservabilityPanel } from "./AgentObservabilityPanel";
 import { OpsSecurityPanel } from "./OpsSecurityPanel";
@@ -416,6 +417,19 @@ export function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    const action = parseBetaDeepLink();
+    const { openSettings, openWizard } = applyBetaDeepLink(action);
+    if (!openSettings) {
+      return;
+    }
+    setSettingsOpen(true);
+    if (openWizard) {
+      setShowWizard(true);
+    }
+    scrollToBetaPanel();
+  }, []);
 
   useEffect(() => {
     if (!showWizard || !connected || onboardingAssignedRef.current) {

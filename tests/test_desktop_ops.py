@@ -87,6 +87,28 @@ class DesktopOpsTests(unittest.TestCase):
         self.assertIn("chat_p95_ttft_ms", gate_ids)
         self.assertTrue(payload["overall_passed"])
 
+    def test_kpi_gate_agent_run_success(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        service = DesktopKpiGateService(
+            str(root / "data" / "desktop_north_star.json"),
+            eval_dashboard_provider=lambda: {"pass_rate": 0.8},
+            agent_metrics_provider=lambda: {
+                "tool_loop_completion_rate": 0.85,
+                "tool_loop_tool_success_rate": 0.9,
+                "by_outcome_class": {
+                    "success": 8,
+                    "failed": 2,
+                },
+            },
+        )
+        payload = service.evaluate_gates()
+        gate_ids = {gate["gate_id"] for gate in payload["gates"]}
+        self.assertIn("agent_run_success_rate", gate_ids)
+        agent_gate = next(g for g in payload["gates"] if g["gate_id"] == "agent_run_success_rate")
+        self.assertEqual(agent_gate["actual"], 0.8)
+        self.assertTrue(agent_gate["passed"])
+        self.assertEqual(payload["agent_metrics"]["agent_run_terminal_total"], 10)
+
     def test_accelerator_share_and_heavy_job(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             service = DesktopAcceleratorService(

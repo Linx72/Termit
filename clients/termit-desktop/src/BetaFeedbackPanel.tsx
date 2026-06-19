@@ -56,7 +56,7 @@ export function BetaFeedbackPanel({ client, connected, locale }: BetaFeedbackPan
   };
 
   return (
-    <div className="beta-feedback-panel">
+    <div className="beta-feedback-panel" id="beta-invite-panel">
       <strong>{t(locale, "betaFeedbackTitle")}</strong>
       <p className="hint">{t(locale, "betaFeedbackHint")}</p>
       {metrics ? (

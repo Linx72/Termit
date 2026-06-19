@@ -527,6 +527,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 - [ ] Push + tagged release
 - [ ] TERMIT_PLAN_STATUS_STRICT в release gate (после beta)
+- [x] Agent run success gate (`agent_run_success_rate` из `by_outcome_class`)
 - [ ] Task success ≥75% на agent runs (не только eval)
 - [ ] D30 retention ≥35% на prod beta
 

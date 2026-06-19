@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Callable
 
+from app.services.agent_outcome_service import agent_run_success_rate
+
 
 class DesktopKpiGateService:
     def __init__(
@@ -50,6 +52,13 @@ class DesktopKpiGateService:
         pass_rate = float(eval_dash.get("pass_rate", 0.0))
         tool_loop_completion = float(agent_metrics.get("tool_loop_completion_rate") or 0.0)
         tool_loop_success = float(agent_metrics.get("tool_loop_tool_success_rate") or 0.0)
+        by_outcome_raw = agent_metrics.get("by_outcome_class") or {}
+        outcome_map = (
+            {str(k): int(v) for k, v in by_outcome_raw.items()}
+            if isinstance(by_outcome_raw, dict)
+            else {}
+        )
+        run_success_rate, terminal_runs = agent_run_success_rate(outcome_map)
 
         gates: list[dict[str, object]] = []
 
@@ -94,6 +103,17 @@ class DesktopKpiGateService:
             tool_loop_success,
             targets.get("tool_loop_tool_success_rate_min", targets.get("tool_loop_completion_rate_min", 0.8)),
         )
+
+        by_outcome = agent_metrics.get("by_outcome_class") or {}
+        if isinstance(by_outcome, dict):
+            min_terminal = int(targets.get("agent_run_terminal_min", 5) or 5)
+            if terminal_runs >= min_terminal:
+                add_gate(
+                    "agent_run_success_rate",
+                    "Agent run success (outcome)",
+                    run_success_rate,
+                    targets.get("agent_run_success_rate_min", targets.get("task_success_rate_min", 0.75)),
+                )
 
         metrics_summary: dict[str, object] = {}
         if self._metrics_summary_provider is not None:
@@ -231,6 +251,9 @@ class DesktopKpiGateService:
                 "tool_loop_completion_rate": tool_loop_completion,
                 "tool_loop_tool_success_rate": tool_loop_success,
                 "health_status": agent_metrics.get("health_status"),
+                "by_outcome_class": outcome_map,
+                "agent_run_success_rate": run_success_rate,
+                "agent_run_terminal_total": terminal_runs,
             },
             "telemetry": telemetry,
             "metrics_summary": metrics_summary,

@@ -12,6 +12,17 @@ OUTCOME_BLOCKED_POLICY = "blocked-policy"
 OUTCOME_FAILED = "failed"
 
 
+def agent_run_success_rate(by_outcome_class: dict[str, int] | None) -> tuple[float, int]:
+    """Доля terminal runs с outcome success (для KPI gate Day 90)."""
+    if not by_outcome_class:
+        return 0.0, 0
+    terminal = sum(int(count) for count in by_outcome_class.values())
+    if terminal <= 0:
+        return 0.0, 0
+    success = int(by_outcome_class.get(OUTCOME_SUCCESS, 0) or 0)
+    return round(success / terminal, 4), terminal
+
+
 def classify_agent_outcome(
     *,
     state: str,

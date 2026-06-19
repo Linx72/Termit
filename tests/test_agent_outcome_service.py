@@ -8,6 +8,7 @@ from app.services.agent_outcome_service import (
     OUTCOME_BLOCKED_POLICY,
     OUTCOME_PARTIAL,
     OUTCOME_SUCCESS,
+    agent_run_success_rate,
     classify_agent_outcome,
 )
 
@@ -48,6 +49,15 @@ class AgentOutcomeServiceTests(unittest.TestCase):
             error="max steps",
         )
         self.assertEqual(outcome, OUTCOME_PARTIAL)
+
+    def test_agent_run_success_rate(self) -> None:
+        rate, total = agent_run_success_rate({"success": 3, "failed": 1})
+        self.assertEqual(total, 4)
+        self.assertEqual(rate, 0.75)
+
+        empty_rate, empty_total = agent_run_success_rate(None)
+        self.assertEqual(empty_total, 0)
+        self.assertEqual(empty_rate, 0.0)
 
 
 if __name__ == "__main__":

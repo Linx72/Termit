@@ -154,17 +154,43 @@ if [[ "${TERMIT_DO_ALL_PLAN:-false}" == "true" ]]; then
   echo "== 7/7 Do-all plan (фаза 5) =="
   TERMIT_PLAN_TRY_STRICT_LIVE="${TERMIT_PLAN_TRY_STRICT_LIVE:-false}" \
     "${ROOT}/scripts/do_all_plan.sh"
+  TERMIT_DO_ALL_DEPLOY_HOSTED="${TERMIT_DO_ALL_DEPLOY_HOSTED:-true}"
 fi
 
-if [[ "${TERMIT_DO_ALL_SKIP_HOSTED:-false}" != "true" ]] && docker info >/dev/null 2>&1; then
+_ensure_docker_daemon() {
+  if docker info >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v colima >/dev/null 2>&1; then
+    echo "Docker недоступен — пробуем colima start..."
+    colima start >/dev/null 2>&1 || colima start
+    sleep 5
+    docker info >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+if [[ "${TERMIT_DO_ALL_SKIP_HOSTED:-false}" != "true" ]]; then
   echo ""
   echo "== 8/8 Hosted smoke (Caddy :8080) =="
-  if curl -sf --max-time 3 "${TERMIT_HOSTED_BASE_URL:-http://127.0.0.1:8080}/health" >/dev/null 2>&1; then
-    TERMIT_HOSTED_BASE_URL="${TERMIT_HOSTED_BASE_URL:-http://127.0.0.1:8080}" \
-      "${ROOT}/scripts/hosted_smoke.sh" \
-      || echo "WARN: hosted smoke failed (non-blocking)."
+  if ! _ensure_docker_daemon; then
+    echo "Skip — Docker daemon недоступен (Docker Desktop / Colima: ./scripts/deploy_hosted_beta.sh)"
   else
-    echo "Skip — hosted proxy down (./scripts/deploy_hosted_beta.sh)"
+    BASE_HOSTED="${TERMIT_HOSTED_BASE_URL:-http://127.0.0.1:8080}"
+    if ! curl -sf --max-time 3 "${BASE_HOSTED}/health" >/dev/null 2>&1; then
+      if [[ "${TERMIT_DO_ALL_DEPLOY_HOSTED:-false}" == "true" ]]; then
+        echo "Hosted proxy down — запуск deploy_hosted_beta.sh..."
+        TERMIT_HOSTED_BASE_URL="${BASE_HOSTED}" "${ROOT}/scripts/deploy_hosted_beta.sh" \
+          || echo "WARN: deploy_hosted_beta failed (non-blocking)."
+      else
+        echo "Skip — hosted proxy down (TERMIT_DO_ALL_DEPLOY_HOSTED=true или ./scripts/deploy_hosted_beta.sh)"
+      fi
+    fi
+    if curl -sf --max-time 3 "${BASE_HOSTED}/health" >/dev/null 2>&1; then
+      TERMIT_HOSTED_BASE_URL="${BASE_HOSTED}" \
+        "${ROOT}/scripts/hosted_smoke.sh" \
+        || echo "WARN: hosted smoke failed (non-blocking)."
+    fi
   fi
 fi
 

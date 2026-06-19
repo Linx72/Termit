@@ -48,6 +48,12 @@ TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.
 
 See [`HOSTED_DEPLOYMENT.md`](HOSTED_DEPLOYMENT.md).
 
+## Beta invite (one page)
+
+RU quick start for testers: [`BETA_INVITE_RU.md`](BETA_INVITE_RU.md).
+
+Desktop deep links: `#beta` (feedback panel), `#beta-onboard` (wizard + feedback).
+
 ## Weekly quality loop
 
 ```bash
