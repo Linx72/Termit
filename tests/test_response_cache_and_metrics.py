@@ -48,6 +48,8 @@ class TelemetryStoreTests(unittest.TestCase):
         store.record_task(completed=True, auto_mode=True, failure_class=None)
         store.record_task(completed=False, auto_mode=True, failure_class="external_error")
         snap = store.snapshot()
+        self.assertEqual(snap.chat_recent_sample_size, 2)
+        self.assertGreater(snap.chat_latency_p95_recent_ms, 0.0)
         self.assertEqual(snap.chat_requests_total, 2)
         self.assertEqual(snap.chat_cache_hits_total, 1)
         self.assertEqual(snap.task_total, 2)
@@ -55,6 +57,23 @@ class TelemetryStoreTests(unittest.TestCase):
         self.assertEqual(snap.chat_code_response_total, 1)
         self.assertEqual(snap.chat_empty_response_total, 0)
         self.assertAlmostEqual(snap.cost_per_successful_task_usd, 0.01)
+
+    def test_recent_window_p95_uses_tail(self) -> None:
+        store = TelemetryStore(recent_window=3)
+        for latency in (100, 100, 100, 5000, 5000):
+            store.record_chat(
+                success=True,
+                cache_hit=False,
+                latency_ms=latency,
+                selected_model="ollama:fast",
+                estimated_cost_usd=0.0,
+                response_text="ok",
+                fallback_used=False,
+            )
+        snap = store.snapshot()
+        self.assertEqual(snap.chat_recent_sample_size, 3)
+        self.assertEqual(snap.chat_latency_p95_recent_ms, 5000.0)
+        self.assertGreaterEqual(snap.chat_latency_p95_ms, 100.0)
 
 
 class MetricsSnapshotStoreTests(unittest.TestCase):

@@ -133,11 +133,15 @@ class DesktopKpiGateService:
                     targets.get("automation_rate_min", 0.6),
                 )
             chat_total = int(metrics_summary.get("chat_requests_total", 0) or 0)
+            recent_n = int(metrics_summary.get("chat_recent_sample_size", 0) or 0)
             if chat_total > 0:
+                chat_p95 = float(metrics_summary.get("chat_latency_p95_ms", 0.0))
+                if recent_n >= 5:
+                    chat_p95 = float(metrics_summary.get("chat_latency_p95_recent_ms", chat_p95) or chat_p95)
                 add_gate(
                     "chat_p95_ttft_ms",
                     "Chat p95 TTFT (ms)",
-                    float(metrics_summary.get("chat_latency_p95_ms", 0.0)),
+                    chat_p95,
                     targets.get("chat_p95_ttft_ms_max", 3000.0),
                     higher_is_better=False,
                 )

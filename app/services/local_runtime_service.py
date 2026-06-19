@@ -169,6 +169,47 @@ class LocalRuntimeService:
             detail=detail,
         )
 
+    async def warm_ollama_models(
+        self,
+        models: list[str] | None = None,
+        *,
+        max_models: int = 3,
+    ) -> dict[str, object]:
+        """Минимальный chat ping — загрузка весов в VRAM/RAM (снижает cold-start TTFT)."""
+        targets: list[str] = []
+        if models:
+            for raw in models:
+                name = raw.strip()
+                if name.startswith("ollama:"):
+                    name = name.split(":", 1)[1]
+                if name:
+                    targets.append(name)
+        else:
+            targets = list(self._required_ollama_models[:max(1, max_models)])
+        results: list[dict[str, object]] = []
+        for bare in targets:
+            payload = {
+                "model": bare,
+                "messages": [{"role": "user", "content": "ping"}],
+                "stream": False,
+                "options": {"num_predict": 1, "temperature": 0.0},
+            }
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    response = await client.post(f"{self._ollama_base_url}/api/chat", json=payload)
+                ok = response.status_code < 400
+                results.append(
+                    {
+                        "model": f"ollama:{bare}",
+                        "ok": ok,
+                        "status_code": response.status_code,
+                    }
+                )
+            except httpx.HTTPError as exc:
+                results.append({"model": f"ollama:{bare}", "ok": False, "error": str(exc)})
+        warmed = sum(1 for item in results if item.get("ok"))
+        return {"warmed": warmed, "total": len(results), "results": results}
+
     async def _probe(self, url: str) -> tuple[bool, str]:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:

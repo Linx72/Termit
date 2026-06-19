@@ -6,9 +6,10 @@ from app.domain.schemas import MetricsSummaryResponse
 
 
 class TelemetryStore:
-    def __init__(self, max_latency_points: int = 5000) -> None:
+    def __init__(self, max_latency_points: int = 5000, recent_window: int = 50) -> None:
         self._lock = Lock()
         self._max_latency_points = max(100, max_latency_points)
+        self._recent_window = max(1, recent_window)
         self._chat_requests_total = 0
         self._chat_success_total = 0
         self._chat_cache_hits_total = 0
@@ -113,6 +114,8 @@ class TelemetryStore:
         with self._lock:
             p50 = self._percentile(self._chat_latencies_ms, 50.0)
             p95 = self._percentile(self._chat_latencies_ms, 95.0)
+            recent_latencies = self._chat_latencies_ms[-self._recent_window :]
+            recent_p95 = self._percentile(recent_latencies, 95.0)
             chat_success_rate = (
                 self._chat_success_total / self._chat_requests_total
                 if self._chat_requests_total
@@ -144,6 +147,8 @@ class TelemetryStore:
                 chat_cache_hit_rate=round(chat_cache_hit_rate, 4),
                 chat_latency_p50_ms=round(p50, 2),
                 chat_latency_p95_ms=round(p95, 2),
+                chat_latency_p95_recent_ms=round(recent_p95, 2),
+                chat_recent_sample_size=len(recent_latencies),
                 chat_empty_response_total=self._chat_empty_response_total,
                 chat_code_response_total=self._chat_code_response_total,
                 chat_fallback_used_total=self._chat_fallback_used_total,

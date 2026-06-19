@@ -235,6 +235,9 @@ class Settings:
     finetune_max_train_regression: float = 0.05
     finetune_shadow_traffic_percent: float = 10.0
     auto_start_ollama: bool = False
+    ollama_warm_on_startup: bool = True
+    ollama_warm_max_models: int = 3
+    chat_latency_recent_window: int = 50
     routing_max_candidates: int = 4
     routing_cost_aware_enabled: bool = False
     routing_model_costs: str = ""
@@ -671,6 +674,10 @@ def get_settings() -> Settings:
         ),
         auto_start_ollama=os.getenv("TERMIT_AUTO_START_OLLAMA", "false").lower()
         in {"1", "true", "yes", "on"},
+        ollama_warm_on_startup=os.getenv("TERMIT_OLLAMA_WARM_ON_STARTUP", "true").lower()
+        in {"1", "true", "yes", "on"},
+        ollama_warm_max_models=max(1, int(os.getenv("TERMIT_OLLAMA_WARM_MAX_MODELS", "3"))),
+        chat_latency_recent_window=max(10, int(os.getenv("TERMIT_CHAT_LATENCY_RECENT_WINDOW", "50"))),
         alert_webhook_url=os.getenv("TERMIT_ALERT_WEBHOOK_URL", ""),
         routing_max_candidates=int(os.getenv("TERMIT_ROUTING_MAX_CANDIDATES", "4")),
         routing_cost_aware_enabled=os.getenv("TERMIT_ROUTING_COST_AWARE_ENABLED", "false").lower()

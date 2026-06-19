@@ -228,6 +228,12 @@ class LocalModelPullResponse(BaseModel):
     detail: str = ""
 
 
+class LocalModelsWarmResponse(BaseModel):
+    warmed: int
+    total: int
+    results: list[dict[str, object]] = Field(default_factory=list)
+
+
 class LocalRuntimeStatusResponse(BaseModel):
     providers: list[ProviderStatus] = Field(default_factory=list)
     required_ollama_models: list[str] = Field(default_factory=list)
@@ -649,6 +655,8 @@ class MetricsSummaryResponse(BaseModel):
     chat_cache_hit_rate: float
     chat_latency_p50_ms: float
     chat_latency_p95_ms: float
+    chat_latency_p95_recent_ms: float = 0.0
+    chat_recent_sample_size: int = 0
     chat_empty_response_total: int = 0
     chat_code_response_total: int = 0
     chat_fallback_used_total: int = 0

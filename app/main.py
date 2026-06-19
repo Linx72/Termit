@@ -90,6 +90,13 @@ async def _app_lifespan(_app: FastAPI):
             )
         else:
             _logger.info("Ollama model check passed (%d required).", len(_required))
+        if settings.ollama_warm_on_startup:
+            warm = await local_runtime.warm_ollama_models(max_models=settings.ollama_warm_max_models)
+            _logger.info(
+                "Ollama warm on startup: warmed=%s total=%s",
+                warm.get("warmed"),
+                warm.get("total"),
+            )
     except Exception as exc:  # noqa: BLE001 — startup must not crash on probe failure
         _logger.warning("Ollama model validation skipped: %s", exc)
     agent_service.start()

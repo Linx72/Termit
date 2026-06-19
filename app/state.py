@@ -655,7 +655,10 @@ def get_orchestration_eval_report_store() -> OrchestrationEvalReportStore:
 @lru_cache
 def _build_telemetry_store() -> TelemetryStore:
     settings = get_settings()
-    return TelemetryStore(max_latency_points=settings.telemetry_max_latency_points)
+    return TelemetryStore(
+        max_latency_points=settings.telemetry_max_latency_points,
+        recent_window=settings.chat_latency_recent_window,
+    )
 
 
 def get_telemetry_store() -> TelemetryStore:
