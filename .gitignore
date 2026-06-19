@@ -42,6 +42,8 @@ data/*
 !data/finetune/
 data/finetune/*
 !data/finetune/.gitkeep
+!data/finetune/recipes/
+!data/finetune/recipes/*.Modelfile
 !data/eval_fixtures/
 data/eval_fixtures/*
 !data/eval_fixtures/patch_sample.txt
