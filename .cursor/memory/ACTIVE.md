@@ -1,6 +1,6 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-19T06:43:00Z
+**Последнее обновление:** 2026-06-19T07:15:00Z
 
 **Причина:** do all прогон
 
@@ -12,19 +12,14 @@ TERMIT_SKIP_OLLAMA_CHECK=1 TERMIT_DO_ALL_PLAN=true ./scripts/do_all_automatic.sh
 
 | Проверка | Результат |
 |----------|-----------|
-| Итог | **exit 0**, ~133 с |
+| Итог | **exit 0**, ~111 с |
 | verify_ci + plan | OK |
 | Hosted smoke `:8080` | **пропущен** (docker down) |
 | `automatic_mode_enabled` | **true** |
-| Finetune KPI (после) | **failed** delta=0% |
+| Finetune KPI | **failed** delta=0% |
 | `overall_ok` | **false** (5 warnings) |
-
-**Warnings:** no_gpu, cloud_benchmark, finetune_kpi, product_kpi, beta_cohort D30=0.
 
 ## Открытые задачи (фаза 5)
 
-- [ ] Docker + `deploy_hosted_beta.sh`
-- [ ] GPU → real DPO
-- [ ] Cloud API key
-- [ ] Beta cohort ≥5
-- [ ] Product KPI gates
+- [ ] Docker + deploy_hosted_beta
+- [ ] GPU, cloud key, beta ≥5, product KPI
