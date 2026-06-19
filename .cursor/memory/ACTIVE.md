@@ -1,17 +1,25 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-19T10:00:00Z
+**Последнее обновление:** 2026-06-19T07:12:00Z
 
-## Сводка
+## Сводка (последний do all)
 
-- do all ~201s: verify_ci, plan, **hosted smoke 8/8 OK**
-- Colima + hosted beta `:8080` стабильны
-- Tool loop KPI: rolling 7d (`TERMIT_TOOL_LOOP_METRICS_RECENT_DAYS`)
-- finetune_kpi warning ушёл после plan (delta +33%)
+```bash
+TERMIT_SKIP_OLLAMA_CHECK=1 TERMIT_DO_ALL_PLAN=true ./scripts/do_all_automatic.sh
+```
+
+| Проверка | Результат |
+|----------|-----------|
+| Итог | **exit 0**, ~277 с |
+| verify_ci + plan | OK |
+| Hosted smoke 8/8 `:8080` | OK |
+| Finetune KPI (после train) | failed delta=0% |
+| `overall_ok` | false (5 warnings) |
+
+**Warnings:** no_gpu, cloud_benchmark, finetune_kpi, product_kpi, beta_cohort.
 
 ## Открытые задачи
 
 - [ ] OPENAI_COMPAT_API_KEY
 - [ ] GPU real DPO
 - [ ] Beta cohort ≥5
-- [ ] product_kpi (tool_loop, chat p95, mcp, local_only)
