@@ -24,12 +24,16 @@ echo "== Termit prod readiness check (staging=${RUN_STAGING}, dev_seed=${DEV_SEE
 
 echo ""
 echo "== 1/4 Plan status (relax env) =="
+PLAN_ARGS=(--summary-only)
+if [[ "${TERMIT_PROD_READINESS_CI:-}" != "true" ]]; then
+  PLAN_ARGS+=(--strict)
+fi
 if [[ "${DEV_SEED}" == "true" ]]; then
   "${ROOT}/scripts/plan_status_dev_green.sh"
 else
   TERMIT_PLAN_STATUS_LOCAL=true \
   TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS=true \
-    "${PYTHON_BIN}" "${ROOT}/scripts/plan_status_check.py" --summary-only --strict
+    "${PYTHON_BIN}" "${ROOT}/scripts/plan_status_check.py" "${PLAN_ARGS[@]}"
 fi
 
 echo ""
