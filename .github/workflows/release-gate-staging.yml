@@ -28,8 +28,11 @@ jobs:
       - name: Deploy hosted beta
         run: ./scripts/start_colima_and_deploy_beta.sh
 
-      - name: Release gate staging
-        run: ./scripts/release_gate_staging.sh
+      - name: Prod readiness (plan + preflight + staging gate)
+        run: |
+          TERMIT_PROD_READINESS_STAGING=true \
+          TERMIT_PROD_READINESS_STRICT_GPU=false \
+            ./scripts/prod_readiness_check.sh
 
       - name: Upload staging artifacts
         if: always()

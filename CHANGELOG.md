@@ -16,6 +16,7 @@
 - `release_smoke`: confirm_run regression in core profile; reset `patch_sample.txt` after live eval gates
 - `seed_product_kpi_dev`: unique run ids per seed batch + `outcome_class=success` для стабильного `agent_run_success_rate` на staging
 - `scripts/prod_readiness_check.sh` — единый prod readiness gate
+- CI: `.github/workflows/prod-readiness.yml` + `scripts/prod_readiness_ci.sh`
 
 
 ## [0.4.21] - 2026-06-20

@@ -1,0 +1,32 @@
+name: Prod Readiness
+
+# Plan status + GPU/cloud preflight (без staging). Blockers GPU/cloud — ожидаемы на GitHub runners.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1"
+
+jobs:
+  prod-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prod readiness (plan + preflight)
+        run: ./scripts/prod_readiness_ci.sh
+
+      - name: Prod blocker hints
+        if: always()
+        run: |
+          echo "Real prod blockers (если preflight WARN):"
+          echo "  TERMIT_REMOTE_GPU_SSH или NVIDIA GPU → learning_loop_0423.sh"
+          echo "  OPENAI_COMPAT_API_KEY → cloud benchmark"
+          echo "  TERMIT_BETA_PROD_URL → beta_prod_gate.sh (secret в beta-prod-gate.yml)"
