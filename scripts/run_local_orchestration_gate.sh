@@ -10,8 +10,10 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
 fi
 
 cd "$ROOT"
-# shellcheck disable=SC1091
-source "${ROOT}/.venv/bin/activate" 2>/dev/null || true
+if [[ -f "${ROOT}/.venv/bin/activate" ]]; then
+  # shellcheck disable=SC1091
+  source "${ROOT}/.venv/bin/activate"
+fi
 
 _fetch_orch_config() {
   TERMIT_BASE_URL="${BASE_URL}" "${PYTHON_BIN}" - <<'PY'

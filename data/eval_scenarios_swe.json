@@ -1,0 +1,62 @@
+[
+  {
+    "id": "SWE1",
+    "category": "swe_bench",
+    "title": "Fix off-by-one in pagination helper",
+    "prompt": "Fix pagination helper that returns one extra item on the last page.",
+    "runner": "tool_patch_verify",
+    "patch_path": "data/eval_fixtures/swe_pagination.py",
+    "patch_old": "    return start, end + 1",
+    "patch_new": "    return start, min(end + 1, total)",
+    "verify_command": "python3 -m py_compile data/eval_fixtures/swe_pagination.py",
+    "patch_dry_run": true
+  },
+  {
+    "id": "SWE2",
+    "category": "swe_bench",
+    "title": "Handle empty input in slugify",
+    "prompt": "Slugify must return empty string for empty input instead of raising.",
+    "runner": "tool_patch_verify",
+    "patch_path": "data/eval_fixtures/swe_slugify.py",
+    "patch_old": "    if not text:\n        raise ValueError(\"empty\")",
+    "patch_new": "    if not text:\n        return \"\"",
+    "verify_command": "python3 -m py_compile data/eval_fixtures/swe_slugify.py",
+    "patch_dry_run": true
+  },
+  {
+    "id": "SWE3",
+    "category": "swe_bench",
+    "title": "Guard division by zero",
+    "prompt": "Average helper should return 0.0 when values list is empty.",
+    "runner": "tool_patch_verify",
+    "patch_path": "data/eval_fixtures/swe_average.py",
+    "patch_old": "    return sum(values) / len(values)",
+    "patch_new": "    if not values:\n        return 0.0\n    return sum(values) / len(values)",
+    "verify_command": "python3 -m py_compile data/eval_fixtures/swe_average.py",
+    "patch_dry_run": true
+  },
+  {
+    "id": "SWE4",
+    "category": "swe_bench",
+    "title": "Normalize boolean env parsing",
+    "prompt": "Parse TERMIT_FEATURE flag case-insensitively for true/false.",
+    "runner": "tool_patch_verify",
+    "patch_path": "data/eval_fixtures/swe_env_bool.py",
+    "patch_old": "    return raw == \"true\"",
+    "patch_new": "    return raw.strip().lower() in {\"1\", \"true\", \"yes\", \"on\"}",
+    "verify_command": "python3 -m py_compile data/eval_fixtures/swe_env_bool.py",
+    "patch_dry_run": true
+  },
+  {
+    "id": "SWE5",
+    "category": "swe_bench",
+    "title": "Trim whitespace in CSV row parser",
+    "prompt": "CSV parser should strip whitespace around each cell.",
+    "runner": "tool_patch_verify",
+    "patch_path": "data/eval_fixtures/swe_csv.py",
+    "patch_old": "    return line.split(\",\")",
+    "patch_new": "    return [cell.strip() for cell in line.split(\",\")]",
+    "verify_command": "python3 -m py_compile data/eval_fixtures/swe_csv.py",
+    "patch_dry_run": true
+  }
+]

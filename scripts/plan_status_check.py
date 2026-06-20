@@ -44,7 +44,9 @@ def collect_plan_status() -> dict[str, Any]:
 
     from app.services.plan_status_service import build_plan_status_service
 
-    return build_plan_status_service().collect(external_api_ok=health is not None)
+    # Локальный collect не требует живого API (CI unittest, do_all_plan offline).
+    external_ok = True if prefer_local else health is not None
+    return build_plan_status_service().collect(external_api_ok=external_ok)
 
 
 def print_summary(payload: dict[str, Any]) -> None:

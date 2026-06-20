@@ -82,15 +82,24 @@ class PlanStatusCheckTests(unittest.TestCase):
         build_mock.return_value.collect.assert_called_once_with(external_api_ok=True)
 
     def test_script_runs(self) -> None:
+        import os
+
         python_bin = ROOT / ".venv/bin/python"
         if not python_bin.exists():
             python_bin = Path("python3")
+        env = {
+            **os.environ,
+            "TERMIT_PLAN_STATUS_LOCAL": "true",
+            "TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS": "true",
+            "TERMIT_BASE_URL": "http://127.0.0.1:59999",
+        }
         proc = subprocess.run(
             [str(python_bin), str(ROOT / "scripts/plan_status_check.py"), "--summary-only"],
             capture_output=True,
             text=True,
             check=False,
             cwd=ROOT,
+            env=env,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("Статус плана", proc.stdout)

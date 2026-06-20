@@ -11,8 +11,11 @@ fi
 OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1:11434}"
 
 cd "$ROOT"
-# shellcheck disable=SC1091
-source "${ROOT}/.venv/bin/activate" 2>/dev/null || true
+# На CI venv часто нет; `source … || true` под set -e на macOS bash всё равно падает.
+if [[ -f "${ROOT}/.venv/bin/activate" ]]; then
+  # shellcheck disable=SC1091
+  source "${ROOT}/.venv/bin/activate"
+fi
 
 echo "== macOS nightly live orchestration =="
 

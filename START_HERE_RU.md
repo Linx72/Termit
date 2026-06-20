@@ -149,6 +149,7 @@ TERMIT_AGENT_VERIFY_AFTER_PATCH=true
 | `smoke_all.sh` | Тесты + platform e2e + smoke HTTP (единый контур Фазы 0) |
 | `training_loop_week2.sh` | Export signals → job → KPI dashboard (Фаза 4) |
 | `plan_status_dev_green.sh` | Локальный `overall_ok=true` (dev KPI seeds + relax env) |
+| `release_gate_local.sh` | Extended smoke + plan dev green (перед push/release) |
 | `local_dev_kpi_seed.sh` | Beta + finetune + product KPI dev seeds |
 | `do_all_plan.sh` | Verify + train + plan status (фаза 5) |
 | `release_smoke.sh` | То же, что `smoke_all.sh` (alias) |
