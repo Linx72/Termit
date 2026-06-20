@@ -90,8 +90,25 @@ def main() -> int:
         run_activity_provider=lambda: [],
     )
     metrics = service.build_metrics()
+    meta_path = Path(os.getenv("TERMIT_BETA_COHORT_META", str(ROOT / "data" / "beta_cohort_meta.json")))
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(
+        json.dumps(
+            {
+                "dev_only": True,
+                "seeded_at": datetime.now(timezone.utc).isoformat(),
+                "actors": max(5, args.actors),
+                "retained_ratio": args.retained_ratio,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(json.dumps(metrics, indent=2, ensure_ascii=False))
     print(f"OK — добавлено {written} feedback строк в {path}")
+    print(f"OK — meta dev seed → {meta_path}")
     return 0
 
 

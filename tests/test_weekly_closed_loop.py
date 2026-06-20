@@ -75,6 +75,20 @@ class WeeklyClosedLoopScriptTests(unittest.TestCase):
         self.assertIn("get_finetune_service", script)
         self.assertIn("train_job", script)
 
+    def test_weekly_closed_loop_can_run_learning_0423(self) -> None:
+        script = (ROOT / "scripts" / "weekly_closed_loop.sh").read_text(encoding="utf-8")
+        self.assertIn("TERMIT_WEEKLY_RUN_LEARNING_0423", script)
+        self.assertIn("learning_loop_0423_ci.sh", script)
+
+    def test_weekly_full_cycle_wires_learning_loop(self) -> None:
+        script = (ROOT / "scripts" / "weekly_full_cycle.sh").read_text(encoding="utf-8")
+        self.assertIn("learning_loop_0423_ci.sh", script)
+
+    def test_do_all_verify_wires_learning_loop(self) -> None:
+        script = (ROOT / "scripts" / "do_all_verify.sh").read_text(encoding="utf-8")
+        self.assertIn("learning_loop_0423_ci.sh", script)
+        self.assertIn("test_learning_loop_0423", script)
+
     def test_bash_syntax(self) -> None:
         for name in (
             "weekly_closed_loop.sh",
@@ -92,6 +106,8 @@ class WeeklyClosedLoopScriptTests(unittest.TestCase):
             "nightly_macos_live_orchestration.sh",
             "capture_eval_kpi_baseline.sh",
             "run_strict_live_orchestration_gate.sh",
+            "learning_loop_0423.sh",
+            "learning_loop_0423_ci.sh",
         ):
             proc = subprocess.run(
                 ["bash", "-n", str(ROOT / "scripts" / name)],

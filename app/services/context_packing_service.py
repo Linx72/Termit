@@ -27,7 +27,11 @@ class ContextPackingService:
         symbol_index: SymbolIndexService | None,
         retrieval_limit: int = 5,
         path_prefix: str = "",
+        exclude_paths: set[str] | None = None,
+        include_retrieval: bool = True,
+        include_neighbors: bool = True,
     ) -> str:
+        excluded = {item.strip().replace("\\", "/") for item in (exclude_paths or set()) if item.strip()}
         sections: list[str] = []
         used_chars = 0
 
@@ -42,13 +46,17 @@ class ContextPackingService:
             sections.append(chunk)
             used_chars += len(chunk)
 
-        normalized_changed = [item.strip().replace("\\", "/") for item in changed_files if item.strip()]
+        normalized_changed = [
+            item.strip().replace("\\", "/")
+            for item in changed_files
+            if item.strip() and item.strip().replace("\\", "/") not in excluded
+        ]
         for rel_path in normalized_changed[:8]:
             excerpt = self._read_excerpt(rel_path)
             if excerpt:
                 append_section(f"Changed file: {rel_path}", excerpt)
 
-        if retrieval is not None:
+        if include_retrieval and retrieval is not None:
             hits = retrieval.search(query, limit=retrieval_limit, path_prefix=path_prefix)
             if hits:
                 append_section(
@@ -58,9 +66,11 @@ class ContextPackingService:
                     ),
                 )
 
-        if symbol_index is not None and normalized_changed:
+        if include_neighbors and symbol_index is not None and normalized_changed:
             neighbors = symbol_index.neighbor_paths(normalized_changed, limit=6)
             for rel_path in neighbors:
+                if rel_path in excluded:
+                    continue
                 excerpt = self._read_excerpt(rel_path, max_chars=1200)
                 if excerpt:
                     append_section(f"Related file: {rel_path}", excerpt)
@@ -68,6 +78,37 @@ class ContextPackingService:
         if not sections:
             return ""
         return "[Context packing]\n" + "\n".join(sections).strip()
+
+    def pack_incremental(
+        self,
+        *,
+        query: str,
+        changed_files: list[str],
+        seen_paths: set[str],
+        retrieval: CodeRetrievalService | None,
+        symbol_index: SymbolIndexService | None,
+        retrieval_limit: int = 5,
+        path_prefix: str = "",
+        include_retrieval: bool = False,
+    ) -> tuple[str, set[str]]:
+        """Delta packing: только новые файлы; retrieval по умолчанию один раз на run."""
+        packed = self.pack(
+            query=query,
+            changed_files=changed_files,
+            retrieval=retrieval,
+            symbol_index=symbol_index,
+            retrieval_limit=retrieval_limit,
+            path_prefix=path_prefix,
+            exclude_paths=seen_paths,
+            include_retrieval=include_retrieval,
+            include_neighbors=True,
+        )
+        updated_seen = set(seen_paths)
+        for rel_path in changed_files:
+            normalized = rel_path.strip().replace("\\", "/")
+            if normalized:
+                updated_seen.add(normalized)
+        return packed, updated_seen
 
     def _read_excerpt(self, rel_path: str, max_chars: int | None = None) -> str:
         limit = max_chars or self.max_file_chars

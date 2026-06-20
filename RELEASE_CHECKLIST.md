@@ -2,7 +2,10 @@
 
 ## 1) Pre-release quality
 
-- Run tests: `python -m unittest discover -s tests -v`
+- **Единый gate (рекомендуется):** `./scripts/pre_release_check.sh`
+  - Local: `release_gate_local.sh` + plan dev green
+  - Staging (auto если `:8080` up): `release_gate_staging.sh`
+- Run tests: `python -m unittest discover -s tests -q` (689+ tests)
 - Verify API health: `GET /health`
 - Verify providers status: `GET /api/providers/status`
 - Verify session export formats:
@@ -57,6 +60,8 @@
   - Nightly extended smoke (CI): pass-rate gate only (`TERMIT_EVAL_MIN_PASS_RATE=0.95`) in `.github/workflows/ci.yml` (`Extended release smoke`); cloud judge coverage is not required on GitHub runners.
 
 - Release smoke profiles:
+  - Pre-release bundle: `./scripts/pre_release_check.sh`
+  - Staging gate: `./scripts/release_gate_staging.sh` (CI: `.github/workflows/release-gate-staging.yml`)
   - Deterministic core (default): `./scripts/release_smoke_core.sh`
   - Extended suite (nightly/integration): `./scripts/release_smoke_extended.sh`
   - Dedicated nightly workflow: `.github/workflows/nightly-extended-smoke.yml`

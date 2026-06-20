@@ -213,6 +213,13 @@ if [[ "${TERMIT_DO_ALL_SKIP_HOSTED:-false}" != "true" ]]; then
       TERMIT_HOSTED_BASE_URL="${BASE_HOSTED}" \
         "${ROOT}/scripts/hosted_smoke.sh" \
         || echo "WARN: hosted smoke failed (non-blocking)."
+      if [[ "${TERMIT_DO_ALL_RELEASE_STAGING:-false}" == "true" ]]; then
+        echo ""
+        echo "== 8b/8 Release gate staging =="
+        TERMIT_HOSTED_BASE_URL="${BASE_HOSTED}" \
+          "${ROOT}/scripts/release_gate_staging.sh" \
+          || echo "WARN: release_gate_staging failed (non-blocking)."
+      fi
     fi
   fi
 fi
@@ -256,6 +263,9 @@ echo "  Finetune KPI dev:  TERMIT_FINETUNE_KPI_DEV_SEED=true scripts/seed_finetu
 echo "  Local KPI bundle:  ./scripts/local_dev_kpi_seed.sh"
 echo "  Plan dev green:    ./scripts/plan_status_dev_green.sh"
 echo "  Release gate:      ./scripts/release_gate_local.sh"
+echo "  Pre-release:       ./scripts/pre_release_check.sh"
+echo "  Staging gate:      ./scripts/release_gate_staging.sh"
+echo "  Do-all staging:    TERMIT_DO_ALL_RELEASE_STAGING=true ./scripts/do_all_automatic.sh"
 echo "  Do-all dev green:  TERMIT_DO_ALL_DEV_GREEN=true ./scripts/do_all_automatic.sh"
 echo "  DPO contract:    scripts/do_all_dpo_contract.sh"
 echo "  macOS live orch: scripts/nightly_macos_live_orchestration.sh"

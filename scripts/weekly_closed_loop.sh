@@ -47,6 +47,14 @@ if curl -sf --max-time 5 "${BASE_URL}/health" >/dev/null 2>&1; then
       "${ROOT}/scripts/cloud_benchmark_cycle.sh"
   fi
 
+  if [[ "${TERMIT_WEEKLY_RUN_LEARNING_0423:-false}" == "true" ]]; then
+    echo ""
+    echo "== 3c/4 Learning loop 0.4.23 =="
+    TERMIT_FINETUNE_OUTPUT_MODEL="${TERMIT_FINETUNE_OUTPUT_MODEL:-termit-core-ft}" \
+      "${ROOT}/scripts/learning_loop_0423_ci.sh" \
+      || echo "WARN: learning loop 0.4.23 failed (non-blocking)."
+  fi
+
   echo ""
   echo "== 4/4 Orchestration eval slice =="
   ORCH_GATE_TIER="${TERMIT_ORCH_GATE_TIER:-}"

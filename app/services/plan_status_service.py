@@ -20,7 +20,13 @@ _CLOUD_HINTS_RU: dict[str, str] = {
     "ok": "Cloud benchmark готов к запуску.",
 }
 
-_RELAX_ENV_WARNING_IDS = frozenset({"no_gpu", "cloud_benchmark"})
+_RELAX_ENV_WARNING_IDS = frozenset({
+    "no_gpu",
+    "cloud_benchmark",
+    "finetune_kpi_dev_seed",
+    "beta_cohort_dev_seed",
+    "dpo_dry_run",
+})
 
 
 def _relax_env_warnings_enabled() -> bool:
@@ -70,6 +76,8 @@ class PlanStatusService:
         beta = self._load_beta_metrics()
         automation = self._load_automation()
         finetune_kpi = self._load_finetune_kpi()
+        learning_loop = self._load_learning_loop_0423()
+        beta_meta = self._load_beta_cohort_meta()
         gpu = self._gpu_probe()
         cloud = self._cloud_probe()
 
@@ -100,20 +108,43 @@ class PlanStatusService:
             )
             warnings.append({"id": "cloud_benchmark", "message": hint})
 
-        if finetune_kpi is not None and not finetune_kpi.get("kpi_passed"):
+        if finetune_kpi is not None and finetune_kpi.get("dev_only"):
             warnings.append(
                 {
-                    "id": "finetune_kpi",
-                    "message": str(
-                        finetune_kpi.get("reason") or "Finetune eval KPI не достигнут (цель +5%)."
-                    ),
+                    "id": "finetune_kpi_dev_seed",
+                    "message": "eval_kpi_last.json — dev seed; запустите learning_loop_0423.sh для real KPI.",
                 }
             )
+        elif finetune_kpi is not None and not finetune_kpi.get("kpi_passed"):
+            measurable = True
+            if isinstance(learning_loop, dict) and learning_loop.get("kpi_measurable") is False:
+                measurable = False
+            if measurable:
+                warnings.append(
+                    {
+                        "id": "finetune_kpi",
+                        "message": str(
+                            finetune_kpi.get("reason")
+                            or "Finetune eval KPI не достигнут (цель +5%)."
+                        ),
+                    }
+                )
         elif finetune_kpi is None:
             warnings.append(
                 {
                     "id": "finetune_kpi",
                     "message": "Нет eval_kpi_last.json — запустите training_loop_full.sh.",
+                }
+            )
+
+        if learning_loop is not None and not learning_loop.get("dpo_real_train"):
+            warnings.append(
+                {
+                    "id": "dpo_dry_run",
+                    "message": (
+                        "Learning loop 0.4.23 без real GPU DPO "
+                        "(TERMIT_REMOTE_GPU_SSH или локальный NVIDIA)."
+                    ),
                 }
             )
 
@@ -135,7 +166,15 @@ class PlanStatusService:
             )
 
         cohort_d30 = int(beta.get("cohort_size_d30", 0) or 0) if isinstance(beta, dict) else 0
-        if cohort_d30 < 5:
+        beta_dev_seed = bool(beta_meta.get("dev_only")) if isinstance(beta_meta, dict) else False
+        if beta_dev_seed:
+            warnings.append(
+                {
+                    "id": "beta_cohort_dev_seed",
+                    "message": "Beta cohort из dev seed; нужна real telemetry на staging.",
+                }
+            )
+        elif cohort_d30 < 5:
             warnings.append(
                 {
                     "id": "beta_cohort",
@@ -173,6 +212,7 @@ class PlanStatusService:
             "gpu": gpu,
             "cloud_benchmark": cloud,
             "finetune_eval_kpi": finetune_kpi,
+            "learning_loop_0423": learning_loop,
             "desktop_kpi_gates": kpi_gates,
             "beta_metrics": beta,
             "d30_retention": beta.get("d30_retention_rate") if isinstance(beta, dict) else None,
@@ -214,6 +254,26 @@ class PlanStatusService:
 
     def _load_finetune_kpi(self) -> dict[str, Any] | None:
         path = self._root / "data" / "eval_kpi_last.json"
+        if not path.is_file():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return payload if isinstance(payload, dict) else None
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    def _load_learning_loop_0423(self) -> dict[str, Any] | None:
+        path = self._root / "data" / "learning_loop_0423_last.json"
+        if not path.is_file():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return payload if isinstance(payload, dict) else None
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    def _load_beta_cohort_meta(self) -> dict[str, Any] | None:
+        path = self._root / "data" / "beta_cohort_meta.json"
         if not path.is_file():
             return None
         try:

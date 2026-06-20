@@ -11,7 +11,7 @@ function stableVariant(deviceId: string): OnboardingVariant {
   return hash % 2 === 0 ? "A" : "B";
 }
 
-function getOrCreateDeviceId(): string {
+export function getOrCreateDeviceId(): string {
   try {
     const existing = localStorage.getItem(DEVICE_ID_KEY);
     if (existing && existing.trim()) {

@@ -65,6 +65,14 @@ if curl -sf --max-time 10 "${BASE_URL}/api/ops/plan-status" >/dev/null 2>&1; the
 fi
 
 echo ""
+echo "== 5/5 Beta staging gate (probe, gate_mode=${TERMIT_BETA_GATE_MODE:-real}) =="
+TERMIT_HOSTED_BASE_URL="${BASE_URL}" \
+TERMIT_BETA_GATE_MODE="${TERMIT_BETA_GATE_MODE:-real}" \
+TERMIT_BETA_STAGING_STRICT=false \
+  "${ROOT}/scripts/beta_staging_gate.sh" \
+  || echo "WARN: beta staging gate not green (expected until real cohort ≥5)."
+
+echo ""
 echo "OK — hosted beta готов: ${BASE_URL}"
 echo "  Smoke с auth: TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.sh"
 echo "  Prod overlay: TERMIT_COMPOSE_FILES='docker-compose.yml -f docker-compose.prod.yml' ./scripts/deploy_hosted_beta.sh"

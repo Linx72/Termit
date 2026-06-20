@@ -63,6 +63,11 @@ def main() -> int:
     parser.add_argument("--min-chosen-chars", type=int, default=12)
     parser.add_argument("--train", action="store_true", help="Run hf_dpo dry-run train after export")
     parser.add_argument("--base-model", default="")
+    parser.add_argument(
+        "--train-result",
+        default="",
+        help="Путь для JSON-результата train (последний блок вывода)",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -120,7 +125,10 @@ def main() -> int:
             base_model=base_model,
             trainer_mode="hf_dpo",
         )
-        print(json.dumps(train_result, indent=2, ensure_ascii=False))
+        train_text = json.dumps(train_result, indent=2, ensure_ascii=False)
+        print(train_text)
+        if args.train_result.strip():
+            Path(args.train_result.strip()).write_text(train_text + "\n", encoding="utf-8")
 
     return 0
 

@@ -1,17 +1,13 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-20T07:32:25Z
-
-**Причина:** session stop
-
-**Последний checkpoint:** [`20260620-073225_c9653b0d-c553-4202-b36f-.md`](checkpoints/20260620-073225_c9653b0d-c553-4202-b36f-.md)
+**Последнее обновление:** 2026-06-20 (ось B harness)
 
 ## Сводка
-- Продолжил — закрыл релиз **0.4.21** и финальные проверки. ## Что сделано 1. **`VERSION` → 0.4.21** — API после restart: `health` показывает `0.4.21`. 2. **`CHANGELOG.md`** — секция 0.4.21 (dev KPI seeds, reload API, relax env, smoke, client). 3. **`PROJECT_TASK_PROMPT_RU.md`** —…
-
-## Файлы сессии
-- `/Users/amoros/Projects/Termit/VERSION`
-- `/Users/amoros/Projects/Termit/PROJECT_TASK_PROMPT_RU.md`
+- **Ось A:** vLLM provider (`vllm:` prefix), docker-compose.vllm.yml, phase B ladder scripts.
+- **Ось B (полная):** lazy tools, cohesion partition, describe_tools API.
+- Док: `docs/MODEL_LADDER_RU.md` — фаза A (Ollama) + фаза B (vLLM hybrid).
 
 ## Открытые задачи
-- [ ] Заполните вручную или через compact-chat после крупной сессии
+- [ ] Real GPU DPO + cloud key (0.4.23)
+- [ ] Prod beta D30 ≥35% без dev seed
+- [x] pre_release_check + release-gate-staging CI + do_all_automatic staging opt-in

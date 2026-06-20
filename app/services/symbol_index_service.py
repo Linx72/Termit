@@ -167,6 +167,37 @@ class SymbolIndexService:
                 lines.append(f"  - {edge.callee_name} @ {edge.path}:{edge.line}")
         return "\n".join(lines)
 
+    def file_adjacency(self) -> dict[str, set[str]]:
+        """Undirected adjacency между файлами (calls + imports) для cohesion partition."""
+        from collections import defaultdict
+
+        if not self._imports_by_file and not self._call_edges:
+            self.reindex()
+        with self._lock:
+            call_edges = list(self._call_edges)
+            imports_map = dict(self._imports_by_file)
+        module_to_paths = self._module_path_index()
+        adjacency: dict[str, set[str]] = defaultdict(set)
+
+        for edge in call_edges:
+            caller_path = edge.caller_path.replace("\\", "/")
+            callee_path = edge.path.replace("\\", "/")
+            if not caller_path or not callee_path or caller_path == callee_path:
+                continue
+            adjacency[caller_path].add(callee_path)
+            adjacency[callee_path].add(caller_path)
+
+        for path, imports in imports_map.items():
+            normalized = path.replace("\\", "/")
+            for imported in imports:
+                for target in module_to_paths.get(imported, []):
+                    target_norm = target.replace("\\", "/")
+                    if target_norm and target_norm != normalized:
+                        adjacency[normalized].add(target_norm)
+                        adjacency[target_norm].add(normalized)
+
+        return {key: set(value) for key, value in adjacency.items()}
+
     def _module_path_index(self) -> dict[str, list[str]]:
         mapping: dict[str, list[str]] = {}
         for file_path in self._iter_files():

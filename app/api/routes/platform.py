@@ -33,6 +33,8 @@ from app.domain.schemas import (
     PlatformSearchHitResponse,
     PlatformSearchRequest,
     PlatformSearchResponse,
+    PlatformToolDescribeRequest,
+    PlatformToolDescribeResponse,
     SkillDetailResponse,
     SkillListResponse,
     SkillSelectRequest,
@@ -493,4 +495,22 @@ async def search_web(
             PlatformSearchHitResponse(title=hit.title, url=hit.url, snippet=hit.snippet)
             for hit in result.hits
         ],
+    )
+
+
+@router.post("/tools/describe", response_model=PlatformToolDescribeResponse)
+async def describe_tools(payload: PlatformToolDescribeRequest) -> PlatformToolDescribeResponse:
+    """Tool search (ось B): вернуть JSON schemas для запрошенных tools."""
+    from app.services.agent_tool_schema import TOOL_DEFINITIONS, build_openai_tools, build_tool_schema_response
+
+    known = [name.strip() for name in payload.tool_names if name.strip() in TOOL_DEFINITIONS]
+    unique = list(dict.fromkeys(known))
+    raw = build_tool_schema_response(unique)
+    import json
+
+    parsed = json.loads(raw)
+    return PlatformToolDescribeResponse(
+        loaded_tools=list(parsed.get("loaded_tools", unique)),
+        schemas=list(parsed.get("schemas", build_openai_tools(unique))),
+        hint=str(parsed.get("hint", "")),
     )

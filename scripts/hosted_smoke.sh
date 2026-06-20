@@ -100,6 +100,7 @@ expect_code /api/desktop/onboarding-metrics 200
 expect_code /api/desktop/mcp-metrics 200
 expect_code /api/ops/beta-metrics 200
 expect_code /api/ops/plan-status 200
+expect_post_json /api/ops/beta/activity 200 '{"session_id":"hosted-smoke-session","source":"hosted_smoke"}'
 expect_post_json /api/ops/reload-dev-metrics-seed 200 '{}'
 expect_code /api/platform/mcp/servers 200
 expect_post_json /api/orchestration/build-from-plan 200 '{"plan_text":"1. Smoke step"}'

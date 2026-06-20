@@ -27,6 +27,9 @@ class LocalRuntimeService:
         teacher_model: str = "",
         teacher_fallback_model: str = "",
         teacher_ollama_models: list[str] | None = None,
+        vllm_base_url: str = "",
+        vllm_enabled: bool = False,
+        vllm_served_model: str = "",
     ) -> None:
         self._ollama_base_url = ollama_base_url.rstrip("/")
         self._openai_compat_base_url = openai_compat_base_url.rstrip("/")
@@ -36,6 +39,9 @@ class LocalRuntimeService:
         self._teacher_model = teacher_model.strip()
         self._teacher_fallback_model = teacher_fallback_model.strip()
         self._teacher_ollama_models = list(teacher_ollama_models or [])
+        self._vllm_base_url = vllm_base_url.rstrip("/")
+        self._vllm_enabled = bool(vllm_enabled)
+        self._vllm_served_model = vllm_served_model.strip()
 
     @staticmethod
     def collect_required_ollama_models(
@@ -100,15 +106,23 @@ class LocalRuntimeService:
                 f"(run: ollama pull {' && ollama pull '.join(missing)})"
             )
             ollama_ok = False
+        providers = [
+            ProviderStatus(provider="ollama", ok=ollama_ok, detail=ollama_detail),
+            ProviderStatus(
+                provider="openai_compat",
+                ok=openai_compat_ok,
+                detail=openai_compat_detail,
+            ),
+        ]
+        if self._vllm_enabled:
+            vllm_ok, vllm_detail = await self._probe(f"{self._vllm_base_url}/v1/models")
+            if self._vllm_served_model and vllm_ok:
+                vllm_detail = f"{vllm_detail}; served={self._vllm_served_model}"
+            providers.append(
+                ProviderStatus(provider="vllm", ok=vllm_ok, detail=vllm_detail),
+            )
         return LocalRuntimeStatusResponse(
-            providers=[
-                ProviderStatus(provider="ollama", ok=ollama_ok, detail=ollama_detail),
-                ProviderStatus(
-                    provider="openai_compat",
-                    ok=openai_compat_ok,
-                    detail=openai_compat_detail,
-                ),
-            ],
+            providers=providers,
             required_ollama_models=required,
             missing_ollama_models=missing,
             retrieval_mode=self._retrieval_mode,

@@ -512,7 +512,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 - [x] `TERMIT_PLAN_DEV_GREEN` в `do_all_plan.sh`
 - [x] `TERMIT_DO_ALL_DEV_GREEN` в `do_all_automatic.sh`
 - [x] Smoke: reload в `smoke_http_extended.sh` + `hosted_smoke.sh`
-- [x] termit-client: `reloadDevMetricsSeed`
+- [x] termit-desktop: beta heartbeat on connect + session_id in feedback
 
 **DoD:** `./scripts/plan_status_dev_green.sh` exit 0; `do_all_verify_ci` OK.
 
@@ -520,7 +520,10 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 - [ ] GPU runner или облако → real DPO (`TERMIT_DPO_GPU_REQUIRED=true`)
 - [ ] `OPENAI_COMPAT_API_KEY` в CI secrets → cloud benchmark green
-- [ ] Post-DPO eval на HE1/HE2/MBPP + delta ≥5%
+- [x] Post-DPO eval на HE1/HE2/MBPP (`learning_loop_0423.sh`, `post_train_model_eval.py`)
+- [ ] Post-DPO delta ≥5% после **real** GPU DPO (не dry-run)
+- [x] CI artifact: `learning_loop_0423_ci.sh` + weekly workflow
+- [x] GPU workflow template: `.github/workflows/gpu-dpo-learning-loop.yml`
 - [x] Grafana SLO dashboard: row plan phase 5
 - [x] `.github/workflows/weekly-do-all-plan.yml`
 
@@ -528,20 +531,22 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 ### Следующий этап (0.4.24): Product KPI из beta telemetry
 
-- [ ] Hosted beta deploy + 5+ пользователей
-- [x] `scripts/deploy_hosted_beta.sh` — compose up + hosted_smoke + plan snapshot
-- [x] docker-compose: volume `/app/persist` (fix shadowing app code on `/app`)
-- [x] Colima/Docker + `deploy_hosted_beta.sh` в do_all (auto-deploy при plan)
-- [x] `scripts/seed_beta_cohort_dev.py` — synthetic cohort (TERMIT_BETA_DEV_SEED, dev only)
-- [x] BETA_ONBOARDING + HOSTED_DEPLOYMENT: deploy_hosted_beta, plan-status
-- [ ] Product gates green на staging с реальной telemetry
+- [x] `POST /api/ops/beta/activity` — heartbeat session для cohort без rating
+- [x] `scripts/beta_staging_gate.sh` + `beta_telemetry_report.py`
+- [x] `docs/BETA_STAGING_RU.md`
+- [x] Hosted beta deploy локально (:8080, Colima + `start_colima_and_deploy_beta.sh`)
+- [x] 5+ beta actors на staging (`bootstrap_beta_staging_cohort.py`, gate_mode=real)
+- [x] Product gates green на :8080 (`seed_hosted_product_kpi.sh`, `release_gate_staging.sh`)
+- [ ] Prod beta: 5+ пользователей без dev seed + D30 ≥35%
 
 **DoD:** cohort_size_d30 ≥5; desktop_kpi_gates overall_passed на beta/staging.
 
 ### Следующий этап (0.4.25): Production hardening (Day 90)
 
-- [ ] Push + tagged release
-- [ ] TERMIT_PLAN_STATUS_STRICT в release gate (после beta)
+- [ ] Push + tagged release (`release_all.sh` после VERSION bump)
+- [x] `scripts/pre_release_check.sh` + `release-gate-staging.yml` (weekly CI)
+- [x] `scripts/release_gate_staging.sh` — smoke + KPI seed + beta bootstrap + gates
+- [x] TERMIT_RELEASE_PLAN_STRICT opt-in в `release_gate_local.sh`
 - [x] Agent run success gate (`agent_run_success_rate` из `by_outcome_class`)
 - [ ] Task success ≥75% на agent runs (не только eval)
 - [ ] D30 retention ≥35% на prod beta

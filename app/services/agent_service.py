@@ -66,7 +66,14 @@ from app.services.tooling_service import ToolingService
 from app.services.trace_span_store import TraceSpanStore
 from app.services.training_signal_store import TrainingSignalStore, normalize_capture_instruction
 from app.services.patch_outcome_store import PatchOutcomeStore
-from app.services.agent_tool_schema import build_openai_tools
+from app.services.agent_tool_schema import (
+    build_openai_tools,
+    build_tool_schema_response,
+    deferred_tool_catalog,
+    expand_tools_after_use,
+    resolve_described_tools,
+    select_initial_tool_names,
+)
 from app.services.loop_step_budget import resolve_loop_step_budget
 from app.services.repo_profile_resolver import infer_repo_profile_id
 from app.services.verify_command_resolver import resolve_verify_command
@@ -174,6 +181,8 @@ class AgentService:
         reasoning_orchestrator: Optional[object] = None,
         tool_loop_metrics_recent_days: int = 7,
         tool_loop_metrics_recent_run_window: int = 5,
+        lazy_tool_schemas_enabled: bool = True,
+        cache_aware_routing_enabled: bool = True,
     ) -> None:
         self._chat_service = chat_service
         self._registry = registry
@@ -214,6 +223,8 @@ class AgentService:
         self._reasoning_orchestrator = reasoning_orchestrator
         self._tool_loop_metrics_recent_days = max(0, tool_loop_metrics_recent_days)
         self._tool_loop_metrics_recent_run_window = max(0, tool_loop_metrics_recent_run_window)
+        self._lazy_tool_schemas_enabled = lazy_tool_schemas_enabled
+        self._cache_aware_routing_enabled = cache_aware_routing_enabled
         self._ssh = SshWorkspaceService(tooling)
         self._notifier = AgentRunNotifier.get()
         self._queue_capacity = max(1, max_queue_size)
@@ -1046,7 +1057,6 @@ class AgentService:
                         attempt=attempt,
                     )
 
-        tools_schema = build_openai_tools(list(profile.enabled_tools))
         run_verify_after_patch = (
             payload.verify_after_patch
             if payload.verify_after_patch is not None
@@ -1062,6 +1072,28 @@ class AgentService:
             if payload.auto_confirm_risky_tools is not None
             else self._auto_confirm_risky_tools
         )
+        enabled_tools = list(profile_for_loop.enabled_tools or [])
+        if self._lazy_tool_schemas_enabled and "describe_tools" not in enabled_tools:
+            enabled_tools.append("describe_tools")
+            profile_for_loop = profile_for_loop.model_copy(update={"enabled_tools": enabled_tools})
+        if self._lazy_tool_schemas_enabled:
+            active_tool_names = set(
+                select_initial_tool_names(
+                    enabled_tools,
+                    payload.input,
+                    run_mode=run_mode,
+                    verify_after_patch=run_verify_after_patch,
+                )
+            )
+            lazy_catalog = deferred_tool_catalog(enabled_tools, active_tool_names)
+            if lazy_catalog:
+                profile_for_loop = profile_for_loop.model_copy(
+                    update={"system_prompt": f"{profile_for_loop.system_prompt}{lazy_catalog}"}
+                )
+            tools_schema = build_openai_tools(sorted(active_tool_names))
+        else:
+            active_tool_names = set(enabled_tools)
+            tools_schema = build_openai_tools(enabled_tools)
         configured_verify = self._verify_cmd if run_verify_after_patch else ""
         verify_cmd = (
             resolve_verify_command(str(self._tooling.root), configured_verify)
@@ -1131,8 +1163,9 @@ class AgentService:
 
         async def native_chat_fn(request: ChatRequest):
             started = time.perf_counter()
+            schema = build_openai_tools(sorted(active_tool_names))
             try:
-                result = await self._chat_service.chat_with_tools(request, tools_schema)
+                result = await self._chat_service.chat_with_tools(request, schema)
             except Exception as exc:
                 if self._trace_spans is not None and run_id:
                     self._trace_spans.record(
@@ -1157,8 +1190,8 @@ class AgentService:
             started = time.perf_counter()
             try:
                 observation, side_effects = self._invoke_loop_tool(
-                    profile.agent_id,
-                    profile,
+                    profile_for_loop.agent_id,
+                    profile_for_loop,
                     tool_name,
                     arguments,
                     run_id=run_id,
@@ -1224,6 +1257,20 @@ class AgentService:
                                     ),
                                     attempt=attempt,
                                 )
+            if self._lazy_tool_schemas_enabled:
+                if tool_name == "describe_tools":
+                    active_tool_names.update(
+                        expand_tools_after_use(
+                            tool_name,
+                            enabled_tools,
+                            active_tool_names,
+                            describe_request=resolve_described_tools(arguments, enabled_tools),
+                        )
+                    )
+                else:
+                    active_tool_names.update(
+                        expand_tools_after_use(tool_name, enabled_tools, active_tool_names)
+                    )
             return observation
 
         def on_step(step) -> None:  # type: ignore[no-untyped-def]
@@ -1402,6 +1449,9 @@ class AgentService:
         self._ensure_tool_allowed(agent_id, tool_name)
         if auto_confirm_risky_tools and tool_name in _RISKY_LOOP_TOOLS:
             arguments = {**arguments, "confirmed": True}
+        if tool_name == "describe_tools":
+            names = resolve_described_tools(arguments, list(profile.enabled_tools or []))
+            return build_tool_schema_response(names), side_effects
         if tool_name in {
             "web_automation",
             "web_search",

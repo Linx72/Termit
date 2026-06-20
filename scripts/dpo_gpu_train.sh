@@ -32,7 +32,10 @@ else
   echo "No GPU — dry-run train only (set TERMIT_DPO_GPU_REQUIRED=true to fail hard)"
 fi
 
+RESULT_JSON="${TERMIT_DPO_TRAIN_RESULT_JSON:-/tmp/termit_dpo_train_result.json}"
+
 exec "${PYTHON_BIN}" "${ROOT}/scripts/finetune_dpo_pipeline.py" \
   --name "${NAME}" \
   --min-pairs "${TERMIT_DPO_MIN_PAIRS:-1}" \
-  --train
+  --train \
+  --train-result "${RESULT_JSON}"

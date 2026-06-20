@@ -1,0 +1,42 @@
+name: Release Gate Staging
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 0"
+
+jobs:
+  staging-gate:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Start Colima
+        run: |
+          if command -v colima >/dev/null 2>&1; then
+            colima start || true
+          fi
+
+      - name: Deploy hosted beta
+        run: ./scripts/start_colima_and_deploy_beta.sh
+
+      - name: Release gate staging
+        run: ./scripts/release_gate_staging.sh
+
+      - name: Upload staging artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-staging
+          path: |
+            data/beta_staging_gate_last.json
+            data/plan_status_staging.json
+          if-no-files-found: ignore

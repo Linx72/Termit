@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.domain.schemas import AgentProfileResponse, AgentRunRequest, ChatMessage, ChatRequest
+from app.services.agent_prompt_cache_service import AgentPromptCacheService
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.context_packing_service import ContextPackingService
 from app.services.cursor_rules_importer import CursorRulesImporter
@@ -25,6 +26,8 @@ class ContextEnrichmentService:
         cursor_rules: CursorRulesImporter | None = None,
         repo_map_enabled: bool = True,
         context_packing_enabled: bool = True,
+        context_packing_incremental: bool = True,
+        prompt_cache: AgentPromptCacheService | None = None,
     ) -> None:
         self._repo_map = repo_map
         self._context_packing = context_packing
@@ -35,6 +38,10 @@ class ContextEnrichmentService:
         self._cursor_rules = cursor_rules or CursorRulesImporter()
         self._repo_map_enabled = repo_map_enabled
         self._context_packing_enabled = context_packing_enabled
+        self._context_packing_incremental = context_packing_incremental
+        self._prompt_cache = prompt_cache
+        self._packing_seen_paths: set[str] = set()
+        self._packing_query: str = ""
 
     @staticmethod
     def _infer_symbol_query(message: str) -> str | None:
@@ -124,14 +131,44 @@ class ContextEnrichmentService:
                         messages.append(ChatMessage(role="system", content=graph))
 
         if payload.use_context_packing and self._context_packing_enabled and self._context_packing is not None:
-            packed = self._context_packing.pack(
-                query=payload.message,
-                changed_files=list(payload.changed_files),
-                retrieval=self._retrieval if payload.use_retrieval else None,
-                symbol_index=self._symbol_index,
-                retrieval_limit=payload.retrieval_limit,
-                path_prefix=prefix,
-            )
+            if (
+                self._context_packing_incremental
+                and self._packing_query
+                and payload.message != self._packing_query
+            ):
+                packed, seen = self._context_packing.pack_incremental(
+                    query=payload.message,
+                    changed_files=list(payload.changed_files),
+                    seen_paths=self._packing_seen_paths,
+                    retrieval=self._retrieval if payload.use_retrieval else None,
+                    symbol_index=self._symbol_index,
+                    retrieval_limit=payload.retrieval_limit,
+                    path_prefix=prefix,
+                    include_retrieval=False,
+                )
+                self._packing_seen_paths = seen
+            elif self._context_packing_incremental and not self._packing_query:
+                packed, seen = self._context_packing.pack_incremental(
+                    query=payload.message,
+                    changed_files=list(payload.changed_files),
+                    seen_paths=self._packing_seen_paths,
+                    retrieval=self._retrieval if payload.use_retrieval else None,
+                    symbol_index=self._symbol_index,
+                    retrieval_limit=payload.retrieval_limit,
+                    path_prefix=prefix,
+                    include_retrieval=True,
+                )
+                self._packing_query = payload.message
+                self._packing_seen_paths = seen
+            else:
+                packed = self._context_packing.pack(
+                    query=payload.message,
+                    changed_files=list(payload.changed_files),
+                    retrieval=self._retrieval if payload.use_retrieval else None,
+                    symbol_index=self._symbol_index,
+                    retrieval_limit=payload.retrieval_limit,
+                    path_prefix=prefix,
+                )
             if packed:
                 messages.append(ChatMessage(role="system", content=packed))
         elif payload.use_retrieval and self._retrieval is not None:
@@ -154,7 +191,21 @@ class ContextEnrichmentService:
         self,
         payload: AgentRunRequest,
         profile: AgentProfileResponse,
+        *,
+        use_prompt_cache: bool = True,
     ) -> list[str]:
+        cache_key = ""
+        if use_prompt_cache and self._prompt_cache is not None:
+            cache_key = AgentPromptCacheService.enrichment_key(
+                agent_id=profile.agent_id,
+                path_prefix=payload.retrieval_path_prefix or profile.retrieval_path_prefix or "",
+                instruction=payload.input,
+                changed_files=list(payload.changed_files),
+            )
+            cached = self._prompt_cache.get(cache_key)
+            if cached is not None:
+                return list(cached)
+
         use_retrieval = (
             profile.use_retrieval if payload.use_retrieval is None else payload.use_retrieval
         )
@@ -170,7 +221,10 @@ class ContextEnrichmentService:
             project_id=payload.project_id,
             symbol_query=payload.input if "@" in payload.input else self._infer_symbol_query(payload.input),
         )
-        return [message.content for message in self.build_system_messages(chat_payload, include_skills=False)]
+        lines = [message.content for message in self.build_system_messages(chat_payload, include_skills=False)]
+        if use_prompt_cache and self._prompt_cache is not None and cache_key:
+            self._prompt_cache.put(cache_key, lines)
+        return lines
 
     def list_project_skill_ids(self, project_id: str | None) -> list[str]:
         if not project_id or self._rules_store is None:

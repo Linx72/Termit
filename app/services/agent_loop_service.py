@@ -23,13 +23,16 @@ from app.services.tool_json_parser import ToolJsonParseError, parse_loop_action
 
 
 def _model_supports_native_tool_calls(model: str) -> bool:
-    """OpenAI-compat cloud + Ollama chat API with tools (qwen2.5-coder, etc.)."""
-    return model.startswith("openai_compat:") or model.startswith("ollama:")
+    """OpenAI-compat cloud + Ollama + vLLM chat API с tools."""
+    return model.startswith("openai_compat:") or model.startswith("ollama:") or model.startswith("vllm:")
 
 
 _LOOP_TOOL_EXAMPLES: dict[str, str] = {
     "list_files": '{"action":"tool","tool":"list_files","arguments":{"path":".","pattern":"*.py"}}',
     "read_file": '{"action":"tool","tool":"read_file","arguments":{"path":"app","file":"main.py"}}',
+    "describe_tools": (
+        '{"action":"tool","tool":"describe_tools","arguments":{"tool_names":["apply_patch","execute_command"]}}'
+    ),
     "execute_command": (
         '{"action":"tool","tool":"execute_command","arguments":{"command":"python3 -m unittest -q",'
         '"path":".","confirmed":true}}'
@@ -644,13 +647,19 @@ class AgentLoopService:
                 if step == 1 and start_step == 1
                 else "Continue with the next tool step or final answer."
             )
+            is_continuation = not (step == 1 and start_step == 1)
             chat_request = ChatRequest(
                 message=continuation,
                 task_type=profile.task_type,
                 model=active_model,
                 session_id=payload.session_id,
                 use_memory=False,
-                use_retrieval=profile.use_retrieval if payload.use_retrieval is None else payload.use_retrieval,
+                use_retrieval=False,
+                use_repo_map=False,
+                use_context_packing=False,
+                skip_context_enrichment=True,
+                pin_model=True,
+                skip_dual_pass=is_continuation,
                 retrieval_limit=payload.retrieval_limit
                 if payload.retrieval_limit is not None
                 else profile.retrieval_limit,

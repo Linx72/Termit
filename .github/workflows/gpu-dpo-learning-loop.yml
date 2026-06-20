@@ -1,0 +1,76 @@
+name: GPU DPO Learning Loop
+
+# Real HF DPO + post-eval + KPI — требует self-hosted runner с NVIDIA GPU.
+on:
+  workflow_dispatch:
+    inputs:
+      dpo_gpu_required:
+        description: "Fail if no GPU (TERMIT_DPO_GPU_REQUIRED)"
+        type: boolean
+        default: true
+      remote_gpu_ssh:
+        description: "Optional SSH target (user@host) instead of local GPU"
+        type: string
+        default: ""
+      finetune_kpi_strict:
+        description: "Strict +5% KPI gate after real train"
+        type: boolean
+        default: true
+
+jobs:
+  gpu-learning-loop:
+    runs-on: [self-hosted, gpu, nvidia]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies + Unsloth stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install unsloth trl datasets transformers accelerate || true
+
+      - name: Start Termit API
+        env:
+          TERMIT_FINETUNE_HF_DRY_RUN: "false"
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8765 &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8765/health && break
+            sleep 2
+          done
+
+      - name: Learning loop 0.4.23 (real DPO)
+        env:
+          TERMIT_DPO_GPU_REQUIRED: ${{ inputs.dpo_gpu_required && 'true' || 'false' }}
+          TERMIT_FINETUNE_HF_DRY_RUN: "false"
+          TERMIT_FINETUNE_KPI_STRICT: ${{ inputs.finetune_kpi_strict && 'true' || 'false' }}
+          TERMIT_REMOTE_GPU_SSH: ${{ inputs.remote_gpu_ssh }}
+          TERMIT_EVAL_POST_DPO_FULL: "true"
+          OPENAI_COMPAT_API_KEY: ${{ secrets.OPENAI_COMPAT_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TERMIT_RUN_CLOUD_BENCHMARK: ${{ secrets.OPENAI_COMPAT_API_KEY != '' && 'true' || 'false' }}
+        run: ./scripts/learning_loop_0423.sh
+
+      - name: Plan status snapshot
+        if: always()
+        run: |
+          python scripts/plan_status_check.py --summary-only \
+            --output /tmp/termit_plan_status_gpu_dpo.json || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-dpo-learning-loop
+          path: |
+            data/learning_loop_0423_last.json
+            data/eval_kpi_last.json
+            data/eval_kpi_baseline_dpo.json
+            data/eval_post_dpo_last.json
+            /tmp/termit_plan_status_gpu_dpo.json
+          if-no-files-found: ignore

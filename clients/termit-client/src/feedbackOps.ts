@@ -44,3 +44,25 @@ export async function getFeedbackSummary(client: TermitClient): Promise<Feedback
 export async function getBetaMetrics(client: TermitClient): Promise<BetaMetrics> {
   return client.requestOps<BetaMetrics>("/api/ops/beta-metrics");
 }
+
+export interface BetaActivityResult {
+  recorded_at: string;
+  session_id: string;
+  tracked_actors: number;
+  cohort_size_d30: number;
+}
+
+/** Heartbeat beta-сессии для cohort D30 (без rating). */
+export async function recordBetaActivity(
+  client: TermitClient,
+  body: { session_id: string; source?: string },
+): Promise<BetaActivityResult> {
+  return client.requestOps<BetaActivityResult>("/api/ops/beta/activity", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id: body.session_id,
+      source: body.source ?? "desktop",
+    }),
+  });
+}

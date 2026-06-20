@@ -63,6 +63,14 @@ echo ""
 echo "== 4/7 DPO path probe (GPU или dry-run) =="
 "${ROOT}/scripts/dpo_gpu_train.sh" || echo "WARN: DPO train пропущен/упал (non-blocking)."
 
+if [[ "${TERMIT_DO_ALL_LEARNING_0423:-false}" == "true" ]]; then
+  echo ""
+  echo "== 4b/7 Learning loop 0.4.23 (pre/post DPO eval + cloud) =="
+  TERMIT_FINETUNE_KPI_STRICT="${TERMIT_FINETUNE_KPI_STRICT:-false}" \
+    "${ROOT}/scripts/learning_loop_0423.sh" \
+    || echo "WARN: learning loop 0.4.23 не прошёл (non-blocking)."
+fi
+
 echo ""
 echo "== 5/7 Live orchestration gate (fallback разрешён) =="
 if [[ "${TERMIT_PLAN_SKIP_LIVE_ORCH:-false}" != "true" ]]; then

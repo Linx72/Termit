@@ -422,7 +422,208 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
             },
         },
     },
+    "describe_tools": {
+        "type": "function",
+        "function": {
+            "name": "describe_tools",
+            "description": (
+                "Load full JSON schemas for deferred tools before calling them. "
+                "Use when you need apply_patch, execute_command, media, MCP, or other lazy tools."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tool_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tool names from the agent allowlist.",
+                    }
+                },
+                "required": ["tool_names"],
+            },
+        },
+    },
 }
+
+
+# Группы для lazy tool schemas (ось B harness): старт с core, расширение по heuristics/usage.
+TOOL_TIER_CORE = frozenset({"list_files", "read_file", "describe_tools"})
+TOOL_TIER_MUTATE = frozenset({"apply_patch", "execute_command", "browser_click"})
+TOOL_TIER_BROWSER = frozenset({"browser_navigate", "browser_snapshot", "browser_click", "web_automation"})
+TOOL_TIER_ONLINE = frozenset({"web_search"})
+TOOL_TIER_MCP = frozenset({"mcp_invoke", "mcp_read_resource", "mcp_get_prompt"})
+TOOL_TIER_AGENT = frozenset({"spawn_agent"})
+TOOL_TIER_MEDIA = frozenset(
+    {
+        "generate_image",
+        "list_media_assets",
+        "vision_qa_media",
+        "estimate_media_cost",
+        "tts_generate",
+        "transcribe_media",
+        "compose_media",
+        "render_video",
+        "wait_media_job",
+        "export_gif",
+        "export_lottie",
+        "run_storyboard",
+    }
+)
+
+_FILE_WRITE_MARKERS = (
+    "create file",
+    "write file",
+    "edit file",
+    "modify file",
+    "update file",
+    "delete file",
+    "apply patch",
+    "apply_patch",
+    "создай файл",
+    "измени файл",
+    "правк",
+    "patch",
+    "refactor",
+    "implement",
+    "fix bug",
+    "add test",
+)
+
+_ONLINE_MARKERS = (
+    "search web",
+    "google",
+    "internet",
+    "online",
+    "browser",
+    "website",
+    "найди в интернете",
+    "поиск",
+    "стать",
+)
+
+_MEDIA_MARKERS = (
+    "image",
+    "video",
+    "storyboard",
+    "lottie",
+    "gif",
+    "tts",
+    "media",
+    "изображен",
+    "видео",
+    "анимац",
+)
+
+
+def _enabled_set(enabled_tools: list[str]) -> set[str]:
+    return {name.strip() for name in enabled_tools if name and name.strip()}
+
+
+def select_initial_tool_names(
+    enabled_tools: list[str],
+    task_message: str,
+    *,
+    run_mode: str = "agent",
+    verify_after_patch: bool = False,
+) -> list[str]:
+    """Минимальный набор native tool schemas для первого шага agent loop."""
+    enabled = _enabled_set(enabled_tools)
+    active = set(TOOL_TIER_CORE & enabled)
+    msg = task_message.lower()
+    plan_only = run_mode.strip().lower() == "plan"
+
+    if not plan_only and any(marker in msg for marker in _FILE_WRITE_MARKERS):
+        active |= TOOL_TIER_MUTATE & enabled
+    if not plan_only and (
+        verify_after_patch
+        or "test" in msg
+        or "pytest" in msg
+        or "npm" in msg
+        or "lint" in msg
+        or "verify" in msg
+    ):
+        if "execute_command" in enabled:
+            active.add("execute_command")
+    if any(marker in msg for marker in _ONLINE_MARKERS):
+        active |= (TOOL_TIER_ONLINE | TOOL_TIER_BROWSER) & enabled
+    if any(marker in msg for marker in _MEDIA_MARKERS):
+        active |= TOOL_TIER_MEDIA & enabled
+    if "mcp" in msg or "mcp_invoke" in enabled:
+        active |= TOOL_TIER_MCP & enabled
+    if "spawn" in msg or "subagent" in msg or "parallel" in msg:
+        active |= TOOL_TIER_AGENT & enabled
+
+    if not active:
+        active = set(enabled)
+    return sorted(active)
+
+
+def expand_tools_after_use(
+    used_tool: str,
+    enabled_tools: list[str],
+    current_active: set[str],
+    *,
+    describe_request: list[str] | None = None,
+) -> set[str]:
+    """Расширить lazy schema после tool call или describe_tools."""
+    enabled = _enabled_set(enabled_tools)
+    expanded = set(current_active)
+    if describe_request:
+        for name in describe_request:
+            if name in enabled:
+                expanded.add(name)
+        if "mcp_invoke" in expanded:
+            expanded |= TOOL_TIER_MCP & enabled
+    if used_tool in TOOL_TIER_CORE:
+        expanded |= TOOL_TIER_MUTATE & enabled
+    if used_tool in {"apply_patch", "execute_command"}:
+        if "execute_command" in enabled:
+            expanded.add("execute_command")
+        if "apply_patch" in enabled:
+            expanded.add("apply_patch")
+    if used_tool in TOOL_TIER_BROWSER:
+        expanded |= TOOL_TIER_BROWSER & enabled
+    if used_tool in TOOL_TIER_MCP:
+        expanded |= TOOL_TIER_MCP & enabled
+    if used_tool in TOOL_TIER_MEDIA:
+        expanded |= TOOL_TIER_MEDIA & enabled
+    return expanded
+
+
+def resolve_described_tools(arguments: dict[str, object], enabled_tools: list[str]) -> list[str]:
+    """Извлечь и отфильтровать tool_names из describe_tools arguments."""
+    enabled = _enabled_set(enabled_tools)
+    raw = arguments.get("tool_names", [])
+    if not isinstance(raw, list):
+        return []
+    return [str(name).strip() for name in raw if str(name).strip() in enabled]
+
+
+def build_tool_schema_response(tool_names: list[str]) -> str:
+    """JSON observation для describe_tools."""
+    import json
+
+    schemas = build_openai_tools(tool_names)
+    return json.dumps(
+        {
+            "loaded_tools": tool_names,
+            "schemas": schemas,
+            "hint": "Schemas are now active for native tool calling on next steps.",
+        },
+        ensure_ascii=True,
+    )
+
+
+def deferred_tool_catalog(enabled_tools: list[str], active_tools: set[str]) -> str:
+    """Краткий список отложенных tools для system prompt (native loop)."""
+    enabled = _enabled_set(enabled_tools)
+    deferred = sorted(name for name in enabled if name not in active_tools and name in TOOL_DEFINITIONS)
+    if not deferred:
+        return ""
+    return (
+        "\n\n[Lazy tools] Schemas for these tools load on demand after exploration: "
+        + ", ".join(deferred)
+    )
 
 
 def build_openai_tools(enabled_tools: list[str]) -> list[dict[str, object]]:

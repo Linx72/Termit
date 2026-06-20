@@ -17,6 +17,18 @@
 
 ## Рекомендуемая ladder (2026)
 
+### Фаза B — vLLM + hybrid (production GPU)
+
+```text
+LOW / tab         → ollama:qwen2.5-coder (7B, быстрый FIM)
+CODE agents       → vllm:Qwen/Qwen3-Coder-Next (MoE, native tools)
+CODE fallback     → ollama:termit-core-ft или qwen2.5-coder:14b
+HIGH / dual-pass  → openai_compat:DeepSeek-V3 (cloud key)
+Embeddings        → nomic-embed-text (Ollama)
+```
+
+### Фаза A — Ollama only (dev / без GPU)
+
 ```text
 LOW coding        → ollama:qwen2.5-coder (7B, fast)
 DEFAULT agents    → ollama:termit-core-ft (FROM qwen2.5-coder:14b)
@@ -26,7 +38,36 @@ Frontier          → openai_compat:DeepSeek-V3
 Embeddings        → nomic-embed-text
 ```
 
-## Быстрый апгрейд (фаза A)
+## Быстрый апгрейд
+
+### Фаза B (vLLM, рекомендуется при NVIDIA GPU)
+
+```bash
+./scripts/upgrade_model_ladder_phase_b.sh
+# или вручную:
+./scripts/start_vllm_sidecar.sh
+./scripts/check_vllm_models.sh
+./scripts/restart_server.sh
+```
+
+Docker prod:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.vllm.yml --profile vllm up -d
+```
+
+Env:
+
+```bash
+TERMIT_VLLM_ENABLED=true
+TERMIT_VLLM_BASE_URL=http://127.0.0.1:8000
+TERMIT_CODE_MODEL=vllm:Qwen/Qwen3-Coder-Next
+TERMIT_FAST_MODEL=ollama:qwen2.5-coder
+```
+
+Провайдер: [`app/services/providers/vllm_provider.py`](file:///Users/amoros/Projects/Termit/app/services/providers/vllm_provider.py) — OpenAI `/v1/chat/completions` + native tool calling.
+
+### Фаза A (Ollama)
 
 ```bash
 ./scripts/upgrade_model_ladder_phase_a.sh
@@ -37,24 +78,30 @@ Embeddings        → nomic-embed-text
 
 ## Dual-pass
 
-`TERMIT_DUAL_PASS_ENABLED=true` — draft local → validator (`analysis` chain). С cloud key validator идёт в 32B; без ключа — локальный analysis model.
+`TERMIT_DUAL_PASS_ENABLED=true` — draft local/vLLM → validator (`analysis` chain). С cloud key validator идёт в frontier; без ключа — локальный analysis model.
 
-## Native tool calling (Ollama)
+## Native tool calling
 
-Agent tool loop для `ollama:*` использует Ollama `/api/chat` с `tools` (qwen2.5-coder, termit-core-ft). При ошибке API — fallback на JSON action loop.
+Agent tool loop для `ollama:*` и `vllm:*` использует OpenAI-style tools. При ошибке API — fallback на JSON action loop.
 
-## Сравнение с внешними моделями
+## Сравнение inference stack
 
-| Модель | Coding + tools | Online | Local |
-|--------|----------------|--------|-------|
-| GPT-4.1 / o4-mini | ★★★★★ | API | Cloud |
-| Claude Sonnet | ★★★★★ | API | Cloud |
-| DeepSeek-V3 | ★★★★☆ | API | Cloud |
-| Qwen2.5-Coder 14B | ★★★★☆ | Слабый | Ollama |
-| termit-core-ft 14B | ★★★☆☆ → ★★★★ после DPO | Harness | Ollama |
+| Stack | tok/s (оценка) | VRAM | Tool calling |
+|-------|----------------|------|--------------|
+| Ollama 14B dense | 1× | ~12 GB | ✓ qwen2.5 |
+| vLLM Qwen3-Coder-Next MoE | 3–5× | ~24–48 GB | ✓ hermes parser |
+| Cloud DeepSeek-V3 | quality↑ | — | ✓ |
 
-Moat Termit — **harness** (tools, eval, finetune), не одна weights file.
+Moat Termit — **harness** (tools, eval, finetune, ось B lazy context), не одна weights file.
 
-## Дальше (фазы B–E)
+## Связанные env (ось B harness)
 
-См. план в чате / `PROJECT_TASK_PROMPT_RU.md` 0.4.23–0.4.25: GPU DPO, beta cohort, symbol graph, search providers.
+```bash
+TERMIT_LAZY_TOOL_SCHEMAS=true
+TERMIT_AGENT_SKIP_STEP_ENRICHMENT=true
+TERMIT_COHESION_PARTITION_ENABLED=true
+```
+
+## Дальше (фазы C–E)
+
+GPU DPO train, cloud benchmark gate, beta product KPI — см. `PROJECT_TASK_PROMPT_RU.md` 0.4.23–0.4.25.

@@ -97,7 +97,7 @@ class ChatService:
         compaction = self._compactor.compact(messages)
         messages = list(compaction.messages)
         retrieval_hits = 0
-        if self._enrichment is not None:
+        if not payload.skip_context_enrichment and self._enrichment is not None:
             enrichment_messages = self._enrichment.build_system_messages(payload)
             if enrichment_messages:
                 messages = enrichment_messages + messages
@@ -108,7 +108,12 @@ class ChatService:
                     path_prefix=payload.retrieval_path_prefix,
                 )
                 retrieval_hits = len(hits)
-        elif payload.use_retrieval and self._retrieval_enabled and self._retrieval is not None:
+        elif (
+            not payload.skip_context_enrichment
+            and payload.use_retrieval
+            and self._retrieval_enabled
+            and self._retrieval is not None
+        ):
             hits = self._retrieval.search(
                 payload.message,
                 limit=payload.retrieval_limit,
@@ -133,6 +138,8 @@ class ChatService:
             path_prefix=payload.retrieval_path_prefix,
             routing_policy=payload.routing_policy,
         )
+        if payload.pin_model and payload.model:
+            candidate_models = [payload.model]
         selected_via = payload.routing_policy
         if payload.repo_profile:
             selected_via = f"repo_profile:{payload.repo_profile}"
@@ -205,7 +212,11 @@ class ChatService:
             raise ProviderError(" | ".join(errors) if errors else "No available models.")
 
         validator_model: Optional[str] = None
-        if self._dual_pass_enabled and payload.task_type.value in self._dual_pass_task_types:
+        if (
+            not payload.skip_dual_pass
+            and self._dual_pass_enabled
+            and payload.task_type.value in self._dual_pass_task_types
+        ):
             response_text, validator_model = await self._apply_dual_pass(
                 payload=payload,
                 draft=response_text,
@@ -262,6 +273,8 @@ class ChatService:
             path_prefix=payload.retrieval_path_prefix,
             routing_policy=payload.routing_policy,
         )
+        if payload.pin_model and payload.model:
+            candidate_models = [payload.model]
         attempted: list[str] = []
         errors: list[str] = []
 

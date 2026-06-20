@@ -44,9 +44,18 @@ jobs:
           TERMIT_FINETUNE_KPI_STRICT: "false"
           TERMIT_PLAN_TRY_STRICT_LIVE: "false"
           TERMIT_DO_ALL_TRY_CLOUD: ${{ secrets.OPENAI_COMPAT_API_KEY != '' && 'true' || 'false' }}
+          TERMIT_DO_ALL_LEARNING_0423: "false"
           OPENAI_COMPAT_API_KEY: ${{ secrets.OPENAI_COMPAT_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: ./scripts/do_all_plan.sh
+
+      - name: Learning loop 0.4.23 CI (offline HE/MBPP + DPO dry-run)
+        env:
+          TERMIT_CLOUD_BENCHMARK_DEV_READY: ${{ secrets.OPENAI_COMPAT_API_KEY == '' && 'true' || 'false' }}
+          OPENAI_COMPAT_API_KEY: ${{ secrets.OPENAI_COMPAT_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TERMIT_RUN_CLOUD_BENCHMARK: ${{ secrets.OPENAI_COMPAT_API_KEY != '' && 'true' || 'false' }}
+        run: ./scripts/learning_loop_0423_ci.sh
 
       - name: Upload plan status artifact
         if: always()
@@ -56,4 +65,6 @@ jobs:
           path: |
             /tmp/termit_plan_status_after.json
             data/plan_status_last.json
+            data/learning_loop_0423_last.json
+            data/eval_kpi_last.json
           if-no-files-found: ignore

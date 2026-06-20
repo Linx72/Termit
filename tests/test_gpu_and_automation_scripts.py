@@ -96,6 +96,16 @@ class AutomationScriptTests(unittest.TestCase):
             "reset_eval_patch_fixture.sh",
             "deploy_hosted_beta.sh",
             "gpu_probe.py",
+            "learning_loop_0423.sh",
+            "learning_loop_0423_report.py",
+            "learning_loop_0423_ci.sh",
+            "beta_staging_gate.sh",
+            "start_colima_and_deploy_beta.sh",
+            "release_gate_staging.sh",
+            "pre_release_check.sh",
+            "seed_hosted_product_kpi.sh",
+            "beta_telemetry_report.py",
+            "remote_gpu_dpo.sh",
         ):
             if name.endswith(".sh"):
                 proc = subprocess.run(

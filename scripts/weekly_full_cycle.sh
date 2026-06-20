@@ -35,7 +35,14 @@ TERMIT_EVAL_AUTO_PROMOTE_BASELINE="${TERMIT_EVAL_AUTO_PROMOTE_BASELINE:-false}" 
 echo ""
 echo "== 3/4 Weekly closed-loop gates (eval + shadow + orchestration) =="
 TERMIT_WEEKLY_RUN_TRAINING_LOOP=false \
+  TERMIT_WEEKLY_RUN_LEARNING_0423=false \
   "${ROOT}/scripts/weekly_closed_loop.sh"
+
+echo ""
+echo "== 4/4 Learning loop 0.4.23 snapshot =="
+TERMIT_FINETUNE_OUTPUT_MODEL="${TERMIT_FINETUNE_OUTPUT_MODEL:-termit-core-ft}" \
+  "${ROOT}/scripts/learning_loop_0423_ci.sh" \
+  || echo "WARN: learning loop 0.4.23 CI failed (non-blocking)."
 
 echo ""
 echo "OK — weekly full cycle complete."

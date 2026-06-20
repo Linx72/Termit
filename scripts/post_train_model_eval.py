@@ -58,10 +58,16 @@ def _parse_scenario_ids(raw: str) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Model-bound LLM eval для finetune KPI")
     parser.add_argument("--model", required=True, help="ID модели, напр. ollama:termit-core-ft")
+    default_ids = os.getenv("TERMIT_EVAL_MODEL_KPI_IDS", "MB1,MB2,MB3")
+    if os.getenv("TERMIT_EVAL_POST_DPO_FULL", "").lower() in {"1", "true", "yes"}:
+        default_ids = os.getenv(
+            "TERMIT_EVAL_POST_DPO_IDS",
+            "MB1,MB2,MB3,HE1,HE2,MBPP1,MBPP2",
+        )
     parser.add_argument(
         "--scenario-ids",
-        default=os.getenv("TERMIT_EVAL_MODEL_KPI_IDS", "MB1,MB2,MB3"),
-        help="ID сценариев через запятую (по умолчанию MB1,MB2,MB3)",
+        default=default_ids,
+        help="ID сценариев через запятую (MB1–MB3 или + HE/MBPP при POST_DPO_FULL)",
     )
     parser.add_argument("--output", required=True, help="Путь JSON-отчёта")
     parser.add_argument("--persist-report", action="store_true", help="Сохранить отчёт в eval store")

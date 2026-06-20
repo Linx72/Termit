@@ -53,6 +53,10 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1200, ge=64, le=8192)
     history: list[ChatMessage] = Field(default_factory=list)
+    # Ось B harness: не дублировать enrichment в agent loop; pin model для prompt cache.
+    skip_context_enrichment: bool = False
+    pin_model: bool = False
+    skip_dual_pass: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -782,6 +786,20 @@ class BetaMetricsResponse(BaseModel):
     target_d30_retention: float = 0.35
 
 
+class BetaActivityRequest(BaseModel):
+    """Heartbeat beta-пользователя для cohort retention (без rating)."""
+
+    session_id: str = Field(min_length=3, max_length=128)
+    source: str = Field(default="desktop", max_length=64)
+
+
+class BetaActivityResponse(BaseModel):
+    recorded_at: str
+    session_id: str
+    tracked_actors: int = 0
+    cohort_size_d30: int = 0
+
+
 class PlanStatusItem(BaseModel):
     id: str
     message: str
@@ -796,6 +814,7 @@ class PlanStatusResponse(BaseModel):
     gpu: dict[str, Any] = Field(default_factory=dict)
     cloud_benchmark: dict[str, Any] = Field(default_factory=dict)
     finetune_eval_kpi: Optional[dict[str, Any]] = None
+    learning_loop_0423: Optional[dict[str, Any]] = None
     desktop_kpi_gates: Optional[dict[str, Any]] = None
     beta_metrics: Optional[dict[str, Any]] = None
     d30_retention: Optional[float] = None
@@ -1973,6 +1992,16 @@ class PlatformSearchResponse(BaseModel):
     query: str
     provider: str
     hits: list[PlatformSearchHitResponse] = Field(default_factory=list)
+
+
+class PlatformToolDescribeRequest(BaseModel):
+    tool_names: list[str] = Field(min_length=1, max_length=24)
+
+
+class PlatformToolDescribeResponse(BaseModel):
+    loaded_tools: list[str] = Field(default_factory=list)
+    schemas: list[dict[str, object]] = Field(default_factory=list)
+    hint: str = ""
 
 
 class DesktopJourneyResponse(BaseModel):

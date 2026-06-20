@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TermitClient } from "@termit/client";
 import { getBetaMetrics, submitFeedback, type BetaMetrics } from "@termit/client";
+import { getBetaActorId } from "./betaActivity";
 import { t, type Locale } from "./i18n";
 
 interface BetaFeedbackPanelProps {
@@ -44,6 +45,7 @@ export function BetaFeedbackPanel({ client, connected, locale }: BetaFeedbackPan
       const result = await submitFeedback(client, {
         message: message.trim(),
         rating,
+        session_id: getBetaActorId(),
       });
       setNotice(`${t(locale, "betaFeedbackSent")}: ${result.timestamp}`);
       setMessage("");

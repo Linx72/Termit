@@ -24,6 +24,7 @@ if [[ "${TERMIT_DO_ALL_CI:-false}" != "true" ]]; then
     tests.test_model_bound_eval_gate \
     tests.test_finetune_training_dashboard \
     tests.test_gpu_and_automation_scripts \
+    tests.test_learning_loop_0423 \
     tests.test_weekly_closed_loop \
     -q
 else
@@ -117,6 +118,13 @@ if curl -sf --max-time 5 "${BASE_URL}/health" >/dev/null 2>&1; then
     echo "== 9/9 Cloud benchmark cycle (auto: API key в env) =="
     TERMIT_RUN_CLOUD_BENCHMARK=true TERMIT_CAP_GATE_TIER="${TERMIT_CAP_GATE_TIER:-ci}" \
       ./scripts/cloud_benchmark_cycle.sh || echo "WARN: cloud benchmark failed (non-blocking)."
+  fi
+
+  if [[ "${TERMIT_DO_ALL_TRY_LEARNING_0423:-true}" == "true" ]]; then
+    echo ""
+    echo "== 10/10 Learning loop 0.4.23 CI (HE/MBPP + DPO dry-run) =="
+    ./scripts/learning_loop_0423_ci.sh \
+      || echo "WARN: learning loop 0.4.23 CI failed (non-blocking)."
   fi
 else
   echo "Server not reachable at ${BASE_URL} — skip HTTP/gate steps."

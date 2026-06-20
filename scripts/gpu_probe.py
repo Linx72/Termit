@@ -9,7 +9,54 @@ import subprocess
 import sys
 
 
+def _probe_remote_gpu(ssh_target: str) -> dict[str, object] | None:
+    """Проб GPU на удалённом хосте через SSH (TERMIT_REMOTE_GPU_SSH)."""
+    if not ssh_target.strip():
+        return None
+    try:
+        completed = subprocess.run(
+            [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=8",
+                ssh_target.strip(),
+                "python3",
+                "-c",
+                "import json,shutil,subprocess;"
+                "out={'gpu_available':False,'backend':'remote','devices':[]};"
+                "import shutil as s;"
+                "if s.which('nvidia-smi'):"
+                " p=subprocess.run(['nvidia-smi','--query-gpu=name','--format=csv,noheader'],"
+                " capture_output=True,text=True,timeout=10);"
+                " if p.returncode==0 and p.stdout.strip():"
+                "  out={'gpu_available':True,'backend':'remote-nvidia-smi',"
+                " 'devices':[l.strip() for l in p.stdout.splitlines() if l.strip()]};"
+                "print(json.dumps(out))",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        if completed.returncode == 0 and completed.stdout.strip():
+            payload = json.loads(completed.stdout.strip().splitlines()[-1])
+            if isinstance(payload, dict):
+                payload["remote_ssh"] = ssh_target.strip()
+                return payload
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        pass
+    return None
+
+
 def probe_gpu() -> dict[str, object]:
+    remote_ssh = __import__("os").getenv("TERMIT_REMOTE_GPU_SSH", "").strip()
+    if remote_ssh:
+        remote = _probe_remote_gpu(remote_ssh)
+        if remote is not None:
+            return remote
+
     if shutil.which("nvidia-smi"):
         try:
             completed = subprocess.run(

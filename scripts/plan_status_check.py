@@ -54,6 +54,13 @@ def print_summary(payload: dict[str, Any]) -> None:
     print(f"  Infra OK:           {payload.get('infra_ok')}")
     print(f"  Код плана (0-4):    {payload.get('plan_code_complete')}")
     print(f"  Автоматизация:      {payload.get('automatic_mode_enabled')}")
+    ll = payload.get("learning_loop_0423") or {}
+    if ll:
+        print(
+            f"  Learning 0.4.23:    dpo_real={ll.get('dpo_real_train')} "
+            f"kpi_measurable={ll.get('kpi_measurable')} "
+            f"post_rate={ll.get('post_dpo_pass_rate')}"
+        )
     kpi = payload.get("finetune_eval_kpi") or {}
     if kpi:
         print(f"  Finetune KPI:       kpi_passed={kpi.get('kpi_passed')} delta={kpi.get('delta')}")

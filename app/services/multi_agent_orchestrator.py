@@ -25,7 +25,9 @@ from app.domain.schemas import (
 )
 from app.services.chat_service import ChatService
 from app.services.code_retrieval_service import CodeRetrievalService
+from app.services.cohesion_partition_service import CohesionPartitionService
 from app.services.providers.base import ProviderError
+from app.services.symbol_index_service import SymbolIndexService
 from app.services.task_service import TaskService
 from app.services.tooling_service import ToolingService
 from app.services.verify_command_resolver import resolve_verify_command
@@ -46,6 +48,8 @@ class MultiAgentOrchestrator:
         chat_service: ChatService,
         tooling: ToolingService | None = None,
         code_retrieval: CodeRetrievalService | None = None,
+        symbol_index: SymbolIndexService | None = None,
+        cohesion_partition_enabled: bool = True,
         openhands_contract_enabled: bool = False,
         tool_loop_execution_enabled: bool = False,
         eval_fixture_coder_enabled: bool = False,
@@ -54,6 +58,9 @@ class MultiAgentOrchestrator:
         self._chat = chat_service
         self._tooling = tooling
         self._retrieval = code_retrieval
+        self._symbol_index = symbol_index
+        self._cohesion_partition = CohesionPartitionService()
+        self._cohesion_partition_enabled = bool(cohesion_partition_enabled)
         self._openhands_contract_enabled = bool(openhands_contract_enabled)
         self._tool_loop_execution_enabled = bool(tool_loop_execution_enabled)
         self._eval_fixture_coder_enabled = bool(eval_fixture_coder_enabled)
@@ -70,6 +77,7 @@ class MultiAgentOrchestrator:
             "orchestration_tool_loop_runs_total": 0,
             "orchestration_tool_steps_total": 0,
             "orchestration_tool_loop_fallback_total": 0,
+            "cohesion_partition_runs_total": 0,
         }
 
     async def run(self, payload: OrchestrationRunRequest) -> OrchestrationRunResponse:
@@ -450,6 +458,8 @@ class MultiAgentOrchestrator:
         if not payload.use_retrieval:
             return ""
 
+        base_parts: list[str] = []
+
         async def retrieval_part() -> str:
             if self._retrieval is None:
                 return ""
@@ -479,8 +489,65 @@ class MultiAgentOrchestrator:
                 return f"workspace list error: {exc}"
 
         retrieval_text, list_text = await asyncio.gather(retrieval_part(), list_part())
-        parts = [part for part in (retrieval_text, list_text) if part.strip()]
-        return "\n".join(parts)
+        for part in (retrieval_text, list_text):
+            if part.strip():
+                base_parts.append(part.strip())
+
+        cohesion_text = await self._cohesion_parallel_explore(payload, retrieval_text)
+        if cohesion_text:
+            base_parts.append(cohesion_text)
+        return "\n".join(base_parts)
+
+    async def _cohesion_parallel_explore(
+        self,
+        payload: OrchestrationRunRequest,
+        retrieval_text: str,
+    ) -> str:
+        """Parallel explore по cohesion partitions (ось B)."""
+        if not self._cohesion_partition_enabled or self._symbol_index is None:
+            return ""
+        seed_paths: list[str] = []
+        for line in retrieval_text.splitlines():
+            chunk = line.strip()
+            if chunk.startswith("- ") and " (score=" in chunk:
+                path = chunk[2:].split(" (score=", 1)[0].strip()
+                if path:
+                    seed_paths.append(path)
+        if len(seed_paths) < 2:
+            return ""
+
+        adjacency = await asyncio.to_thread(self._symbol_index.file_adjacency)
+        partitions = self._cohesion_partition.partition_paths(
+            seed_paths,
+            adjacency,
+            max_partitions=3,
+        )
+        if len(partitions) < 2:
+            return ""
+
+        async def summarize_partition(index: int, paths: list[str]) -> str:
+            summaries = [CohesionPartitionService.summarize_partition(index, paths)]
+            if self._tooling is not None:
+                for rel_path in paths[:2]:
+                    try:
+                        result = await asyncio.to_thread(
+                            self._tooling.read_file,
+                            ReadFileRequest(path=rel_path),
+                        )
+                        preview = (result.content or "")[:180].replace("\n", " ")
+                        if preview:
+                            summaries.append(f"  excerpt {rel_path}: {preview}")
+                    except Exception:  # noqa: BLE001
+                        continue
+            return "\n".join(summaries)
+
+        partition_texts = await asyncio.gather(
+            *[summarize_partition(index, group) for index, group in enumerate(partitions)]
+        )
+        with self._metrics_lock:
+            self._metrics["cohesion_partition_runs_total"] += 1
+        header = f"cohesion partitions ({len(partitions)} groups, parallel explore):"
+        return header + "\n" + "\n".join(partition_texts)
 
     async def _reviewer_phase(self, task_input: str, executor_response: str) -> tuple[str, bool]:
         if not executor_response.strip():

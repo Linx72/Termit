@@ -16,6 +16,8 @@ from app.domain.schemas import (
     OpsReloadDevMetricsSeedResponse,
     OpsReadinessResponse,
     BetaMetricsResponse,
+    BetaActivityRequest,
+    BetaActivityResponse,
     PlanStatusResponse,
     QuotaResetRequest,
     QuotaResetResponse,
@@ -98,6 +100,29 @@ async def beta_metrics(
     payload = service.build_metrics()
     payload["feedback_total"] = feedback_store.summarize().get("total", 0)
     return BetaMetricsResponse(**payload)
+
+
+@router.post("/beta/activity", response_model=BetaActivityResponse)
+async def beta_activity(
+    body: BetaActivityRequest,
+    feedback_store: FeedbackStore = Depends(get_feedback_store),
+    service=Depends(get_beta_cohort_service),
+) -> BetaActivityResponse:
+    """Записать beta heartbeat (session) для cohort D30 без обязательного feedback rating."""
+    recorded_at = feedback_store.append(
+        message=f"beta_activity:{body.source}",
+        rating=None,
+        contact=None,
+        api_key=None,
+        session_id=body.session_id.strip(),
+    )
+    metrics = service.build_metrics()
+    return BetaActivityResponse(
+        recorded_at=recorded_at,
+        session_id=body.session_id.strip(),
+        tracked_actors=int(metrics.get("tracked_actors", 0) or 0),
+        cohort_size_d30=int(metrics.get("cohort_size_d30", 0) or 0),
+    )
 
 
 @router.get("/plan-status", response_model=PlanStatusResponse)

@@ -86,6 +86,7 @@ import { PromptInputModal } from "./PromptInputModal";
 import { PlanPanel } from "./PlanPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { getOrAssignOnboardingVariant } from "./onboardingExperiment";
+import { recordBetaActivityIfDue } from "./betaActivity";
 
 
 type AgentFolder = {
@@ -581,6 +582,7 @@ export function App() {
       }
       setConnected(true);
       setApiReachable(true);
+      void recordBetaActivityIfDue(client, "desktop_launch").catch(() => undefined);
       void refreshAgents();
       void refreshPlatformData(selectedAgentId);
       void refreshLiveChanges();

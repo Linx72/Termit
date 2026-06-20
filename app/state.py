@@ -26,6 +26,7 @@ from app.services.chat_service import ChatService
 from app.services.context_compaction import ContextCompactor
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.agent_templates_store import AgentTemplatesStore
+from app.services.agent_prompt_cache_service import AgentPromptCacheService
 from app.services.context_enrichment_service import ContextEnrichmentService
 from app.services.context_packing_service import ContextPackingService
 from app.services.project_rules_store import ProjectRulesStore
@@ -41,9 +42,7 @@ from app.services.plan_build_service import PlanBuildService
 from app.services.routing_policy_service import RoutingPolicyService
 from app.services.ops_service import OpsService
 from app.services.team_workspace_service import TeamWorkspaceService
-from app.services.providers.base import BaseProvider
-from app.services.providers.ollama_provider import OllamaProvider
-from app.services.providers.openai_compat_provider import OpenAICompatProvider
+from app.services.providers.factory import build_llm_providers
 from app.services.sqlite_memory_store import SQLiteMemoryStore
 from app.services.sqlite_agent_run_store import SQLiteAgentRunStore
 from app.services.eval_report_store import EvalReportStore
@@ -74,13 +73,7 @@ from app.services.reasoning_orchestrator_service import ReasoningOrchestratorSer
 @lru_cache
 def _build_llm_caller_service() -> LlmCallerService:
     settings = get_settings()
-    providers: dict[str, BaseProvider] = {
-        "ollama": OllamaProvider(settings.ollama_base_url),
-        "openai_compat": OpenAICompatProvider(
-            settings.openai_compat_base_url,
-            settings.openai_compat_api_key,
-        ),
-    }
+    providers = build_llm_providers(settings)
     router = ModelRouter(settings, routing_policy=_build_routing_policy_service())
     return LlmCallerService(providers=providers, model_router=router)
 
@@ -106,13 +99,7 @@ def get_reasoning_orchestrator_service() -> ReasoningOrchestratorService:
 @lru_cache
 def _build_chat_service() -> ChatService:
     settings = get_settings()
-    providers: dict[str, BaseProvider] = {
-        "ollama": OllamaProvider(settings.ollama_base_url),
-        "openai_compat": OpenAICompatProvider(
-            settings.openai_compat_base_url,
-            settings.openai_compat_api_key,
-        ),
-    }
+    providers = build_llm_providers(settings)
     router = ModelRouter(settings, routing_policy=_build_routing_policy_service())
     memory_store: MemoryBackend
     if settings.memory_backend == "sqlite":
@@ -245,6 +232,8 @@ def _build_agent_service() -> AgentService:
         reasoning_orchestrator=_build_reasoning_orchestrator_service(),
         tool_loop_metrics_recent_days=settings.tool_loop_metrics_recent_days,
         tool_loop_metrics_recent_run_window=settings.tool_loop_metrics_recent_run_window,
+        lazy_tool_schemas_enabled=settings.lazy_tool_schemas_enabled,
+        cache_aware_routing_enabled=settings.cache_aware_routing_enabled,
     )
 
 
@@ -748,6 +737,9 @@ def _build_local_runtime_service() -> LocalRuntimeService:
         teacher_model=settings.teacher_model,
         teacher_fallback_model=settings.teacher_fallback_model,
         teacher_ollama_models=teacher_ollama_model_names(settings),
+        vllm_base_url=settings.vllm_base_url,
+        vllm_enabled=settings.vllm_enabled,
+        vllm_served_model=settings.vllm_served_model,
     )
 
 
@@ -823,6 +815,12 @@ def get_agent_templates_store() -> AgentTemplatesStore:
 
 
 @lru_cache
+def _build_agent_prompt_cache_service() -> AgentPromptCacheService:
+    settings = get_settings()
+    return AgentPromptCacheService(ttl_seconds=settings.agent_prompt_cache_ttl_seconds)
+
+
+@lru_cache
 def _build_context_enrichment_service() -> ContextEnrichmentService:
     settings = get_settings()
     return ContextEnrichmentService(
@@ -834,6 +832,8 @@ def _build_context_enrichment_service() -> ContextEnrichmentService:
         skill_store=_build_skill_store(),
         repo_map_enabled=True,
         context_packing_enabled=True,
+        context_packing_incremental=settings.context_packing_incremental,
+        prompt_cache=_build_agent_prompt_cache_service(),
     )
 
 
@@ -872,6 +872,8 @@ def _build_multi_agent_orchestrator() -> MultiAgentOrchestrator:
         chat_service=_build_chat_service(),
         tooling=_build_tooling_service(),
         code_retrieval=_build_code_retrieval_service(),
+        symbol_index=_build_symbol_index_service(),
+        cohesion_partition_enabled=settings.cohesion_partition_enabled,
         openhands_contract_enabled=settings.orchestration_openhands_contract_enabled,
         tool_loop_execution_enabled=settings.orchestration_tool_loop_execution_enabled,
         eval_fixture_coder_enabled=settings.orchestration_eval_fixture_coder_enabled,

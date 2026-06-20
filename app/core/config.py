@@ -127,6 +127,16 @@ class Settings:
     agent_verify_max_retries: int = 1
     dual_pass_enabled: bool = True
     dual_pass_task_types: str = "coding,review,debug"
+    lazy_tool_schemas_enabled: bool = True
+    agent_skip_step_enrichment: bool = True
+    context_packing_incremental: bool = True
+    cache_aware_routing_enabled: bool = True
+    agent_prompt_cache_ttl_seconds: int = 300
+    cohesion_partition_enabled: bool = True
+    vllm_base_url: str = "http://127.0.0.1:8000"
+    vllm_api_key: str = ""
+    vllm_enabled: bool = False
+    vllm_served_model: str = "Qwen/Qwen3-Coder-Next"
     task_use_agent: bool = False
     task_agent_id: str = ""
     fim_max_tokens: int = 64
@@ -333,6 +343,10 @@ def get_settings() -> Settings:
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         openai_compat_base_url=os.getenv("OPENAI_COMPAT_BASE_URL", "http://localhost:8001"),
         openai_compat_api_key=os.getenv("OPENAI_COMPAT_API_KEY", ""),
+        vllm_base_url=os.getenv("TERMIT_VLLM_BASE_URL", "http://127.0.0.1:8000"),
+        vllm_api_key=os.getenv("TERMIT_VLLM_API_KEY", ""),
+        vllm_enabled=os.getenv("TERMIT_VLLM_ENABLED", "false").lower() in {"1", "true", "yes"},
+        vllm_served_model=os.getenv("TERMIT_VLLM_SERVED_MODEL", "Qwen/Qwen3-Coder-Next"),
         memory_backend=os.getenv("TERMIT_MEMORY_BACKEND", "sqlite"),
         memory_sqlite_path=os.getenv("TERMIT_MEMORY_SQLITE_PATH", "./termit_memory.db"),
         memory_max_messages=int(os.getenv("TERMIT_MEMORY_MAX_MESSAGES", "40")),
@@ -393,6 +407,19 @@ def get_settings() -> Settings:
             "TERMIT_DUAL_PASS_TASK_TYPES",
             "coding,review,debug",
         ),
+        lazy_tool_schemas_enabled=os.getenv("TERMIT_LAZY_TOOL_SCHEMAS", "true").lower()
+        in {"1", "true", "yes"},
+        agent_skip_step_enrichment=os.getenv("TERMIT_AGENT_SKIP_STEP_ENRICHMENT", "true").lower()
+        in {"1", "true", "yes"},
+        context_packing_incremental=os.getenv("TERMIT_CONTEXT_PACKING_INCREMENTAL", "true").lower()
+        in {"1", "true", "yes"},
+        cache_aware_routing_enabled=os.getenv("TERMIT_CACHE_AWARE_ROUTING", "true").lower()
+        in {"1", "true", "yes"},
+        agent_prompt_cache_ttl_seconds=max(
+            0, int(os.getenv("TERMIT_AGENT_PROMPT_CACHE_TTL_SECONDS", "300"))
+        ),
+        cohesion_partition_enabled=os.getenv("TERMIT_COHESION_PARTITION_ENABLED", "true").lower()
+        in {"1", "true", "yes"},
         task_use_agent=os.getenv("TERMIT_TASK_USE_AGENT", "false").lower() in {"1", "true", "yes"},
         task_agent_id=os.getenv("TERMIT_TASK_AGENT_ID", ""),
         fim_max_tokens=int(os.getenv("TERMIT_FIM_MAX_TOKENS", "64")),

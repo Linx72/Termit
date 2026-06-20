@@ -68,11 +68,20 @@ fi
 
 echo ""
 if [[ "${USE_MODEL_KPI}" == "true" ]]; then
-  echo "== 3/5 Post-train model eval (MB1-MB3) =="
+  echo "== 3/5 Post-train model eval (MB1-MB3 + HE/MBPP при POST_DPO_FULL) =="
   POST_TRAIN_MODEL="${TERMIT_FINETUNE_OUTPUT_MODEL:-termit-core-ft}"
   POST_TRAIN_MODEL="${POST_TRAIN_MODEL#ollama:}"
+  POST_DPO_IDS="${TERMIT_EVAL_POST_DPO_IDS:-}"
+  if [[ -z "${POST_DPO_IDS}" ]]; then
+    if [[ "${TERMIT_EVAL_POST_DPO_FULL:-false}" == "true" ]]; then
+      POST_DPO_IDS="MB1,MB2,MB3,HE1,HE2,MBPP1,MBPP2"
+    else
+      POST_DPO_IDS="${TERMIT_EVAL_MODEL_KPI_IDS:-MB1,MB2,MB3}"
+    fi
+  fi
   python3 "$ROOT/scripts/post_train_model_eval.py" \
     --model "ollama:${POST_TRAIN_MODEL}" \
+    --scenario-ids "${POST_DPO_IDS}" \
     --output "$CURRENT_REPORT" \
     --persist-report
   python3 -m json.tool "$CURRENT_REPORT" | head -30

@@ -62,20 +62,30 @@ class PlanStatusServiceTests(unittest.TestCase):
                 payload = service.collect(from_running_api=True)
         self.assertTrue(payload["relax_env_warnings_enabled"])
         self.assertEqual(len(payload["warnings"]), 0)
-        self.assertEqual(len(payload["relaxed_env_warnings"]), 2)
+        self.assertGreaterEqual(len(payload["relaxed_env_warnings"]), 2)
         self.assertTrue(payload["overall_ok"])
 
     def test_beta_cohort_uses_cohort_size_d30(self) -> None:
-        service = PlanStatusService(
-            kpi_gate_service=MagicMock(evaluate_gates=MagicMock(return_value={})),
-            beta_service=MagicMock(
-                build_metrics=MagicMock(return_value={"cohort_size_d30": 2})
-            ),
-            automation_service=MagicMock(snapshot=MagicMock(return_value={})),
-            gpu_probe=lambda: {"gpu_available": True},
-            cloud_probe=lambda: {"ready": True},
-        )
-        payload = service.collect(from_running_api=True)
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "data").mkdir()
+            (root / "data" / "eval_kpi_last.json").write_text(
+                json.dumps({"kpi_passed": True}),
+                encoding="utf-8",
+            )
+            service = PlanStatusService(
+                project_root=root,
+                kpi_gate_service=MagicMock(evaluate_gates=MagicMock(return_value={})),
+                beta_service=MagicMock(
+                    build_metrics=MagicMock(return_value={"cohort_size_d30": 2})
+                ),
+                automation_service=MagicMock(snapshot=MagicMock(return_value={})),
+                gpu_probe=lambda: {"gpu_available": True},
+                cloud_probe=lambda: {"ready": True},
+            )
+            payload = service.collect(from_running_api=True)
         self.assertTrue(any(item["id"] == "beta_cohort" for item in payload["warnings"]))
 
 

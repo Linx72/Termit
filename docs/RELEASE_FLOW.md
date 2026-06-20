@@ -21,10 +21,10 @@ Termit uses semantic-ish versioning in `VERSION` and git tags `v{VERSION}`.
 3. Set `VERSION` to `X.Y.Z`.
 4. **Quality**:
    ```bash
-   .venv/bin/python -m unittest discover -s tests -q
-   ./scripts/release_smoke_core.sh
-   # optional local release tier:
-   TERMIT_EVAL_GATE_TIER=release ./scripts/release_smoke_extended.sh
+   ./scripts/pre_release_check.sh
+   # или по частям:
+   ./scripts/release_gate_local.sh
+   TERMIT_RELEASE_RUN_STAGING=true ./scripts/pre_release_check.sh
    ```
 5. **Ship**:
    ```bash
@@ -60,4 +60,6 @@ Follow `docs/ROLLBACK_PLAN_{version}.md` for the deployed version. Always verify
 
 - [`RELEASE_CHECKLIST.md`](../RELEASE_CHECKLIST.md)
 - [`scripts/release_all.sh`](../scripts/release_all.sh)
+- [`scripts/pre_release_check.sh`](../scripts/pre_release_check.sh)
+- [`scripts/release_gate_staging.sh`](../scripts/release_gate_staging.sh)
 - [`scripts/release_pack.sh`](../scripts/release_pack.sh)
