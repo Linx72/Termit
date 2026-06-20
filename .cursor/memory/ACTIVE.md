@@ -1,14 +1,14 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-20 — **v0.4.27 полностью green**
+**Последнее обновление:** 2026-06-20 — **do_all_automatic green + commit pending**
 
 ## Сводка
-- **v0.4.27** — Release + desktop zip: https://github.com/Linx72/Termit/releases/tag/v0.4.27
-- CI + Agent Eval — **success**
-- **Release Gate Staging** — **success** (ubuntu Docker, operator-key, non-strict beta)
-- Docs: `MIGRATION_NOTES_0.4.27.md`, `ROLLBACK_PLAN_0.4.27.md`
+- **do_all_automatic** (plan + learning + hosted) — exit 0 ~5.4 min
+- Fix: `do_all_automatic.sh` без `source .env`; `.env.example` кавычки VERIFY_CMD
+- Cloud benchmark: `OPENAI_COMPAT_API_KEY` в `.env` **пустой** — probe missing_api_key
+- v0.4.27 Release + CI + Release Gate Staging — green
 
-## Real prod (нужны секреты пользователя)
-- [ ] `OPENAI_COMPAT_API_KEY` → GitHub Secrets + `.env` → cloud benchmark vs V4
-- [ ] `TERMIT_BETA_PROD_URL` + 5+ real desktop users
-- [ ] GPU / `TERMIT_REMOTE_GPU_SSH` → real DPO + KPI +5%
+## Real prod blockers
+- [ ] Заполнить `OPENAI_COMPAT_API_KEY` в `.env` + GitHub Secrets
+- [ ] GPU / `TERMIT_REMOTE_GPU_SSH` → real DPO
+- [ ] `TERMIT_BETA_PROD_URL` + real desktop users

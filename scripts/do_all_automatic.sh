@@ -169,13 +169,9 @@ fi
 if [[ "${TERMIT_DO_ALL_PLAN:-false}" == "true" ]]; then
   echo ""
   echo "== 7/7 Do-all plan (фаза 5) =="
-  if [[ -f "${ROOT}/.env" ]]; then
-    # shellcheck disable=SC1090
-    set -a
-    source "${ROOT}/.env"
-    set +a
-  fi
+  # .env читает Python (dotenv); не source — значения с пробелами ломают bash.
   TERMIT_PLAN_TRY_STRICT_LIVE="${TERMIT_PLAN_TRY_STRICT_LIVE:-false}" \
+  TERMIT_DO_ALL_LEARNING_0423="${TERMIT_DO_ALL_LEARNING_0423:-false}" \
     "${ROOT}/scripts/do_all_plan.sh"
   TERMIT_DO_ALL_DEPLOY_HOSTED="${TERMIT_DO_ALL_DEPLOY_HOSTED:-true}"
 fi
