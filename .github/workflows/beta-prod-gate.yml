@@ -20,16 +20,17 @@ jobs:
       - name: Install deps
         run: pip install -q -r requirements.txt
 
+      # secrets нельзя в if: — проверка URL внутри step через env.
       - name: Beta prod gate
-        if: ${{ secrets.TERMIT_BETA_PROD_URL != '' }}
         env:
           TERMIT_BETA_PROD_URL: ${{ secrets.TERMIT_BETA_PROD_URL }}
           TERMIT_API_KEY: ${{ secrets.TERMIT_API_KEY }}
-        run: ./scripts/beta_prod_gate.sh
-
-      - name: Skip (no prod URL secret)
-        if: ${{ secrets.TERMIT_BETA_PROD_URL == '' }}
-        run: echo "TERMIT_BETA_PROD_URL not configured — skip prod beta gate."
+        run: |
+          if [ -z "${TERMIT_BETA_PROD_URL}" ]; then
+            echo "TERMIT_BETA_PROD_URL not configured — skip prod beta gate."
+            exit 0
+          fi
+          ./scripts/beta_prod_gate.sh
 
       - name: Upload report
         if: always()
