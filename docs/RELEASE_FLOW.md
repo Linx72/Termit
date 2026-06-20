@@ -64,3 +64,4 @@ Follow `docs/ROLLBACK_PLAN_{version}.md` for the deployed version. Always verify
 - [`scripts/pre_release_check.sh`](../scripts/pre_release_check.sh)
 - [`scripts/release_gate_staging.sh`](../scripts/release_gate_staging.sh)
 - [`scripts/release_pack.sh`](../scripts/release_pack.sh)
+- [`scripts/prod_handoff_after_release.sh`](../scripts/prod_handoff_after_release.sh) — после релиза: secrets + workflows
