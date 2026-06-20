@@ -1,11 +1,12 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-20 — **v0.4.27 Release CI fix (DPO + venv)**
+**Последнее обновление:** 2026-06-20 — **v0.4.27 released, CI green**
 
 ## Сводка
-- v0.4.25 release без assets (Release workflow: DPO contract JSON parse)
-- v0.4.26: fix DPO export parse, agent-eval deep limit 53, staging docker install
-- Prod Readiness workflow — success; Release Gate Staging — docker missing (fixed in 0.4.26)
+- **v0.4.27** — Release success, desktop zip на GitHub
+- CI + Agent Eval — **success** (fast gate)
+- Docs: `MIGRATION_NOTES_0.4.27.md`, `ROLLBACK_PLAN_0.4.27.md`
+- Release Gate Staging: Colima fail на macOS runner → workflow на `ubuntu-latest`
 
 ## Real prod (нужны секреты пользователя)
 - [ ] `OPENAI_COMPAT_API_KEY` → GitHub Secrets + `.env`

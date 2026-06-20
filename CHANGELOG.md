@@ -8,6 +8,8 @@
 - `release.yml`: `python -m venv .venv` перед unit tests и desktop build
 - DPO contract test: `TERMIT_NORMALIZE_SIGNALS_BEFORE_DPO=false`
 - `agent-eval.yml`: только fast gate (cursor_parity×20), как CI push — deep×53 давал 90.6% на ubuntu
+- `release-gate-staging.yml`: `ubuntu-latest` + native Docker (Colima/VZ не работает на GH macOS)
+- Docs: `MIGRATION_NOTES_0.4.27.md`, `ROLLBACK_PLAN_0.4.27.md`
 
 ## [0.4.26] - 2026-06-20
 

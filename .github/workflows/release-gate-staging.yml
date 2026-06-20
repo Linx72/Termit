@@ -7,7 +7,8 @@ on:
 
 jobs:
   staging-gate:
-    runs-on: macos-latest
+    # ubuntu: встроенный Docker; macOS GH runners не поднимают Colima/VZ.
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -19,20 +20,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Install Colima and Docker CLI
-        run: |
-          if ! command -v docker >/dev/null 2>&1; then
-            brew install colima docker
-          fi
-
-      - name: Start Colima
-        run: |
-          if command -v colima >/dev/null 2>&1; then
-            colima start --cpu 2 --memory 4 || true
-          fi
-
       - name: Deploy hosted beta
-        run: ./scripts/start_colima_and_deploy_beta.sh
+        run: ./scripts/deploy_hosted_beta.sh
 
       - name: Prod readiness (plan + preflight + staging gate)
         run: |

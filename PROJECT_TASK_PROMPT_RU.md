@@ -552,6 +552,8 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 - [x] `cloud_benchmark_probe.py` — frontier_chain + /models availability hint
 - [x] `scripts/v4_ladder_smoke.sh` — локальный e2e без cloud key (exit 0)
 - [x] Terminal-Bench-style eval TB1–TB3 + SWE1–SWE5 в model_bound slice
+- [x] Push + tagged release **v0.4.27** (desktop assets, Release CI green)
+- [x] Agent Eval + CI green (fast gate); docs `MIGRATION_NOTES_0.4.27.md`
 - [ ] `OPENAI_COMPAT_API_KEY` → real capability report vs V4
 - [ ] GPU → real DPO + post-train delta ≥5%
 - [ ] `termit_win_rate` vs V4 ≥ 0.4 на hybrid ladder
