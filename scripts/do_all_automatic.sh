@@ -158,6 +158,14 @@ if [[ "${TERMIT_DO_ALL_DEV_GREEN:-false}" == "true" ]]; then
     || echo "WARN: plan_status_dev_green failed (non-blocking)."
 fi
 
+if [[ "${TERMIT_DO_ALL_RELEASE_GATE:-false}" == "true" ]]; then
+  echo ""
+  echo "== Release gate local (extended smoke + plan green) =="
+  TERMIT_RELEASE_SMOKE_PROFILE="${TERMIT_RELEASE_SMOKE_PROFILE:-extended}" \
+    "${ROOT}/scripts/release_gate_local.sh" \
+    || echo "WARN: release_gate_local failed (non-blocking)."
+fi
+
 if [[ "${TERMIT_DO_ALL_PLAN:-false}" == "true" ]]; then
   echo ""
   echo "== 7/7 Do-all plan (фаза 5) =="
@@ -247,6 +255,7 @@ echo "  Product KPI dev: TERMIT_PRODUCT_KPI_DEV_SEED=true scripts/seed_product_k
 echo "  Finetune KPI dev:  TERMIT_FINETUNE_KPI_DEV_SEED=true scripts/seed_finetune_kpi_dev.py"
 echo "  Local KPI bundle:  ./scripts/local_dev_kpi_seed.sh"
 echo "  Plan dev green:    ./scripts/plan_status_dev_green.sh"
+echo "  Release gate:      ./scripts/release_gate_local.sh"
 echo "  Do-all dev green:  TERMIT_DO_ALL_DEV_GREEN=true ./scripts/do_all_automatic.sh"
 echo "  DPO contract:    scripts/do_all_dpo_contract.sh"
 echo "  macOS live orch: scripts/nightly_macos_live_orchestration.sh"
