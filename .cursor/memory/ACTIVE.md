@@ -1,12 +1,12 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-20 (релиз v0.4.22 shipped)
+**Последнее обновление:** 2026-06-20 (prod beta gate)
 
 ## Сводка
-- **Релиз:** v0.4.22 shipped.
-- **Clients:** build_clients.sh (termit-client 12 tests, vscode, desktop).
-- **Preflight:** gpu_dpo_preflight.sh — exit 1 без GPU/SSH (ожидаемо).
+- **Prod beta gate:** `beta_prod_gate.sh` + workflow `beta-prod-gate.yml` (gate_mode=prod, D30+retention).
+- **Staging smoke prod gate:** OK на :8080 (локальный hosted beta).
+- **Learning loop:** preflight при `TERMIT_DPO_GPU_REQUIRED` или `TERMIT_LEARNING_LOOP_PREFLIGHT`.
 
 ## Открытые задачи
 - [ ] Real GPU DPO → preflight OK → learning_loop_0423.sh
-- [ ] Prod beta D30 ≥35% на real desktop
+- [ ] Prod beta: secret `TERMIT_BETA_PROD_URL` + 5+ real desktop users

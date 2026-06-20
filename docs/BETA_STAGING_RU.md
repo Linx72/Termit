@@ -50,6 +50,22 @@ python scripts/bootstrap_beta_staging_cohort.py --base-url http://127.0.0.1:8080
 python scripts/beta_telemetry_report.py --base-url http://127.0.0.1:8765 --strict
 ```
 
+## Prod beta gate (DoD 0.4.24 prod)
+
+Для **prod** (не staging bootstrap): D30 cohort ≥ 5, retention ≥ 35%, product gates green.
+
+```bash
+export TERMIT_BETA_PROD_URL=https://your-prod-host
+export TERMIT_API_KEY=...   # если auth включён
+./scripts/beta_prod_gate.sh
+```
+
+`gate_mode=prod` — учитывает `d30_retention_rate` (в отличие от staging `real`).
+
+CI: `.github/workflows/beta-prod-gate.yml` (weekly + dispatch, secret `TERMIT_BETA_PROD_URL`).
+
+Desktop на prod: в настройках API URL → prod; heartbeat `recordBetaActivityIfDue` (≤1/сутки, actor = `termit-device-id`).
+
 ## Dev seed (local only)
 
 ```bash

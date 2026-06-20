@@ -78,6 +78,34 @@ class BetaTelemetryReportTests(unittest.TestCase):
         )
         self.assertTrue(summary["staging_ok"])
 
+    def test_evaluate_prod_mode_requires_retention(self) -> None:
+        mod = _load_beta_report_module()
+        ok = mod.evaluate_beta_staging(
+            beta={
+                "cohort_size_d30": 6,
+                "d30_retention_rate": 0.5,
+                "target_d30_retention": 0.35,
+            },
+            gates={"overall_passed": True, "gates": []},
+            min_cohort_d30=5,
+            gate_mode="prod",
+        )
+        self.assertTrue(ok["retention_ok"])
+        self.assertTrue(ok["staging_ok"])
+
+        fail = mod.evaluate_beta_staging(
+            beta={
+                "cohort_size_d30": 6,
+                "d30_retention_rate": 0.2,
+                "target_d30_retention": 0.35,
+            },
+            gates={"overall_passed": True, "gates": []},
+            min_cohort_d30=5,
+            gate_mode="prod",
+        )
+        self.assertFalse(fail["retention_ok"])
+        self.assertFalse(fail["staging_ok"])
+
 
 class PlanStatusBetaMetaTests(unittest.TestCase):
     def test_beta_dev_seed_warning_instead_of_small_cohort(self) -> None:

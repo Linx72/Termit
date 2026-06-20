@@ -38,6 +38,17 @@ REMOTE_GPU=false
 
 echo "== Learning loop 0.4.23 (model=ollama:${MODEL}, scenarios=${SCENARIO_IDS}) =="
 
+if [[ "${TERMIT_DPO_GPU_REQUIRED:-false}" == "true" || "${TERMIT_LEARNING_LOOP_PREFLIGHT:-false}" == "true" ]]; then
+  echo ""
+  echo "== 0/6 GPU/cloud preflight =="
+  if ! "${ROOT}/scripts/gpu_dpo_preflight.sh"; then
+    if [[ "${TERMIT_DPO_GPU_REQUIRED:-false}" == "true" ]]; then
+      exit 1
+    fi
+    echo "WARN: preflight не пройден (non-required)." >&2
+  fi
+fi
+
 echo ""
 echo "== 1/6 Infra probes (GPU + cloud) =="
 GPU_JSON="$("${PYTHON_BIN}" "${ROOT}/scripts/gpu_probe.py")"

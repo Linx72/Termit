@@ -537,13 +537,15 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 - [x] Hosted beta deploy локально (:8080, Colima + `start_colima_and_deploy_beta.sh`)
 - [x] 5+ beta actors на staging (`bootstrap_beta_staging_cohort.py`, gate_mode=real)
 - [x] Product gates green на :8080 (`seed_hosted_product_kpi.sh`, `release_gate_staging.sh`)
-- [ ] Prod beta: 5+ пользователей без dev seed + D30 ≥35%
+- [x] `scripts/beta_prod_gate.sh` + `gate_mode=prod` (D30 + retention ≥35%)
+- [x] `.github/workflows/beta-prod-gate.yml` (secret `TERMIT_BETA_PROD_URL`)
+- [ ] Prod beta: 5+ **real** desktop users без dev seed + D30 ≥35% на prod URL
 
 **DoD:** cohort_size_d30 ≥5; desktop_kpi_gates overall_passed на beta/staging.
 
 ### Следующий этап (0.4.25): Production hardening (Day 90)
 
-- [ ] Push + tagged release (`release_all.sh` после VERSION bump)
+- [x] Push + tagged release v0.4.22 (`release_all.sh`)
 - [x] `scripts/pre_release_check.sh` + `release-gate-staging.yml` (weekly CI)
 - [x] `scripts/release_gate_staging.sh` — smoke + KPI seed + beta bootstrap + gates
 - [x] TERMIT_RELEASE_PLAN_STRICT opt-in в `release_gate_local.sh`

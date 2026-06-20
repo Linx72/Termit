@@ -1,0 +1,40 @@
+name: Beta Prod Gate
+
+# Еженедельная проверка prod beta D30 (нужен secret TERMIT_BETA_PROD_URL).
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  beta-prod-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -q -r requirements.txt
+
+      - name: Beta prod gate
+        if: ${{ secrets.TERMIT_BETA_PROD_URL != '' }}
+        env:
+          TERMIT_BETA_PROD_URL: ${{ secrets.TERMIT_BETA_PROD_URL }}
+          TERMIT_API_KEY: ${{ secrets.TERMIT_API_KEY }}
+        run: ./scripts/beta_prod_gate.sh
+
+      - name: Skip (no prod URL secret)
+        if: ${{ secrets.TERMIT_BETA_PROD_URL == '' }}
+        run: echo "TERMIT_BETA_PROD_URL not configured — skip prod beta gate."
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-prod-gate
+          path: data/beta_prod_gate_last.json
+          if-no-files-found: ignore

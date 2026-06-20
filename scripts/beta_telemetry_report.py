@@ -77,6 +77,14 @@ def evaluate_beta_staging(
         cohort_ok = tracked >= min_tracked and active_7d >= min_active_7d
         retention_ok = True
         staging_ok = cohort_ok and (gates_passed if require_product_gates else True)
+    elif mode == "prod":
+        # Prod DoD 0.4.24: cohort D30 ≥ N и retention ≥ target (не bootstrap-only).
+        cohort_ok = cohort >= min_cohort_d30
+        retention_ok = False
+        target = float(beta.get("target_d30_retention", 0.35) or 0.35)
+        if cohort_ok and isinstance(d30, (int, float)):
+            retention_ok = float(d30) >= target
+        staging_ok = cohort_ok and retention_ok and (gates_passed if require_product_gates else True)
     else:
         cohort_ok = cohort >= min_cohort_d30
         retention_ok = True
@@ -117,8 +125,8 @@ def main() -> int:
     parser.add_argument(
         "--gate-mode",
         default=os.getenv("TERMIT_BETA_GATE_MODE", "d30"),
-        choices=("d30", "real"),
-        help="d30=cohort_size_d30; real=tracked_actors для свежего staging",
+        choices=("d30", "real", "prod"),
+        help="d30=cohort_size_d30; real=tracked_actors; prod=D30 cohort + retention target",
     )
     parser.add_argument(
         "--min-tracked",
@@ -136,6 +144,11 @@ def main() -> int:
         choices=("true", "false"),
     )
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument(
+        "--reject-dev-seed",
+        action="store_true",
+        help="Fail strict если локальный beta_cohort_meta.json dev_only (local API only)",
+    )
     parser.add_argument("--output", default="")
     args = parser.parse_args()
 
@@ -155,6 +168,9 @@ def main() -> int:
     )
     if meta and meta.get("dev_only"):
         summary["beta_dev_seed"] = True
+    if args.reject_dev_seed and summary.get("beta_dev_seed"):
+        summary["dev_seed_rejected"] = True
+        summary["staging_ok"] = False
     summary["beta_metrics"] = beta
     summary["desktop_kpi_gates"] = gates
 

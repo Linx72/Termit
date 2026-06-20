@@ -175,6 +175,7 @@ class LearningLoopScriptSyntaxTests(unittest.TestCase):
             "remote_gpu_dpo.sh",
             "gpu_dpo_preflight.sh",
             "build_clients.sh",
+            "beta_prod_gate.sh",
         ):
             proc = subprocess.run(
                 ["bash", "-n", str(ROOT / "scripts" / name)],
