@@ -1,0 +1,29 @@
+[
+  {
+    "id": "TB1",
+    "category": "terminal_bench",
+    "title": "Terminal: dry-run shell",
+    "prompt": "Execute echo in dry-run mode without side effects.",
+    "runner": "tool_exec",
+    "tool_command": "echo termit-tb1-ok",
+    "tool_dry_run": true
+  },
+  {
+    "id": "TB2",
+    "category": "terminal_bench",
+    "title": "Terminal: list service modules",
+    "prompt": "List Python modules under app/services.",
+    "runner": "tool_list",
+    "tool_path": "app/services",
+    "tool_pattern": "*.py"
+  },
+  {
+    "id": "TB3",
+    "category": "terminal_bench",
+    "title": "Terminal: python smoke",
+    "prompt": "Run python3 one-liner and verify stdout marker.",
+    "runner": "tool_exec",
+    "tool_command": "python3 -c \"print('tb3_ok')\"",
+    "tool_dry_run": false
+  }
+]

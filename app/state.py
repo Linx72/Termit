@@ -46,8 +46,9 @@ from app.services.providers.factory import build_llm_providers
 from app.services.sqlite_memory_store import SQLiteMemoryStore
 from app.services.sqlite_agent_run_store import SQLiteAgentRunStore
 from app.services.eval_report_store import EvalReportStore
-from app.services.orchestration_eval_report_store import OrchestrationEvalReportStore
 from app.services.eval_service import EvalService
+from app.services.orchestration_eval_report_store import OrchestrationEvalReportStore
+from app.services.eval_standalone import extra_eval_scenario_paths
 from app.services.finetune_service import FinetuneService
 from app.services.finetune_adapter_resolver import FinetuneAdapterResolver
 from app.services.finetune_trainer_service import FinetuneTrainerService
@@ -619,11 +620,7 @@ def _build_eval_service() -> EvalService:
         retrieval_service=_build_code_retrieval_service(),
         symbol_index_service=_build_symbol_index_service(),
         extra_scenarios_path=settings.media_eval_scenarios_path,
-        extra_scenarios_paths=[
-            settings.eval_iq_scenarios_path,
-            settings.eval_swe_scenarios_path,
-            settings.eval_humaneval_scenarios_path,
-        ],
+        extra_scenarios_paths=extra_eval_scenario_paths(settings),
         quality_judge=quality_judge,
         llm_caller=llm_caller,
         model_benchmark_scenarios_path=settings.eval_model_benchmark_scenarios_path,

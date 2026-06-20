@@ -102,19 +102,42 @@ class ModelRouterTests(unittest.TestCase):
         self.assertEqual(models[0], "ollama:qwen2.5-coder")
 
     def test_high_complexity_includes_frontier_fallback(self) -> None:
-        router = ModelRouter(build_settings())
+        settings = build_settings()
+        settings = Settings(
+            **{
+                **settings.__dict__,
+                "frontier_fallback_model": "openai_compat:deepseek-ai/DeepSeek-V4-Pro",
+            }
+        )
+        router = ModelRouter(settings)
         models = router.candidate_models(
             TaskType.coding,
             message="refactor architecture across multiple services with migration plan",
         )
+        self.assertIn("openai_compat:deepseek-ai/DeepSeek-V4-Pro", models)
+
+    def test_high_complexity_includes_frontier_chain(self) -> None:
+        settings = build_settings()
+        settings = Settings(
+            **{
+                **settings.__dict__,
+                "frontier_fallback_model": "openai_compat:deepseek-ai/DeepSeek-V4-Pro",
+            }
+        )
+        router = ModelRouter(settings)
+        models = router.candidate_models(
+            TaskType.coding,
+            message="refactor architecture across multiple services with migration plan",
+        )
+        self.assertIn("openai_compat:deepseek-ai/DeepSeek-V4-Pro", models)
+        self.assertIn("openai_compat:deepseek-ai/DeepSeek-V4-Flash", models)
         self.assertIn("openai_compat:deepseek-ai/DeepSeek-V3", models)
 
-    def test_routing_tiers_exposed(self) -> None:
+    def test_routing_tiers_exposes_frontier_chain(self) -> None:
         router = ModelRouter(build_settings())
         tiers = router.routing_tiers()
-        self.assertIn("fast", tiers)
-        self.assertIn("strong_local", tiers)
-        self.assertIn("frontier_fallback", tiers)
+        self.assertIn("frontier_chain", tiers)
+        self.assertIn("DeepSeek-V4-Pro", tiers["frontier_chain"])
 
     def test_cost_aware_routing_prefers_cheaper_model_for_low_complexity(self) -> None:
         settings = Settings(

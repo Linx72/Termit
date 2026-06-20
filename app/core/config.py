@@ -155,17 +155,18 @@ class Settings:
     eval_ci_limit: int = 53
     eval_iq_scenarios_path: str = "./data/eval_scenarios_iq.json"
     eval_swe_scenarios_path: str = "./data/eval_scenarios_swe.json"
+    eval_terminal_scenarios_path: str = "./data/eval_scenarios_terminal.json"
     eval_humaneval_scenarios_path: str = "./data/eval_scenarios_humaneval.json"
     eval_model_benchmark_scenarios_path: str = "./data/eval_scenarios_model_benchmark.json"
     eval_quality_judge_model: str = ""
-    eval_benchmark_reference_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
+    eval_benchmark_reference_model: str = "openai_compat:deepseek-ai/DeepSeek-V4-Pro"
     eval_capability_baseline_path: str = "./data/eval_capability_baseline.json"
     capability_regression_max_pass_gap_drop: float = 0.05
     capability_regression_max_quality_gap_drop: float = 0.05
     capability_regression_max_win_rate_drop: float = 0.10
-    cloud_teacher_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
+    cloud_teacher_model: str = "openai_compat:deepseek-ai/DeepSeek-V4-Pro"
     fast_model: str = "ollama:qwen2.5-coder"
-    frontier_fallback_model: str = "openai_compat:deepseek-ai/DeepSeek-V3"
+    frontier_fallback_model: str = "openai_compat:deepseek-ai/DeepSeek-V4-Pro"
     reasoning_draft_model: str = ""
     reasoning_critic_model: str = ""
     orchestration_openhands_contract_enabled: bool = False
@@ -250,7 +251,7 @@ class Settings:
     chat_latency_recent_window: int = 50
     tool_loop_metrics_recent_days: int = 7
     tool_loop_metrics_recent_run_window: int = 5
-    routing_max_candidates: int = 4
+    routing_max_candidates: int = 6
     routing_cost_aware_enabled: bool = False
     routing_model_costs: str = ""
     routing_default_openai_cost_usd: float = 0.002
@@ -457,6 +458,9 @@ def get_settings() -> Settings:
         eval_swe_scenarios_path=os.getenv(
             "TERMIT_EVAL_SWE_SCENARIOS_PATH", "./data/eval_scenarios_swe.json"
         ),
+        eval_terminal_scenarios_path=os.getenv(
+            "TERMIT_EVAL_TERMINAL_SCENARIOS_PATH", "./data/eval_scenarios_terminal.json"
+        ),
         eval_humaneval_scenarios_path=os.getenv(
             "TERMIT_EVAL_HUMANEVAL_SCENARIOS_PATH", "./data/eval_scenarios_humaneval.json"
         ),
@@ -467,7 +471,7 @@ def get_settings() -> Settings:
         eval_quality_judge_model=os.getenv("TERMIT_EVAL_QUALITY_JUDGE_MODEL", ""),
         eval_benchmark_reference_model=os.getenv(
             "TERMIT_EVAL_BENCHMARK_REFERENCE_MODEL",
-            "openai_compat:deepseek-ai/DeepSeek-V3",
+            "openai_compat:deepseek-ai/DeepSeek-V4-Pro",
         ),
         eval_capability_baseline_path=os.getenv(
             "TERMIT_EVAL_CAPABILITY_BASELINE_PATH",
@@ -487,12 +491,12 @@ def get_settings() -> Settings:
         ),
         cloud_teacher_model=os.getenv(
             "TERMIT_CLOUD_TEACHER_MODEL",
-            "openai_compat:deepseek-ai/DeepSeek-V3",
+            "openai_compat:deepseek-ai/DeepSeek-V4-Pro",
         ),
         fast_model=os.getenv("TERMIT_FAST_MODEL", "ollama:qwen2.5-coder"),
         frontier_fallback_model=os.getenv(
             "TERMIT_FRONTIER_FALLBACK_MODEL",
-            "openai_compat:deepseek-ai/DeepSeek-V3",
+            "openai_compat:deepseek-ai/DeepSeek-V4-Pro",
         ),
         reasoning_draft_model=os.getenv("TERMIT_REASONING_DRAFT_MODEL", ""),
         reasoning_critic_model=os.getenv("TERMIT_REASONING_CRITIC_MODEL", ""),
@@ -715,7 +719,7 @@ def get_settings() -> Settings:
             0, int(os.getenv("TERMIT_TOOL_LOOP_METRICS_RECENT_RUN_WINDOW", "5"))
         ),
         alert_webhook_url=os.getenv("TERMIT_ALERT_WEBHOOK_URL", ""),
-        routing_max_candidates=int(os.getenv("TERMIT_ROUTING_MAX_CANDIDATES", "4")),
+        routing_max_candidates=int(os.getenv("TERMIT_ROUTING_MAX_CANDIDATES", "6")),
         routing_cost_aware_enabled=os.getenv("TERMIT_ROUTING_COST_AWARE_ENABLED", "false").lower()
         in {"1", "true", "yes"},
         routing_model_costs=os.getenv("TERMIT_ROUTING_MODEL_COSTS", ""),

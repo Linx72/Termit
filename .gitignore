@@ -36,6 +36,7 @@ data/*
 !data/eval_scenarios_orchestration.json
 !data/eval_scenarios_model_benchmark.json
 !data/eval_scenarios_humaneval.json
+!data/eval_scenarios_terminal.json
 !data/agent_templates.json
 !data/skills/
 !data/skills/**/SKILL.md

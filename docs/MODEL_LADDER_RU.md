@@ -23,7 +23,7 @@
 LOW / tab         → ollama:qwen2.5-coder (7B, быстрый FIM)
 CODE agents       → vllm:Qwen/Qwen3-Coder-Next (MoE, native tools)
 CODE fallback     → ollama:termit-core-ft или qwen2.5-coder:14b
-HIGH / dual-pass  → openai_compat:DeepSeek-V3 (cloud key)
+HIGH / dual-pass  → openai_compat:DeepSeek-V4-Pro (cloud key; fallback V4-Flash → V3)
 Embeddings        → nomic-embed-text (Ollama)
 ```
 
@@ -34,7 +34,7 @@ LOW coding        → ollama:qwen2.5-coder (7B, fast)
 DEFAULT agents    → ollama:termit-core-ft (FROM qwen2.5-coder:14b)
 CODE fallback     → ollama:qwen2.5-coder:14b
 HIGH / dual-pass  → openai_compat:Qwen2.5-Coder-32B (нужен API key)
-Frontier          → openai_compat:DeepSeek-V3
+Frontier          → openai_compat:DeepSeek-V4-Pro
 Embeddings        → nomic-embed-text
 ```
 
@@ -90,7 +90,8 @@ Agent tool loop для `ollama:*` и `vllm:*` использует OpenAI-style 
 |-------|----------------|------|--------------|
 | Ollama 14B dense | 1× | ~12 GB | ✓ qwen2.5 |
 | vLLM Qwen3-Coder-Next MoE | 3–5× | ~24–48 GB | ✓ hermes parser |
-| Cloud DeepSeek-V3 | quality↑ | — | ✓ |
+| Cloud DeepSeek-V4-Pro | quality↑ | — | ✓ |
+| Cloud DeepSeek-V3 (fallback) | quality | — | ✓ |
 
 Moat Termit — **harness** (tools, eval, finetune, ось B lazy context), не одна weights file.
 
@@ -104,4 +105,26 @@ TERMIT_COHESION_PARTITION_ENABLED=true
 
 ## Дальше (фазы C–E)
 
-GPU DPO train, cloud benchmark gate, beta product KPI — см. `PROJECT_TASK_PROMPT_RU.md` 0.4.23–0.4.25.
+### Фаза C — DeepSeek V4 ladder (2026)
+
+```bash
+./scripts/v4_ladder_smoke.sh          # phase0 + capability CI + model_bound + learning loop CI
+./scripts/upgrade_model_ladder_v4.sh
+# Проверка готовности фазы 0:
+./scripts/phase0_v4_readiness.sh
+TERMIT_PHASE0_RUN_BENCHMARK=true ./scripts/phase0_v4_readiness.sh
+```
+
+Env:
+
+```bash
+TERMIT_FRONTIER_FALLBACK_MODEL=openai_compat:deepseek-ai/DeepSeek-V4-Pro
+TERMIT_FRONTIER_FALLBACK_CHAIN=openai_compat:deepseek-ai/DeepSeek-V4-Pro,openai_compat:deepseek-ai/DeepSeek-V4-Flash,openai_compat:deepseek-ai/DeepSeek-V3
+TERMIT_EVAL_BENCHMARK_REFERENCE_MODEL=openai_compat:deepseek-ai/DeepSeek-V4-Pro
+TERMIT_EVAL_QUALITY_JUDGE_MODEL=openai_compat:deepseek-ai/DeepSeek-V4-Pro
+OPENAI_COMPAT_API_KEY=<ключ>
+```
+
+Если провайдер ещё не выдает V4 — временно `TERMIT_EVAL_BENCHMARK_REFERENCE_MODEL=openai_compat:deepseek-ai/DeepSeek-V3`.
+
+GPU DPO train, cloud benchmark gate, beta product KPI — см. `PROJECT_TASK_PROMPT_RU.md` 0.4.23–0.4.26.

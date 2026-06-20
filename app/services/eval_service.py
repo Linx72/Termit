@@ -144,7 +144,8 @@ class EvalService:
         return [item.id for item in self._model_benchmark_scenarios]
 
     def model_bound_tool_scenario_ids(self) -> list[str]:
-        return [item.id for item in self._scenarios if item.category in ("humaneval", "mbpp")]
+        tool_categories = ("humaneval", "mbpp", "swe_bench", "terminal_bench")
+        return [item.id for item in self._scenarios if item.category in tool_categories]
 
     def model_bound_scenario_ids(self) -> list[str]:
         return self.model_benchmark_scenario_ids() + self.model_bound_tool_scenario_ids()

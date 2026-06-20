@@ -37,7 +37,7 @@ else
 fi
 
 echo ""
-echo "== 2/4 GPU / cloud preflight =="
+echo "== 2/5 GPU / cloud preflight =="
 if ! "${ROOT}/scripts/gpu_dpo_preflight.sh"; then
   PREFLIGHT_BLOCKER=1
   if [[ "${STRICT_GPU}" == "true" ]]; then
@@ -45,6 +45,14 @@ if ! "${ROOT}/scripts/gpu_dpo_preflight.sh"; then
     exit 1
   fi
   echo "WARN: GPU/cloud preflight blockers (non-fatal unless TERMIT_PROD_READINESS_STRICT_GPU=true)."
+fi
+
+if [[ "${TERMIT_PROD_READINESS_PHASE0:-true}" == "true" ]]; then
+  echo ""
+  echo "== 2b/5 Phase 0 V4 readiness (non-strict) =="
+  TERMIT_PHASE0_STRICT=false \
+  TERMIT_PHASE0_RUN_BENCHMARK=false \
+    "${ROOT}/scripts/phase0_v4_readiness.sh" || echo "WARN: phase0 readiness reported gaps."
 fi
 
 STAGING_RUN=false
@@ -60,7 +68,7 @@ fi
 
 if [[ "${STAGING_RUN}" == "true" ]]; then
   echo ""
-  echo "== 3/4 Staging gate (${HOSTED_URL}) =="
+  echo "== 3/5 Staging gate (${HOSTED_URL}) =="
   if TERMIT_HOSTED_BASE_URL="${HOSTED_URL}" "${ROOT}/scripts/release_gate_staging.sh"; then
     echo "OK — staging gate."
   else
@@ -69,12 +77,12 @@ if [[ "${STAGING_RUN}" == "true" ]]; then
   fi
 else
   echo ""
-  echo "== 3/4 Staging gate — skip (TERMIT_PROD_READINESS_STAGING=${RUN_STAGING}) =="
+  echo "== 3/5 Staging gate — skip (TERMIT_PROD_READINESS_STAGING=${RUN_STAGING}) =="
 fi
 
 if [[ -n "${TERMIT_BETA_PROD_URL:-${TERMIT_HOSTED_PROD_URL:-}}" ]]; then
   echo ""
-  echo "== 4/4 Prod beta gate =="
+  echo "== 4/5 Prod beta gate =="
   if "${ROOT}/scripts/beta_prod_gate.sh"; then
     echo "OK — prod beta gate."
   else
@@ -83,7 +91,7 @@ if [[ -n "${TERMIT_BETA_PROD_URL:-${TERMIT_HOSTED_PROD_URL:-}}" ]]; then
   fi
 else
   echo ""
-  echo "== 4/4 Prod beta gate — skip (задайте TERMIT_BETA_PROD_URL) =="
+  echo "== 4/5 Prod beta gate — skip (задайте TERMIT_BETA_PROD_URL) =="
 fi
 
 echo ""

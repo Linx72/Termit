@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -13,42 +12,16 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.core.config import get_settings
-from app.core.model_roles import resolve_cloud_teacher_model
-from app.services.eval_quality_judge_service import EvalQualityJudgeService
-from app.services.eval_service import EvalService
-from app.services.tooling_service import ToolingService
-from app.state import _build_llm_caller_service
+from app.services.eval_standalone import build_standalone_eval_service, default_post_dpo_scenario_ids
 
 
 def _normalize_model(raw: str) -> str:
     model = raw.strip()
     if not model:
         return model
-    if model.startswith("ollama:"):
+    if ":" in model:
         return model
     return f"ollama:{model}"
-
-
-def _build_eval_service() -> EvalService:
-    settings = get_settings()
-    llm_caller = _build_llm_caller_service()
-    judge_model = settings.eval_quality_judge_model or resolve_cloud_teacher_model(settings)
-    quality_judge = EvalQualityJudgeService(
-        judge_model=judge_model,
-        llm_caller=llm_caller.call,
-    )
-    tooling = ToolingService(root_path=str(ROOT))
-    return EvalService(
-        scenarios_path=settings.eval_scenarios_path,
-        tooling_service=tooling,
-        extra_scenarios_paths=[
-            settings.eval_humaneval_scenarios_path,
-        ],
-        quality_judge=quality_judge,
-        llm_caller=llm_caller,
-        model_benchmark_scenarios_path=settings.eval_model_benchmark_scenarios_path,
-    )
 
 
 def _parse_scenario_ids(raw: str) -> list[str]:
@@ -58,16 +31,11 @@ def _parse_scenario_ids(raw: str) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Model-bound LLM eval для finetune KPI")
     parser.add_argument("--model", required=True, help="ID модели, напр. ollama:termit-core-ft")
-    default_ids = os.getenv("TERMIT_EVAL_MODEL_KPI_IDS", "MB1,MB2,MB3")
-    if os.getenv("TERMIT_EVAL_POST_DPO_FULL", "").lower() in {"1", "true", "yes"}:
-        default_ids = os.getenv(
-            "TERMIT_EVAL_POST_DPO_IDS",
-            "MB1,MB2,MB3,HE1,HE2,MBPP1,MBPP2",
-        )
+    default_ids = default_post_dpo_scenario_ids()
     parser.add_argument(
         "--scenario-ids",
         default=default_ids,
-        help="ID сценариев через запятую (MB1–MB3 или + HE/MBPP при POST_DPO_FULL)",
+        help="ID сценариев через запятую (MB/KPI или полный post-DPO slice)",
     )
     parser.add_argument("--output", required=True, help="Путь JSON-отчёта")
     parser.add_argument("--persist-report", action="store_true", help="Сохранить отчёт в eval store")
@@ -79,17 +47,17 @@ def main() -> int:
         return 2
 
     model = _normalize_model(args.model)
-    service = _build_eval_service()
+    service = build_standalone_eval_service(root_path=str(ROOT))
     report = service.run_scenario_ids(
         scenario_ids,
         persist_report=args.persist_report,
-        category_filter="model_benchmark_kpi",
+        category_filter="model_kpi",
         model=model,
     )
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(json.dumps({"pass_rate": report["pass_rate"], "eval_model": model, "output": str(output)}, indent=2))
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(json.dumps({"output": str(output_path), "pass_rate": report["pass_rate"], "total": report["total"]}))
     return 0
 
 

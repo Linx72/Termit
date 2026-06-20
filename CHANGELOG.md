@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.4.25] - 2026-06-20
+
+### Added
+- DeepSeek V4 ladder: `app/core/frontier_models.py` (V4-Pro / V4-Flash / V3 chain)
+- Defaults frontier/cloud teacher/benchmark reference → `DeepSeek-V4-Pro`
+- `scripts/upgrade_model_ladder_v4.sh`, `scripts/phase0_v4_readiness.sh`, `scripts/capability_benchmark_ci.sh`
+- `cloud_benchmark_probe.py`: `frontier_chain`, проверка `/models`, hint при отсутствии V4
+- `model_router`: HIGH complexity использует полный frontier chain; `routing_tiers.frontier_chain`
+- `benchmark_baselines.py` / eval API: `resolve_benchmark_reference_model`, cloud judge fallback
+- `app/services/eval_standalone.py` — единая сборка EvalService для CLI + post-DPO ids (SWE/TB)
+- `scripts/v4_ladder_smoke.sh` — локальный end-to-end без cloud key
+- Fix: `learning_loop_0423_report.py` — sys.path для import `app`
+- `TERMIT_EVAL_TERMINAL_SCENARIOS_PATH`, CI step `capability_benchmark_ci.sh`
+
+## [0.4.24] - 2026-06-20
+
+### Added
+- `CachedSearchProvider` + `TERMIT_SEARCH_CACHE_TTL_SECONDS` (default 300) для web_search
+- `AgentMemoryStore.get_context_for_task()` — релевантная long-term memory по overlap с задачей
+- Eval: сценарии ON1–ON3 (`online_research`), `EvalService` через настроенный search provider
+- `release_smoke` extended: gate `online_research` (stub/SearXNG)
+- Тесты: `test_agent_memory_store.py`, DPO contract export в `test_gpu_and_automation_scripts`
+
+### Fixed
+- `do_all_dpo_contract.sh`: парсинг JSON (`raw_decode`, не `rfind` на `contract_stats`)
+- `restart_server.sh`: ожидание API до 30s (Ollama warm)
+- `run_local_orchestration_gate.sh`: stdin для eval gate (корректный exit code)
+- Live orch gate: timeout 360s (`run_live_orchestration_gate.sh`)
+
 ## [0.4.23] - 2026-06-20
 
 ### Added

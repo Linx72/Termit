@@ -27,6 +27,9 @@ class CloudBenchmarkProbeTests(unittest.TestCase):
         payload = json.loads(proc.stdout)
         self.assertFalse(payload.get("ready"))
 
+        self.assertIn("frontier_chain", payload)
+        self.assertIn("DeepSeek-V4-Pro", str(payload.get("frontier_chain", "")))
+
     def test_dev_stub_reports_ready(self) -> None:
         python_bin = ROOT / ".venv" / "bin" / "python"
         if not python_bin.exists():
@@ -106,6 +109,11 @@ class AutomationScriptTests(unittest.TestCase):
             "seed_hosted_product_kpi.sh",
             "beta_telemetry_report.py",
             "remote_gpu_dpo.sh",
+            "upgrade_model_ladder_v4.sh",
+            "phase0_v4_readiness.sh",
+            "capability_benchmark_ci.sh",
+            "v4_ladder_smoke.sh",
+            "learning_loop_0423_ci.sh",
         ):
             if name.endswith(".sh"):
                 proc = subprocess.run(

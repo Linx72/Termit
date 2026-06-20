@@ -43,12 +43,17 @@ def filter_runtime_candidates(settings: Settings, models: list[str]) -> list[str
 
 
 def resolve_cloud_teacher_model(settings: Settings) -> str:
+    from app.core.frontier_models import resolve_frontier_model
+
     cloud = settings.cloud_teacher_model.strip()
     if cloud:
         return cloud
     fallback = settings.teacher_fallback_model.strip()
     if fallback.startswith("openai_compat:"):
         return fallback
+    frontier = resolve_frontier_model(settings)
+    if frontier.startswith("openai_compat:"):
+        return frontier
     return settings.teacher_model.strip() or "ollama:deepseek-coder"
 
 

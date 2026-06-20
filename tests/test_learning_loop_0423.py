@@ -35,6 +35,25 @@ class LearningLoop0423ReportTests(unittest.TestCase):
         self.assertIn("HE1", ids)
         self.assertIn("MBPP1", ids)
         self.assertIn("MB1", ids)
+        self.assertIn("SWE1", ids)
+        self.assertIn("TB1", ids)
+
+    def test_skip_model_benchmark_post_dpo_ids(self) -> None:
+        from app.services.eval_standalone import default_post_dpo_scenario_ids
+
+        with unittest.mock.patch.dict(
+            os.environ,
+            {
+                "TERMIT_EVAL_POST_DPO_FULL": "true",
+                "TERMIT_LEARNING_LOOP_SKIP_MODEL_BENCHMARK": "true",
+                "TERMIT_EVAL_POST_DPO_IDS": "",
+            },
+            clear=False,
+        ):
+            ids = default_post_dpo_scenario_ids().split(",")
+        self.assertNotIn("MB1", ids)
+        self.assertIn("SWE1", ids)
+        self.assertIn("TB3", ids)
 
     def test_build_report_marks_real_train_on_gpu(self) -> None:
         mod = _load_report_module()

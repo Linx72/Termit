@@ -26,7 +26,7 @@ RELEASE_GATE = EvalGateTier(
     min_cloud_judge_coverage=1.0,
 )
 
-# Deterministic tool scenarios (HumanEval/MBPP fixtures) — safe for CI without cloud keys.
+# Deterministic tool scenarios (HumanEval/MBPP/SWE/Terminal fixtures) — safe for CI without cloud keys.
 MODEL_BOUND_CI_GATE = EvalGateTier(
     name="model_bound_ci",
     limit=0,

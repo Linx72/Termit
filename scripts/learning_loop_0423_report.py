@@ -6,19 +6,21 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 
 def default_post_dpo_scenario_ids() -> str:
-    """ID сценариев для post-DPO eval: MB1–MB3 + HumanEval + MBPP."""
-    override = os.getenv("TERMIT_EVAL_POST_DPO_IDS", "").strip()
-    if override:
-        return override
-    if os.getenv("TERMIT_EVAL_POST_DPO_FULL", "true").lower() in {"1", "true", "yes"}:
-        return "MB1,MB2,MB3,HE1,HE2,MBPP1,MBPP2"
-    return os.getenv("TERMIT_EVAL_MODEL_KPI_IDS", "MB1,MB2,MB3")
+    """Re-export для learning loop report (см. eval_standalone)."""
+    from app.services.eval_standalone import default_post_dpo_scenario_ids as _default
+
+    return _default()
 
 
 def pass_rate_from_report(path: Path) -> Optional[float]:

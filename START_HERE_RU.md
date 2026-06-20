@@ -91,14 +91,17 @@ TERMIT_RETRIEVAL_EMBED_MODEL=nomic-embed-text
 
 Переиндекс: UI или `POST /api/retrieval/reindex`. Без Ollama embeddings — fallback на keyword.
 
-## 6a. Model ladder (coding)
+## 6a. Model ladder (coding) — DeepSeek V4
 
 Док: [`docs/MODEL_LADDER_RU.md`](docs/MODEL_LADDER_RU.md).
 
 ```bash
-./scripts/upgrade_model_ladder_phase_a.sh   # pull 14B + recreate termit-core-ft
-# В .env: TERMIT_DUAL_PASS_ENABLED=true, OPENAI_COMPAT_API_KEY для cloud validator
-# Verify: scripts/swe_eval_gate.py (SWE1–5), do_all_verify.sh шаг 2c
+./scripts/upgrade_model_ladder_phase_a.sh   # Ollama: 14B + termit-core-ft
+./scripts/upgrade_model_ladder_v4.sh        # V4-Pro frontier + env-подсказки
+./scripts/v4_ladder_smoke.sh                # локальный smoke без cloud key
+# .env: TERMIT_FRONTIER_FALLBACK_MODEL=openai_compat:deepseek-ai/DeepSeek-V4-Pro
+#       OPENAI_COMPAT_API_KEY=…  → cloud benchmark vs V4
+# Verify: model_bound gate (SWE/HE/MBPP/TB), TERMIT_CAP_REFRESH_BASELINE=1 cloud_benchmark_cycle.sh
 ```
 
 ## 7. Кроссплатформа (iOS / macOS / Windows / Android)
@@ -147,7 +150,9 @@ TERMIT_AGENT_VERIFY_AFTER_PATCH=true
 | `do_all_automatic.sh` | Полный авто-режим: .env, LaunchAgent, crontab, schedulers |
 | `smoke_http.sh` | Curl smoke `:8765` (health, readiness, agent metrics) |
 | `smoke_all.sh` | Тесты + platform e2e + smoke HTTP (единый контур Фазы 0) |
-| `training_loop_week2.sh` | Export signals → job → KPI dashboard (Фаза 4) |
+| `upgrade_model_ladder_v4.sh` | Frontier DeepSeek V4-Pro + benchmark env |
+| `v4_ladder_smoke.sh` | Phase0 + capability CI + model_bound + learning loop (без API key) |
+| `phase0_v4_readiness.sh` | Probe GPU/cloud + optional benchmark |
 | `plan_status_dev_green.sh` | Локальный `overall_ok=true` (dev KPI seeds + relax env) |
 | `release_gate_local.sh` | Extended smoke + plan dev green (перед push/release) |
 | `local_dev_kpi_seed.sh` | Beta + finetune + product KPI dev seeds |

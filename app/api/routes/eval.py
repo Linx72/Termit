@@ -19,6 +19,7 @@ from app.domain.schemas import (
     RoutingBenchmarkSyncRequest,
     RoutingBenchmarkSyncResponse,
 )
+from app.core.frontier_models import resolve_benchmark_reference_model
 from app.services.eval_benchmark_service import EvalBenchmarkService
 from app.services.eval_ci_gate import (
     DEEP_GATE,
@@ -243,10 +244,11 @@ async def run_benchmark_baselines(
         scenario_ids = service.model_benchmark_scenario_ids()
     else:
         scenario_ids = ["IQ1", "SWE1", "A1"]
+    reference_model = resolve_benchmark_reference_model(settings)
     benchmark = EvalBenchmarkService(
         report_file_path=settings.eval_report_file_path,
         termit_model=settings.code_model,
-        reference_model=settings.eval_benchmark_reference_model,
+        reference_model=reference_model,
         scenario_runner=lambda scenario_id, model: service.run_scenario(scenario_id, model=model),
         quality_judge=lambda result: float(result.get("quality_score", 0.0) or 0.0),
     )
@@ -276,10 +278,11 @@ async def run_benchmark_baselines(
 @router.get("/benchmark/capability-review", response_model=EvalCapabilityReviewResponse)
 async def benchmark_capability_review(limit: int = 6) -> EvalCapabilityReviewResponse:
     settings = get_settings()
+    reference_model = resolve_benchmark_reference_model(settings)
     benchmark = EvalBenchmarkService(
         report_file_path=settings.eval_report_file_path,
         termit_model=settings.code_model,
-        reference_model=settings.eval_benchmark_reference_model,
+        reference_model=reference_model,
     )
     payload = benchmark.build_capability_review(limit=max(1, min(limit, 52)))
     return EvalCapabilityReviewResponse(**payload)
@@ -304,10 +307,11 @@ async def benchmark_capability_regression(
     if not isinstance(baseline_payload, dict):
         raise HTTPException(status_code=400, detail=f"Capability baseline must be JSON object: {baseline_file}")
 
+    reference_model = resolve_benchmark_reference_model(settings)
     benchmark = EvalBenchmarkService(
         report_file_path=settings.eval_report_file_path,
         termit_model=settings.code_model,
-        reference_model=settings.eval_benchmark_reference_model,
+        reference_model=reference_model,
     )
     payload = benchmark.build_capability_regression(
         baseline=baseline_payload,
@@ -338,10 +342,11 @@ async def refresh_capability_baseline(
 ) -> EvalCapabilityBaselineRefreshResponse:
     settings = get_settings()
     target_path = (baseline_path or settings.eval_capability_baseline_path).strip()
+    reference_model = resolve_benchmark_reference_model(settings)
     benchmark = EvalBenchmarkService(
         report_file_path=settings.eval_report_file_path,
         termit_model=settings.code_model,
-        reference_model=settings.eval_benchmark_reference_model,
+        reference_model=reference_model,
     )
     baseline = benchmark.refresh_capability_baseline(
         baseline_file_path=target_path,

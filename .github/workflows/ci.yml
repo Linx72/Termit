@@ -58,6 +58,10 @@ jobs:
         if: github.ref_name == 'main' || github.ref_name == 'master'
         run: ./scripts/prod_readiness_ci.sh
 
+      - name: V4 ladder smoke (phase0 + capability CI + model-bound + learning loop)
+        if: github.ref_name == 'main' || github.ref_name == 'master'
+        run: ./scripts/v4_ladder_smoke.sh
+
       - name: Eval fast gate (PR/main)
         env:
           TERMIT_EVAL_GATE_TIER: "fast"

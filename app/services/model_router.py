@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 from app.domain.schemas import ChatMessage
 from app.core.config import Settings
+from app.core.frontier_models import frontier_fallback_chain, resolve_benchmark_reference_model
 from app.core.model_roles import filter_runtime_candidates
 from app.domain.schemas import TaskType
 
@@ -83,7 +84,7 @@ class ModelRouter:
                 models = [
                     self.settings.code_model,
                     self.settings.analysis_model,
-                    self.settings.frontier_fallback_model,
+                    *frontier_fallback_chain(self.settings),
                     self.settings.code_fallback_model,
                     self.settings.analysis_fallback_model,
                 ]
@@ -223,8 +224,10 @@ class ModelRouter:
         return model_name.split(":", 1)[0]
 
     def routing_tiers(self) -> dict[str, str]:
+        chain = frontier_fallback_chain(self.settings)
         return {
             "fast": self.settings.fast_model,
             "strong_local": self.settings.code_model,
             "frontier_fallback": self.settings.frontier_fallback_model,
+            "frontier_chain": ",".join(chain),
         }

@@ -39,7 +39,7 @@ class EvalBenchmarkService:
         *,
         report_file_path: str = "./data/eval_reports.jsonl",
         termit_model: str = "ollama:termit-core-ft",
-        reference_model: str = "openai_compat:deepseek-ai/DeepSeek-V3",
+        reference_model: str = "openai_compat:deepseek-ai/DeepSeek-V4-Pro",
         scenario_runner: Optional[Callable[[str, str], dict[str, object]]] = None,
         quality_judge: Optional[Callable[[dict[str, object]], float]] = None,
     ) -> None:

@@ -14,20 +14,55 @@ class ModelBoundEvalTests(unittest.TestCase):
         self.service = EvalService(
             scenarios_path="./data/eval_scenarios.json",
             tooling_service=ToolingService(root_path="."),
-            extra_scenarios_paths=["./data/eval_scenarios_humaneval.json"],
+            extra_scenarios_paths=[
+                "./data/eval_scenarios_humaneval.json",
+                "./data/eval_scenarios_swe.json",
+                "./data/eval_scenarios_terminal.json",
+            ],
             model_benchmark_scenarios_path="./data/eval_scenarios_model_benchmark.json",
         )
 
     def test_model_bound_tool_ids(self) -> None:
         self.assertEqual(
             self.service.model_bound_tool_scenario_ids(),
-            ["HE1", "HE2", "MBPP1", "MBPP2"],
+            [
+                "HE1",
+                "HE2",
+                "MBPP1",
+                "MBPP2",
+                "SWE1",
+                "SWE2",
+                "SWE3",
+                "SWE4",
+                "SWE5",
+                "TB1",
+                "TB2",
+                "TB3",
+            ],
         )
 
     def test_model_bound_all_ids(self) -> None:
         self.assertEqual(
             self.service.model_bound_scenario_ids(),
-            ["MB1", "MB2", "MB3", "MT1", "MT2", "HE1", "HE2", "MBPP1", "MBPP2"],
+            [
+                "MB1",
+                "MB2",
+                "MB3",
+                "MT1",
+                "MT2",
+                "HE1",
+                "HE2",
+                "MBPP1",
+                "MBPP2",
+                "SWE1",
+                "SWE2",
+                "SWE3",
+                "SWE4",
+                "SWE5",
+                "TB1",
+                "TB2",
+                "TB3",
+            ],
         )
 
     def test_humaneval_patch_verify_passes(self) -> None:
@@ -36,6 +71,10 @@ class ModelBoundEvalTests(unittest.TestCase):
 
     def test_mbpp_exec_passes(self) -> None:
         result = self.service.run_scenario("MBPP1")
+        self.assertEqual(result["status"], "passed")
+
+    def test_terminal_bench_exec_passes(self) -> None:
+        result = self.service.run_scenario("TB3")
         self.assertEqual(result["status"], "passed")
 
     def test_model_bound_ci_gate_passes_on_tool_slice(self) -> None:
@@ -50,7 +89,7 @@ class ModelBoundEvalTests(unittest.TestCase):
             total=int(report["total"]),
         )
         self.assertTrue(ok, message)
-        self.assertEqual(int(report["total"]), 4)
+        self.assertEqual(int(report["total"]), 12)
 
 
 if __name__ == "__main__":

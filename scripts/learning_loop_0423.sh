@@ -16,15 +16,9 @@ MODEL_RAW="${TERMIT_FINETUNE_OUTPUT_MODEL:-termit-core-ft}"
 MODEL="${MODEL_RAW#ollama:}"
 SCENARIO_IDS="${TERMIT_EVAL_POST_DPO_IDS:-}"
 if [[ -z "${SCENARIO_IDS}" ]]; then
-  if [[ "${TERMIT_EVAL_POST_DPO_FULL:-true}" == "true" ]]; then
-    if [[ "${TERMIT_LEARNING_LOOP_SKIP_MODEL_BENCHMARK:-false}" == "true" ]]; then
-      SCENARIO_IDS="HE1,HE2,MBPP1,MBPP2"
-    else
-      SCENARIO_IDS="MB1,MB2,MB3,HE1,HE2,MBPP1,MBPP2"
-    fi
-  else
-    SCENARIO_IDS="${TERMIT_EVAL_MODEL_KPI_IDS:-MB1,MB2,MB3}"
-  fi
+  SCENARIO_IDS="$(
+    "${PYTHON_BIN}" -c "from app.services.eval_standalone import default_post_dpo_scenario_ids; print(default_post_dpo_scenario_ids())"
+  )"
 fi
 
 BASELINE="${TERMIT_EVAL_KPI_BASELINE:-${ROOT}/data/eval_kpi_baseline_dpo.json}"
@@ -90,7 +84,7 @@ if [[ "${TERMIT_DPO_GPU_REQUIRED:-false}" == "true" && "${DPO_EXIT}" -ne 0 ]]; t
 fi
 
 echo ""
-echo "== 4/6 Post-DPO eval (HE1/HE2/MBPP + MB1–MB3) =="
+echo "== 4/6 Post-DPO eval (model-bound slice: ${SCENARIO_IDS}) =="
 "${PYTHON_BIN}" "${ROOT}/scripts/post_train_model_eval.py" \
   --model "ollama:${MODEL}" \
   --scenario-ids "${SCENARIO_IDS}" \

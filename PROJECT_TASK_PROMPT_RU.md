@@ -543,6 +543,21 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** cohort_size_d30 ≥5; desktop_kpi_gates overall_passed на beta/staging.
 
+### Следующий этап (0.4.26): DeepSeek V4 ladder + phase 0 readiness
+
+- [x] `app/core/frontier_models.py` — V4-Pro / V4-Flash / V3 chain
+- [x] Defaults: `TERMIT_FRONTIER_FALLBACK_MODEL`, cloud teacher, benchmark reference → V4-Pro
+- [x] `scripts/upgrade_model_ladder_v4.sh` — env recommendations + optional benchmark
+- [x] `scripts/phase0_v4_readiness.sh` — probe + GPU + optional benchmark
+- [x] `cloud_benchmark_probe.py` — frontier_chain + /models availability hint
+- [x] `scripts/v4_ladder_smoke.sh` — локальный e2e без cloud key (exit 0)
+- [x] Terminal-Bench-style eval TB1–TB3 + SWE1–SWE5 в model_bound slice
+- [ ] `OPENAI_COMPAT_API_KEY` → real capability report vs V4
+- [ ] GPU → real DPO + post-train delta ≥5%
+- [ ] `termit_win_rate` vs V4 ≥ 0.4 на hybrid ladder
+
+**DoD:** `./scripts/phase0_v4_readiness.sh` strict green с ключом; первый benchmark report с cloud judge.
+
 ### Следующий этап (0.4.25): Production hardening (Day 90)
 
 - [x] Push + tagged release v0.4.22 (`release_all.sh`)
