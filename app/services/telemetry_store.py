@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from threading import Lock
 
 from app.domain.schemas import MetricsSummaryResponse
@@ -109,6 +110,34 @@ class TelemetryStore:
                     }
                 )
             return rows
+
+    def hydrate_from_dev_seed(self, payload: dict[str, object]) -> bool:
+        """Загрузить dev-only chat/task метрики из JSON (plan_status / cold start)."""
+        if not payload.get("dev_only"):
+            return False
+        latencies_raw = payload.get("chat_latencies_ms")
+        if not isinstance(latencies_raw, list) or not latencies_raw:
+            return False
+        latencies = [max(0, int(v)) for v in latencies_raw]
+        with self._lock:
+            self._chat_latencies_ms = latencies[-self._max_latency_points :]
+            self._chat_requests_total = int(payload.get("chat_requests_total", len(latencies)) or len(latencies))
+            self._chat_success_total = int(
+                payload.get("chat_success_total", self._chat_requests_total) or self._chat_requests_total
+            )
+            self._chat_cache_hits_total = int(payload.get("chat_cache_hits_total", 0) or 0)
+            self._chat_cache_miss_total = int(
+                payload.get("chat_cache_miss_total", self._chat_requests_total) or self._chat_requests_total
+            )
+            self._task_total = int(payload.get("task_total", 0) or 0)
+            self._task_completed = int(payload.get("task_completed", 0) or 0)
+            self._task_failed = int(payload.get("task_failed", 0) or 0)
+            self._task_auto_total = int(payload.get("task_auto_total", 0) or 0)
+        return True
+
+    @staticmethod
+    def dev_seed_file_path(state_dir: str) -> Path:
+        return Path(state_dir).resolve() / "dev_chat_metrics_seed.json"
 
     def snapshot(self) -> MetricsSummaryResponse:
         with self._lock:

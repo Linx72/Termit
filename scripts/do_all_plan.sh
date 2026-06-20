@@ -14,6 +14,15 @@ source "${ROOT}/.venv/bin/activate" 2>/dev/null || true
 
 echo "== Termit do_all_plan (фаза 5) =="
 
+if [[ "${TERMIT_PLAN_DEV_GREEN:-false}" == "true" ]]; then
+  export TERMIT_BETA_DEV_SEED=true
+  export TERMIT_PRODUCT_KPI_DEV_SEED=true
+  export TERMIT_FINETUNE_KPI_DEV_SEED=true
+  export TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS=true
+  export TERMIT_PLAN_STATUS_LOCAL=true
+  echo "TERMIT_PLAN_DEV_GREEN=true — dev seeds + relax env warnings для локального overall_ok."
+fi
+
 if [[ "${TERMIT_BETA_DEV_SEED:-false}" == "true" ]]; then
   echo ""
   echo "== 0/7 Beta dev cohort seed (local only) =="
@@ -26,6 +35,13 @@ if [[ "${TERMIT_PRODUCT_KPI_DEV_SEED:-false}" == "true" ]]; then
   echo "== 0b/7 Product KPI dev seed (local only) =="
   "${PYTHON_BIN}" "${ROOT}/scripts/seed_product_kpi_dev.py" --force \
     || echo "WARN: product KPI dev seed failed (non-blocking)."
+fi
+
+if [[ "${TERMIT_FINETUNE_KPI_DEV_SEED:-false}" == "true" ]]; then
+  echo ""
+  echo "== 0c/7 Finetune KPI dev seed (local only) =="
+  "${PYTHON_BIN}" "${ROOT}/scripts/seed_finetune_kpi_dev.py" --force \
+    || echo "WARN: finetune KPI dev seed failed (non-blocking)."
 fi
 
 echo ""
@@ -71,6 +87,9 @@ fi
 echo ""
 echo "== 7/7 Статус плана (после) =="
 PLAN_STRICT="${TERMIT_PLAN_STATUS_STRICT:-false}"
+if [[ "${TERMIT_PLAN_DEV_GREEN:-false}" == "true" ]]; then
+  PLAN_STRICT=true
+fi
 PLAN_ARGS=(--summary-only --output "${TERMIT_PLAN_STATUS_AFTER:-/tmp/termit_plan_status_after.json}")
 if [[ "${PLAN_STRICT}" == "true" ]]; then
   PLAN_ARGS+=(--strict)
@@ -88,3 +107,4 @@ echo "OK — do_all_plan завершён."
 echo "  Отчёты: ${TERMIT_PLAN_STATUS_BEFORE:-/tmp/termit_plan_status_before.json}"
 echo "          ${TERMIT_PLAN_STATUS_AFTER:-/tmp/termit_plan_status_after.json}"
 echo "  Strict product KPI: TERMIT_PLAN_STATUS_STRICT=true ${ROOT}/scripts/plan_status_check.py --strict"
+echo "  Dev green shortcut: TERMIT_PLAN_DEV_GREEN=true ${ROOT}/scripts/do_all_plan.sh"

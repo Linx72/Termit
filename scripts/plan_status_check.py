@@ -33,9 +33,11 @@ def _curl_json(url: str, api_key: str = "") -> dict[str, Any] | None:
 def collect_plan_status() -> dict[str, Any]:
     base_url = os.getenv("TERMIT_BASE_URL", "http://127.0.0.1:8765").rstrip("/")
     api_key = os.getenv("TERMIT_API_KEY", "")
+    prefer_local = os.getenv("TERMIT_PLAN_STATUS_LOCAL", "").lower() in {"1", "true", "yes"}
 
     health = _curl_json(f"{base_url}/health", api_key)
-    if health is not None:
+
+    if not prefer_local and health is not None:
         plan = _curl_json(f"{base_url}/api/ops/plan-status", api_key)
         if plan is not None:
             return plan
@@ -62,6 +64,11 @@ def print_summary(payload: dict[str, Any]) -> None:
     for item in payload.get("warnings") or []:
         msg_item = item if isinstance(item, dict) else {"id": "", "message": str(item)}
         print(f"  WARN:    [{msg_item.get('id')}] {msg_item.get('message')}")
+    for item in payload.get("relaxed_env_warnings") or []:
+        msg_item = item if isinstance(item, dict) else {"id": "", "message": str(item)}
+        print(f"  ENV:     [{msg_item.get('id')}] {msg_item.get('message')}")
+    if payload.get("relax_env_warnings_enabled"):
+        print(f"  overall_ok:         {payload.get('overall_ok')} (relax env warnings)")
 
 
 def main() -> int:

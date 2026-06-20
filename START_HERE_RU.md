@@ -148,6 +148,9 @@ TERMIT_AGENT_VERIFY_AFTER_PATCH=true
 | `smoke_http.sh` | Curl smoke `:8765` (health, readiness, agent metrics) |
 | `smoke_all.sh` | Тесты + platform e2e + smoke HTTP (единый контур Фазы 0) |
 | `training_loop_week2.sh` | Export signals → job → KPI dashboard (Фаза 4) |
+| `plan_status_dev_green.sh` | Локальный `overall_ok=true` (dev KPI seeds + relax env) |
+| `local_dev_kpi_seed.sh` | Beta + finetune + product KPI dev seeds |
+| `do_all_plan.sh` | Verify + train + plan status (фаза 5) |
 | `release_smoke.sh` | То же, что `smoke_all.sh` (alias) |
 
 ## 9. Автоматизация (do_all_automatic + отключение в Desktop)
@@ -161,6 +164,20 @@ TERMIT_SKIP_OLLAMA_CHECK=1 ./scripts/do_all_automatic.sh
 Промпт для агентов: [AUTOMATION_TASK_PROMPT_RU.md](AUTOMATION_TASK_PROMPT_RU.md). Skill: `.cursor/skills/termit-automation/SKILL.md`.
 
 Подробнее: [DESKTOP_QUICKSTART.md](DESKTOP_QUICKSTART.md), [GITHUB_SETUP_RU.md](GITHUB_SETUP_RU.md), [SYNC_WORKFLOW.md](SYNC_WORKFLOW.md).
+
+## 11. Фаза 5 — plan status и KPI gates
+
+Локальная проверка без GPU и cloud API key:
+
+```bash
+./scripts/plan_status_dev_green.sh
+# или по шагам:
+./scripts/local_dev_kpi_seed.sh
+TERMIT_PLAN_STATUS_LOCAL=true TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS=true \
+  python3 scripts/plan_status_check.py --summary-only
+```
+
+Prod: `GET /api/ops/plan-status`, `TERMIT_PLAN_STATUS_STRICT=true` после реальной beta и cloud benchmark. См. [BETA_ONBOARDING.md](BETA_ONBOARDING.md).
 
 ## 10. Media Studio (картинки, анимация, видео)
 

@@ -13,6 +13,7 @@ from app.domain.schemas import (
     AutomationPrefsUpdateRequest,
     AutomationToggleItem,
     OpsIncidentDrillResponse,
+    OpsReloadDevMetricsSeedResponse,
     OpsReadinessResponse,
     BetaMetricsResponse,
     PlanStatusResponse,
@@ -105,6 +106,15 @@ async def plan_status() -> PlanStatusResponse:
 
     payload = build_plan_status_service().collect(from_running_api=True)
     return PlanStatusResponse.model_validate(payload)
+
+
+@router.post("/reload-dev-metrics-seed", response_model=OpsReloadDevMetricsSeedResponse)
+async def reload_dev_metrics_seed() -> OpsReloadDevMetricsSeedResponse:
+    """Dev-only: перечитать data/desktop/dev_chat_metrics_seed.json без рестарта API."""
+    from app.state import reload_dev_telemetry_seed
+
+    payload = reload_dev_telemetry_seed()
+    return OpsReloadDevMetricsSeedResponse.model_validate(payload)
 
 
 @router.post("/incident-drill", response_model=OpsIncidentDrillResponse)

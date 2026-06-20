@@ -46,7 +46,13 @@ TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.
 
 **Локальная отладка beta cohort (не prod):** `TERMIT_BETA_DEV_SEED=true ./scripts/seed_beta_cohort_dev.py --force`
 
-**Локальная отладка Product KPI gates (не prod):** `TERMIT_PRODUCT_KPI_DEV_SEED=true ./scripts/seed_product_kpi_dev.py --force` — tool-loop window, chat p95 recent, local-only share.
+**Локальная отладка Product KPI gates (не prod):** `TERMIT_PRODUCT_KPI_DEV_SEED=true ./scripts/seed_product_kpi_dev.py --force` — tool-loop window, chat p95, local-only share.
+
+**Finetune KPI dev:** `TERMIT_FINETUNE_KPI_DEV_SEED=true ./scripts/seed_finetune_kpi_dev.py --force`
+
+**Полный локальный green path (`overall_ok=true`):** `./scripts/plan_status_dev_green.sh` — beta + finetune + product KPI seeds, reload chat metrics, relax env warnings (GPU/cloud).
+
+**Reload chat metrics без restart API:** `POST /api/ops/reload-dev-metrics-seed` (после `seed_product_kpi_dev.py`).
 
 **Оба seed + plan status:** `./scripts/local_dev_kpi_seed.sh`
 

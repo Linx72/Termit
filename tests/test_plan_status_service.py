@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -30,6 +31,27 @@ class PlanStatusServiceTests(unittest.TestCase):
         payload = service.collect(from_running_api=True)
         self.assertTrue(payload["infra_ok"])
         self.assertFalse(any(item["id"] == "api_down" for item in payload["blockers"]))
+
+    def test_relax_env_warnings_filters_gpu_and_cloud(self) -> None:
+        service = PlanStatusService(
+            kpi_gate_service=MagicMock(
+                evaluate_gates=MagicMock(return_value={"overall_passed": True, "gates": []})
+            ),
+            beta_service=MagicMock(
+                build_metrics=MagicMock(return_value={"cohort_size_d30": 10, "d30_retention_rate": 0.4})
+            ),
+            automation_service=MagicMock(
+                snapshot=MagicMock(return_value={"automatic_mode_enabled": True})
+            ),
+            gpu_probe=lambda: {"gpu_available": False},
+            cloud_probe=lambda: {"ready": False, "reason": "missing_api_key"},
+        )
+        with patch.dict(os.environ, {"TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS": "true"}, clear=False):
+            payload = service.collect(from_running_api=True)
+        self.assertTrue(payload["relax_env_warnings_enabled"])
+        self.assertEqual(len(payload["warnings"]), 0)
+        self.assertEqual(len(payload["relaxed_env_warnings"]), 2)
+        self.assertTrue(payload["overall_ok"])
 
     def test_beta_cohort_uses_cohort_size_d30(self) -> None:
         service = PlanStatusService(
@@ -97,6 +119,34 @@ class PlanStatusApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["phase"], "5_production_kpi")
         self.assertTrue(body["infra_ok"])
+
+    def test_reload_dev_metrics_seed_endpoint(self) -> None:
+        import os
+        import tempfile
+
+        from app.state import _build_telemetry_store, reload_dev_telemetry_seed
+
+        with tempfile.TemporaryDirectory() as tmp:
+            desktop = Path(tmp) / "desktop"
+            desktop.mkdir()
+            seed_payload = {
+                "dev_only": True,
+                "chat_latencies_ms": [750] * 55,
+                "chat_requests_total": 55,
+                "chat_success_total": 55,
+            }
+            (desktop / "dev_chat_metrics_seed.json").write_text(
+                json.dumps(seed_payload), encoding="utf-8"
+            )
+            with patch.dict(os.environ, {"TERMIT_DESKTOP_STATE_DIR": str(desktop)}, clear=False):
+                _build_telemetry_store.cache_clear()
+                direct = reload_dev_telemetry_seed()
+                self.assertTrue(direct.get("reloaded"))
+                response = self.client.post("/api/ops/reload-dev-metrics-seed")
+            self.assertEqual(response.status_code, 200)
+            body = response.json()
+            self.assertTrue(body.get("reloaded"))
+            self.assertGreaterEqual(int(body.get("chat_requests_total", 0)), 55)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,29 @@ class CloudBenchmarkProbeTests(unittest.TestCase):
         payload = json.loads(proc.stdout)
         self.assertFalse(payload.get("ready"))
 
+    def test_dev_stub_reports_ready(self) -> None:
+        python_bin = ROOT / ".venv" / "bin" / "python"
+        if not python_bin.exists():
+            python_bin = Path("python3")
+        env = {
+            **dict(__import__("os").environ),
+            "TERMIT_CLOUD_BENCHMARK_DEV_READY": "true",
+            "OPENAI_COMPAT_API_KEY": "",
+            "OPENAI_API_KEY": "",
+        }
+        proc = subprocess.run(
+            [str(python_bin), str(ROOT / "scripts" / "cloud_benchmark_probe.py")],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=ROOT,
+            env=env,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertTrue(payload.get("ready"))
+        self.assertEqual(payload.get("reason"), "dev_stub")
+
 
 class GpuProbeTests(unittest.TestCase):
     def test_probe_returns_structured_json(self) -> None:
@@ -66,7 +89,9 @@ class AutomationScriptTests(unittest.TestCase):
             "plan_status_check.py",
             "capture_plan_status_snapshot.sh",
             "seed_beta_cohort_dev.py",
+            "seed_finetune_kpi_dev.py",
             "local_dev_kpi_seed.sh",
+            "plan_status_dev_green.sh",
             "deploy_hosted_beta.sh",
             "gpu_probe.py",
         ):

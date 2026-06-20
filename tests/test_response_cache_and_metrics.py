@@ -75,6 +75,25 @@ class TelemetryStoreTests(unittest.TestCase):
         self.assertEqual(snap.chat_latency_p95_recent_ms, 5000.0)
         self.assertGreaterEqual(snap.chat_latency_p95_ms, 100.0)
 
+    def test_hydrate_from_dev_seed(self) -> None:
+        store = TelemetryStore(recent_window=50)
+        ok = store.hydrate_from_dev_seed(
+            {
+                "dev_only": True,
+                "chat_latencies_ms": [800] * 55,
+                "task_total": 20,
+                "task_completed": 16,
+                "task_failed": 4,
+                "task_auto_total": 14,
+            }
+        )
+        self.assertTrue(ok)
+        snap = store.snapshot()
+        self.assertEqual(snap.chat_requests_total, 55)
+        self.assertLess(snap.chat_latency_p95_recent_ms, 3000.0)
+        self.assertEqual(snap.task_total, 20)
+        self.assertFalse(store.hydrate_from_dev_seed({"dev_only": False, "chat_latencies_ms": [1]}))
+
 
 class MetricsSnapshotStoreTests(unittest.TestCase):
     def test_append_and_trend(self) -> None:

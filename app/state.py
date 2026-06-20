@@ -657,15 +657,59 @@ def get_orchestration_eval_report_store() -> OrchestrationEvalReportStore:
 
 @lru_cache
 def _build_telemetry_store() -> TelemetryStore:
+    import json
+
     settings = get_settings()
-    return TelemetryStore(
+    store = TelemetryStore(
         max_latency_points=settings.telemetry_max_latency_points,
         recent_window=settings.chat_latency_recent_window,
     )
+    seed_path = TelemetryStore.dev_seed_file_path(settings.desktop_state_dir)
+    if seed_path.is_file():
+        try:
+            payload = json.loads(seed_path.read_text(encoding="utf-8"))
+            store.hydrate_from_dev_seed(payload)
+        except (json.JSONDecodeError, OSError, TypeError, ValueError):
+            pass
+    return store
 
 
 def get_telemetry_store() -> TelemetryStore:
     return _build_telemetry_store()
+
+
+def reload_dev_telemetry_seed() -> dict[str, object]:
+    """Перечитать dev_chat_metrics_seed.json в live TelemetryStore (только dev_only файл)."""
+    import json
+
+    settings = get_settings()
+    seed_path = TelemetryStore.dev_seed_file_path(settings.desktop_state_dir)
+    if not seed_path.is_file():
+        return {"reloaded": False, "reason": "seed_file_missing"}
+    try:
+        payload = json.loads(seed_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, TypeError, ValueError):
+        return {"reloaded": False, "reason": "seed_file_invalid"}
+    if not isinstance(payload, dict) or not payload.get("dev_only"):
+        return {"reloaded": False, "reason": "not_dev_only"}
+
+    for cached in (
+        _build_telemetry_store,
+        _build_chat_service,
+        _build_task_service,
+        _build_eval_service,
+        _build_agent_service,
+    ):
+        if hasattr(cached, "cache_clear"):
+            cached.cache_clear()
+
+    snapshot = _build_telemetry_store().snapshot()
+    return {
+        "reloaded": True,
+        "reason": "ok",
+        "chat_requests_total": snapshot.chat_requests_total,
+        "chat_latency_p95_recent_ms": snapshot.chat_latency_p95_recent_ms,
+    }
 
 
 @lru_cache

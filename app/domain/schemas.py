@@ -505,6 +505,13 @@ class OpsIncidentDrillResponse(BaseModel):
     recommended_actions: list[str] = Field(default_factory=list)
 
 
+class OpsReloadDevMetricsSeedResponse(BaseModel):
+    reloaded: bool
+    reason: str = ""
+    chat_requests_total: int = 0
+    chat_latency_p95_recent_ms: float = 0.0
+
+
 class QuotaEntrySummary(BaseModel):
     key_hint: str
     role: str
@@ -796,6 +803,8 @@ class PlanStatusResponse(BaseModel):
     warnings: list[PlanStatusItem] = Field(default_factory=list)
     blocker_count: int = 0
     warning_count: int = 0
+    relax_env_warnings_enabled: bool = False
+    relaxed_env_warnings: list[PlanStatusItem] = Field(default_factory=list)
 
 
 class EvalScenarioResponse(BaseModel):

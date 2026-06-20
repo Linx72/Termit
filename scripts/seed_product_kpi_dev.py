@@ -95,6 +95,26 @@ def seed_workflow_local_runs(state_dir: str, count: int) -> int:
     return count
 
 
+def seed_chat_metrics_file(state_dir: str, samples: int = 55, latency_ms: int = 800) -> Path:
+    """Персистентный dev-seed chat p95 (читается TelemetryStore при cold start)."""
+    latencies = [latency_ms + (index % 5) * 20 for index in range(max(5, samples))]
+    payload = {
+        "dev_only": True,
+        "chat_latencies_ms": latencies,
+        "chat_requests_total": len(latencies),
+        "chat_success_total": len(latencies),
+        "chat_cache_miss_total": len(latencies),
+        "task_total": 20,
+        "task_completed": 16,
+        "task_failed": 4,
+        "task_auto_total": 14,
+    }
+    path = Path(state_dir).resolve() / "dev_chat_metrics_seed.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
 def warm_and_chat(base_url: str, chats: int, timeout: int) -> int:
     try:
         urllib.request.urlopen(f"{base_url.rstrip('/')}/health", timeout=5)
@@ -136,11 +156,31 @@ def warm_and_chat(base_url: str, chats: int, timeout: int) -> int:
     return ok
 
 
+def post_reload_dev_metrics(base_url: str) -> dict[str, object] | None:
+    try:
+        urllib.request.urlopen(f"{base_url.rstrip('/')}/health", timeout=5)
+    except (urllib.error.URLError, TimeoutError):
+        return None
+    try:
+        req = urllib.request.Request(
+            f"{base_url.rstrip('/')}/api/ops/reload-dev-metrics-seed",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+            return payload if isinstance(payload, dict) else None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed local Product KPI metrics (dev only)")
     parser.add_argument("--runs", type=int, default=6, help="Успешных tool-loop run'ов (≥5)")
     parser.add_argument("--local-runs", type=int, default=120, help="Workflow local agent_run_created")
-    parser.add_argument("--chats", type=int, default=55, help="Быстрые chat запросы к API")
+    parser.add_argument("--chats", type=int, default=12, help="Chat запросы к API (0 = пропуск)")
+    parser.add_argument("--chat-timeout", type=int, default=90, help="Таймаут одного chat запроса (сек)")
     parser.add_argument("--base-url", default=os.getenv("TERMIT_BASE_URL", "http://127.0.0.1:8765"))
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
@@ -157,12 +197,31 @@ def main() -> int:
         return 2
 
     settings = get_settings()
-    store = SQLiteAgentRunStore(db_path=settings.agent_run_sqlite_path)
-    tool_runs = seed_tool_loop_runs(store, max(5, args.runs))
-    local_rows = seed_workflow_local_runs(settings.desktop_state_dir, max(5, args.local_runs))
-    chats_ok = warm_and_chat(args.base_url, max(5, args.chats), timeout=180)
+    tool_runs = 0
+    if args.runs > 0:
+        store = SQLiteAgentRunStore(db_path=settings.agent_run_sqlite_path)
+        tool_runs = seed_tool_loop_runs(store, max(5, args.runs))
+    local_rows = 0
+    if args.local_runs > 0:
+        local_rows = seed_workflow_local_runs(settings.desktop_state_dir, max(5, args.local_runs))
+    chat_seed_path = seed_chat_metrics_file(settings.desktop_state_dir)
+    chats_ok = 0
+    if args.chats > 0:
+        chats_ok = warm_and_chat(
+            args.base_url,
+            max(1, args.chats),
+            timeout=max(10, args.chat_timeout),
+        )
 
-    from app.state import _build_agent_service, _build_desktop_kpi_gate_service
+    from app.state import (
+        _build_agent_service,
+        _build_desktop_kpi_gate_service,
+        _build_telemetry_store,
+    )
+
+    _build_telemetry_store.cache_clear()
+
+    reload_payload = post_reload_dev_metrics(args.base_url)
 
     agent_metrics = _build_agent_service().queue_metrics()
     kpi = _build_desktop_kpi_gate_service().evaluate_gates()
@@ -170,6 +229,8 @@ def main() -> int:
         "tool_loop_runs_seeded": tool_runs,
         "workflow_local_seeded": local_rows,
         "chat_requests_ok": chats_ok,
+        "chat_metrics_seed_file": str(chat_seed_path),
+        "live_reload": reload_payload,
         "tool_loop_window": {
             "runs": agent_metrics.get("tool_loop_runs_recent_window"),
             "completion": agent_metrics.get("tool_loop_completion_rate_recent_window"),
@@ -183,6 +244,10 @@ def main() -> int:
     print(
         f"OK — seeded tool-loop={tool_runs}, workflow_local={local_rows}, chats_ok={chats_ok}"
     )
+    if reload_payload and reload_payload.get("reloaded"):
+        print(f"Live API telemetry reloaded (chat_total={reload_payload.get('chat_requests_total')})")
+    else:
+        print(f"Chat metrics seed: {chat_seed_path} (POST /api/ops/reload-dev-metrics-seed или restart API)")
     return 0
 
 

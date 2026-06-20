@@ -18,6 +18,16 @@ if str(ROOT) not in sys.path:
 def probe_cloud_benchmark() -> dict[str, object]:
     from app.core.config import get_settings
 
+    if os.getenv("TERMIT_CLOUD_BENCHMARK_DEV_READY", "").lower() in {"1", "true", "yes"}:
+        settings = get_settings()
+        return {
+            "ready": True,
+            "reason": "dev_stub",
+            "dev_only": True,
+            "reference_model": settings.eval_benchmark_reference_model,
+            "hint": "Cloud benchmark dev stub (TERMIT_CLOUD_BENCHMARK_DEV_READY).",
+        }
+
     settings = get_settings()
     openai_compat_key = os.getenv("OPENAI_COMPAT_API_KEY", settings.openai_compat_api_key or "").strip()
     openai_key = os.getenv("OPENAI_API_KEY", settings.openai_api_key or "").strip()

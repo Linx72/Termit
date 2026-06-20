@@ -151,6 +151,13 @@ echo ""
 echo "== 6/6 Do-all verify (CI mode) =="
 TERMIT_DO_ALL_CI=true "${ROOT}/scripts/do_all_verify_ci.sh"
 
+if [[ "${TERMIT_DO_ALL_DEV_GREEN:-false}" == "true" ]]; then
+  echo ""
+  echo "== 6b/6 Plan status dev green (local KPI seeds) =="
+  "${ROOT}/scripts/plan_status_dev_green.sh" \
+    || echo "WARN: plan_status_dev_green failed (non-blocking)."
+fi
+
 if [[ "${TERMIT_DO_ALL_PLAN:-false}" == "true" ]]; then
   echo ""
   echo "== 7/7 Do-all plan (фаза 5) =="
@@ -237,7 +244,10 @@ echo "  Deploy hosted:   scripts/deploy_hosted_beta.sh"
 echo "  SWE eval gate:   scripts/swe_eval_gate.py"
 echo "  Beta dev seed:   TERMIT_BETA_DEV_SEED=true scripts/seed_beta_cohort_dev.py"
 echo "  Product KPI dev: TERMIT_PRODUCT_KPI_DEV_SEED=true scripts/seed_product_kpi_dev.py"
-echo "  Local KPI bundle: ./scripts/local_dev_kpi_seed.sh"
+echo "  Finetune KPI dev:  TERMIT_FINETUNE_KPI_DEV_SEED=true scripts/seed_finetune_kpi_dev.py"
+echo "  Local KPI bundle:  ./scripts/local_dev_kpi_seed.sh"
+echo "  Plan dev green:    ./scripts/plan_status_dev_green.sh"
+echo "  Do-all dev green:  TERMIT_DO_ALL_DEV_GREEN=true ./scripts/do_all_automatic.sh"
 echo "  DPO contract:    scripts/do_all_dpo_contract.sh"
 echo "  macOS live orch: scripts/nightly_macos_live_orchestration.sh"
 echo "  Strict live orch: scripts/run_strict_live_orchestration_gate.sh"

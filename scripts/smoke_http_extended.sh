@@ -30,6 +30,14 @@ check_ext /api/ops/automation
 check_ext /api/ops/plan-status
 
 if [[ -n "$API_KEY" ]]; then
+  code="$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' -d '{}' "$BASE_URL/api/ops/reload-dev-metrics-seed")"
+else
+  code="$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$BASE_URL/api/ops/reload-dev-metrics-seed")"
+fi
+echo "POST /api/ops/reload-dev-metrics-seed -> HTTP $code"
+[[ "$code" == "200" ]]
+
+if [[ -n "$API_KEY" ]]; then
   code="$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' -d '{"event_type":"smoke_ping","journey_id":"local_feature"}' "$BASE_URL/api/desktop/workflow-events")"
 else
   code="$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"event_type":"smoke_ping","journey_id":"local_feature"}' "$BASE_URL/api/desktop/workflow-events")"

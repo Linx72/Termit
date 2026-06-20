@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.21] - 2026-06-20
+
+### Added
+- Product KPI dev seeds: `seed_product_kpi_dev.py`, `dev_chat_metrics_seed.json`, rolling tool-loop window
+- Finetune KPI dev seed: `seed_finetune_kpi_dev.py`
+- `POST /api/ops/reload-dev-metrics-seed` — live chat telemetry reload без restart API
+- Plan status relax env: `TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS`, `relaxed_env_warnings` в API
+- `plan_status_dev_green.sh`, `local_dev_kpi_seed.sh`, `TERMIT_PLAN_DEV_GREEN`, `TERMIT_DO_ALL_DEV_GREEN`
+- termit-client: `reloadDevMetricsSeed()`, plan status relaxed env fields
+- Smoke: reload endpoint в `smoke_http_extended.sh` и `hosted_smoke.sh`
+
 ## [0.4.20] - 2026-06-17
 
 ### Added

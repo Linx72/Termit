@@ -502,6 +502,20 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 **DoD:** Prometheus экспортирует plan metrics; KPI export и web/desktop показывают plan status.
 
+### Следующий этап (0.4.24): Dev KPI seeds + plan status green (local)
+
+- [x] `seed_product_kpi_dev.py` — tool-loop window, `dev_chat_metrics_seed.json`, reload API
+- [x] `seed_finetune_kpi_dev.py` — `eval_kpi_last.json` dev stub
+- [x] `POST /api/ops/reload-dev-metrics-seed` — live telemetry без restart
+- [x] `TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS` — GPU/cloud в `relaxed_env_warnings`
+- [x] `plan_status_dev_green.sh` + `local_dev_kpi_seed.sh`
+- [x] `TERMIT_PLAN_DEV_GREEN` в `do_all_plan.sh`
+- [x] `TERMIT_DO_ALL_DEV_GREEN` в `do_all_automatic.sh`
+- [x] Smoke: reload в `smoke_http_extended.sh` + `hosted_smoke.sh`
+- [x] termit-client: `reloadDevMetricsSeed`
+
+**DoD:** `./scripts/plan_status_dev_green.sh` exit 0; `do_all_verify_ci` OK.
+
 ### Следующий этап (0.4.23): Learning loop — real train + cloud benchmark
 
 - [ ] GPU runner или облако → real DPO (`TERMIT_DPO_GPU_REQUIRED=true`)

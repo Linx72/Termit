@@ -20,6 +20,16 @@ _CLOUD_HINTS_RU: dict[str, str] = {
     "ok": "Cloud benchmark готов к запуску.",
 }
 
+_RELAX_ENV_WARNING_IDS = frozenset({"no_gpu", "cloud_benchmark"})
+
+
+def _relax_env_warnings_enabled() -> bool:
+    return os.getenv("TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
 
 class PlanStatusService:
     """Сбор статуса фазы 5 из сервисов Termit и infra-проб."""
@@ -136,6 +146,17 @@ class PlanStatusService:
                 }
             )
 
+        relaxed_env_warnings: list[dict[str, str]] = []
+        relax_enabled = _relax_env_warnings_enabled()
+        if relax_enabled:
+            kept: list[dict[str, str]] = []
+            for item in warnings:
+                if item.get("id") in _RELAX_ENV_WARNING_IDS:
+                    relaxed_env_warnings.append(item)
+                else:
+                    kept.append(item)
+            warnings = kept
+
         infra_ok = from_running_api or bool(external_api_ok)
         overall_ok = infra_ok and len(blockers) == 0 and len(warnings) == 0
 
@@ -144,6 +165,8 @@ class PlanStatusService:
             "plan_code_complete": True,
             "infra_ok": infra_ok,
             "overall_ok": overall_ok,
+            "relax_env_warnings_enabled": relax_enabled,
+            "relaxed_env_warnings": relaxed_env_warnings,
             "automatic_mode_enabled": (
                 bool(automation.get("automatic_mode_enabled")) if automation else None
             ),
