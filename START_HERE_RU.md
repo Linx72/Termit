@@ -245,3 +245,16 @@ Staging hosted beta:
 ```
 
 Док: [`docs/BETA_STAGING_RU.md`](docs/BETA_STAGING_RU.md), [`docs/RELEASE_FLOW.md`](docs/RELEASE_FLOW.md).
+
+### После релиза (real prod)
+
+```bash
+./scripts/prod_handoff_after_release.sh   # readiness + список secrets/workflows
+```
+
+GitHub Secrets: `OPENAI_COMPAT_API_KEY`, `TERMIT_BETA_PROD_URL` (+ опционально `TERMIT_API_KEY`). Затем:
+
+```bash
+gh workflow run gpu-dpo-learning-loop.yml
+gh workflow run beta-prod-gate.yml
+```

@@ -125,7 +125,11 @@ class PlanStatusCheckTests(unittest.TestCase):
             self.assertTrue(payload.get("dev_only"), f"{name} must have dev_only: true")
 
     def test_prod_readiness_scripts_bash_syntax(self) -> None:
-        for script in ("prod_readiness_check.sh", "prod_readiness_ci.sh"):
+        for script in (
+            "prod_readiness_check.sh",
+            "prod_readiness_ci.sh",
+            "prod_handoff_after_release.sh",
+        ):
             proc = subprocess.run(
                 ["bash", "-n", str(ROOT / "scripts" / script)],
                 capture_output=True,
