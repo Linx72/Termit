@@ -546,6 +546,8 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Следующий этап (0.4.25): Production hardening (Day 90)
 
 - [x] Push + tagged release v0.4.22 (`release_all.sh`)
+- [x] Push + tagged release v0.4.23 (prod readiness gates, CI fixtures, staging KPI fix)
+- [x] `scripts/prod_handoff_after_release.sh` — secrets/workflows после релиза
 - [x] `scripts/pre_release_check.sh` + `release-gate-staging.yml` (weekly CI)
 - [x] `scripts/prod_readiness_check.sh` — plan + GPU preflight + optional staging/prod beta
 - [x] `scripts/release_gate_staging.sh` — smoke + KPI seed + beta bootstrap + gates
