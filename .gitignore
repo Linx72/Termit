@@ -46,6 +46,8 @@ data/finetune/*
 !data/finetune/.gitkeep
 !data/finetune/recipes/
 !data/finetune/recipes/*.Modelfile
+!data/finetune/datasets/
+!data/finetune/datasets/sample_dpo_contract.jsonl
 !data/eval_fixtures/
 data/eval_fixtures/*
 !data/eval_fixtures/patch_sample.txt
@@ -54,7 +56,6 @@ data/eval_fixtures/*
 !data/desktop_policy_presets.json
 !data/mcp_servers.json
 !data/eval_baseline_release.json
-!data/eval_capability_baseline.json
 !data/eval_capability_baseline.json
 
 # Cursor rules — keep
