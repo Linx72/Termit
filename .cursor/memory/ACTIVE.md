@@ -1,14 +1,13 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-20 (extended release gate + docs)
+**Последнее обновление:** 2026-06-20 — **Release v0.4.23**
 
 ## Сводка
-- **release_gate_local extended:** OK (~229s, 691 tests)
-- **release_smoke:** confirm_run regression в core + reset patch fixture
-- **CHANGELOG / RELEASE_FLOW:** задокументированы фиксы
+- **v0.4.23** released: prod readiness, CI fixtures, staging KPI fix — GitHub release создан
+- **pre_release_check** + **release_all**: 693 tests OK
+- CI main: green
 
-## Открытые задачи
-- [ ] Real GPU DPO → preflight OK → learning_loop_0423.sh
-- [ ] Prod beta: secret `TERMIT_BETA_PROD_URL` + 5+ real desktop users
-- [x] beta-prod-gate.yml — fix secrets в if (41981e2)
-- [x] RELEASE_CHECKLIST + RELEASE_FLOW — confirm_run / patch fixture
+## Открытые задачи (real prod)
+- [ ] GPU DPO → TERMIT_REMOTE_GPU_SSH / NVIDIA
+- [ ] OPENAI_COMPAT_API_KEY → cloud benchmark
+- [ ] TERMIT_BETA_PROD_URL + 5+ real desktop users

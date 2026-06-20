@@ -84,6 +84,7 @@ TERMIT_BETA_DEV_SEED=true ./scripts/seed_beta_cohort_dev.py --force
 
 ## Связанные скрипты
 
+- [`prod_handoff_after_release.sh`](file:///Users/amoros/Projects/Termit/scripts/prod_handoff_after_release.sh) — после релиза: secrets + workflow hints
 - [`prod_readiness_check.sh`](file:///Users/amoros/Projects/Termit/scripts/prod_readiness_check.sh) — plan + preflight + optional staging/prod beta
 - [`deploy_hosted_beta.sh`](file:///Users/amoros/Projects/Termit/scripts/deploy_hosted_beta.sh)
 - [`hosted_smoke.sh`](file:///Users/amoros/Projects/Termit/scripts/hosted_smoke.sh) — включает `POST /api/ops/beta/activity`
