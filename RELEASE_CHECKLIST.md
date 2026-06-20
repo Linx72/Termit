@@ -7,6 +7,7 @@
   - Staging (auto если `:8080` up): `release_gate_staging.sh`
 - **Prod readiness (plan + preflight + optional gates):** `./scripts/prod_readiness_check.sh`
   - CI runners: `./scripts/prod_readiness_ci.sh` (в `ci.yml` на main + weekly `prod-readiness.yml`)
+  - CI plan fixtures (`dev_only`): `data/eval_kpi_last.json`, `data/learning_loop_0423_last.json`, `data/beta_cohort_meta.json`
 - Run tests: `python -m unittest discover -s tests -q` (689+ tests)
 - Verify API health: `GET /health`
 - Verify providers status: `GET /api/providers/status`

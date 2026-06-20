@@ -113,6 +113,27 @@ class PlanStatusCheckTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
+    def test_committed_plan_ci_fixtures_are_dev_only(self) -> None:
+        for name in (
+            "eval_kpi_last.json",
+            "learning_loop_0423_last.json",
+            "beta_cohort_meta.json",
+        ):
+            path = ROOT / "data" / name
+            self.assertTrue(path.is_file(), f"missing {name}")
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertTrue(payload.get("dev_only"), f"{name} must have dev_only: true")
+
+    def test_prod_readiness_scripts_bash_syntax(self) -> None:
+        for script in ("prod_readiness_check.sh", "prod_readiness_ci.sh"):
+            proc = subprocess.run(
+                ["bash", "-n", str(ROOT / "scripts" / script)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
