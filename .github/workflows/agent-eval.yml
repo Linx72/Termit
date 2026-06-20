@@ -27,6 +27,8 @@ jobs:
         run: python -m unittest discover -s tests -q
 
       - name: Start Termit
+        env:
+          TERMIT_SKIP_OLLAMA_CHECK: "1"
         run: |
           uvicorn app.main:app --host 127.0.0.1 --port 8765 &
           for i in $(seq 1 30); do

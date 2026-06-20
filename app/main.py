@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 from contextlib import asynccontextmanager
@@ -79,26 +80,34 @@ async def _app_lifespan(_app: FastAPI):
             import subprocess
 
             subprocess.run(["/bin/bash", str(script)], check=False, capture_output=True)
-    try:
-        _required, missing = await local_runtime.check_required_models()
-        if missing:
-            pull_hint = " && ollama pull ".join(missing)
-            _logger.error(
-                "Missing Ollama models: %s. Install with: ollama pull %s",
-                ", ".join(missing),
-                pull_hint,
-            )
-        else:
-            _logger.info("Ollama model check passed (%d required).", len(_required))
-        if settings.ollama_warm_on_startup:
-            warm = await local_runtime.warm_ollama_models(max_models=settings.ollama_warm_max_models)
-            _logger.info(
-                "Ollama warm on startup: warmed=%s total=%s",
-                warm.get("warmed"),
-                warm.get("total"),
-            )
-    except Exception as exc:  # noqa: BLE001 — startup must not crash on probe failure
-        _logger.warning("Ollama model validation skipped: %s", exc)
+    skip_ollama_check = os.getenv("TERMIT_SKIP_OLLAMA_CHECK", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if skip_ollama_check:
+        _logger.info("Ollama model check skipped (TERMIT_SKIP_OLLAMA_CHECK=1).")
+    else:
+        try:
+            _required, missing = await local_runtime.check_required_models()
+            if missing:
+                pull_hint = " && ollama pull ".join(missing)
+                _logger.error(
+                    "Missing Ollama models: %s. Install with: ollama pull %s",
+                    ", ".join(missing),
+                    pull_hint,
+                )
+            else:
+                _logger.info("Ollama model check passed (%d required).", len(_required))
+            if settings.ollama_warm_on_startup:
+                warm = await local_runtime.warm_ollama_models(max_models=settings.ollama_warm_max_models)
+                _logger.info(
+                    "Ollama warm on startup: warmed=%s total=%s",
+                    warm.get("warmed"),
+                    warm.get("total"),
+                )
+        except Exception as exc:  # noqa: BLE001 — startup must not crash on probe failure
+            _logger.warning("Ollama model validation skipped: %s", exc)
     agent_service.start()
     stage1_scheduler.start()
     daily_improvement_scheduler.start()
