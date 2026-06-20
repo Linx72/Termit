@@ -56,7 +56,8 @@ echo ""
 echo "== 3/4 Hosted smoke =="
 HOSTED_API_KEY="${TERMIT_API_KEY:-${TERMIT_HOSTED_API_KEY:-}}"
 if [[ -z "${HOSTED_API_KEY}" ]] && grep -qE '^TERMIT_AUTH_ENABLED=true' "${ROOT}/.env" 2>/dev/null; then
-  HOSTED_API_KEY="viewer-key"
+  # eval/* и POST /api/orchestration/* требуют role operator (см. app/core/rbac.py)
+  HOSTED_API_KEY="operator-key"
   export TERMIT_HOSTED_AUTH_EXPECT="${TERMIT_HOSTED_AUTH_EXPECT:-true}"
 fi
 TERMIT_HOSTED_BASE_URL="${BASE_URL}" \
@@ -86,5 +87,5 @@ TERMIT_BETA_STAGING_STRICT=false \
 
 echo ""
 echo "OK — hosted beta готов: ${BASE_URL}"
-echo "  Smoke с auth: TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.sh"
+echo "  Smoke с auth: TERMIT_API_KEY=operator-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.sh"
 echo "  Prod overlay: TERMIT_COMPOSE_FILES='docker-compose.yml -f docker-compose.prod.yml' ./scripts/deploy_hosted_beta.sh"
