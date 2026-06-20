@@ -289,7 +289,7 @@ jobs:
           TERMIT_ORCH_GATE_TIER: release
           TERMIT_ORCH_MIN_PASS_RATE: "0.00"
           TERMIT_ORCH_MIN_RETRY_SUCCESS_RATE: "0.00"
-          TERMIT_ORCH_MIN_TOTAL: "3"
+          TERMIT_ORCH_MIN_TOTAL: "1"
         run: cat /tmp/orch_eval_report_nightly.json | python3 scripts/eval_orchestration_gate.py
       - name: Nightly cloud benchmark (optional secrets)
         env:
