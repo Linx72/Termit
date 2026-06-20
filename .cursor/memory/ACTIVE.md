@@ -1,6 +1,6 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-20 — **v0.4.26 CI/release fixes**
+**Последнее обновление:** 2026-06-20 — **v0.4.27 Release CI fix (DPO + venv)**
 
 ## Сводка
 - v0.4.25 release без assets (Release workflow: DPO contract JSON parse)

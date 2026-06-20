@@ -138,6 +138,7 @@ class AutomationScriptTests(unittest.TestCase):
                 **dict(__import__("os").environ),
                 "TERMIT_DPO_EXPORT_NAME": "unittest-dpo-contract",
                 "TERMIT_DPO_MIN_PAIRS": "1",
+                "TERMIT_NORMALIZE_SIGNALS_BEFORE_DPO": "false",
             },
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)

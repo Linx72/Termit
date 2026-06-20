@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.27] - 2026-06-20
+
+### Fixed
+- `do_all_dpo_contract.sh`: fallback на sample при ошибке export/`set -e` (Release macOS без `.venv`)
+- `finetune_bootstrap_signals.py`: bootstrap-сообщения → stderr
+- `release.yml`: `python -m venv .venv` перед unit tests и desktop build
+- DPO contract test: `TERMIT_NORMALIZE_SIGNALS_BEFORE_DPO=false`
+
 ## [0.4.26] - 2026-06-20
 
 ### Fixed

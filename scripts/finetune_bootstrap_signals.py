@@ -24,7 +24,7 @@ def main() -> int:
         enabled=True,
     )
     if store.load_samples(1):
-        print("[bootstrap] training signals already present, skip")
+        print("[bootstrap] training signals already present, skip", file=sys.stderr)
         return 0
 
     store.try_capture_tool_step(
@@ -45,7 +45,7 @@ def main() -> int:
         instruction=INSTRUCTION,
         reason="verify_failed",
     )
-    print(f"[bootstrap] seeded signals at {store.file_path}")
+    print(f"[bootstrap] seeded signals at {store.file_path}", file=sys.stderr)
     return 0
 
 

@@ -25,9 +25,11 @@ jobs:
       - name: Resolve release version
         run: echo "TERMIT_RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
       - name: Run unit tests
-        run: python -m unittest discover -s tests -v
+        run: .venv/bin/python -m unittest discover -s tests -v
       - name: Build Termit desktop app bundle
         run: ./scripts/package_desktop.sh
       - name: Verify codesign (signed release)
