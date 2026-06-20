@@ -60,6 +60,7 @@ data/eval_fixtures/*
 !data/eval_capability_baseline.json
 !data/eval_kpi_last.json
 !data/learning_loop_0423_last.json
+!data/beta_cohort_meta.json
 
 # Cursor rules — keep
 !.cursor/
