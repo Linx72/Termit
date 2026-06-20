@@ -1,0 +1,11 @@
+{
+  "phase": "0.4.23",
+  "dev_only": true,
+  "dpo_real_train": false,
+  "kpi_measurable": false,
+  "post_dpo_pass_rate": 1.0,
+  "gpu": {
+    "gpu_available": false,
+    "backend": "none"
+  }
+}
