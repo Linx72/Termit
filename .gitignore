@@ -53,6 +53,7 @@ data/eval_fixtures/*
 !data/desktop_policy_presets.json
 !data/mcp_servers.json
 !data/eval_baseline_release.json
+!data/eval_capability_baseline.json
 
 # Cursor rules — keep
 !.cursor/

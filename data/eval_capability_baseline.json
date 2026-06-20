@@ -1,0 +1,11 @@
+{
+  "total_reports": 2,
+  "mean_pass_gap": 0.0,
+  "mean_quality_gap": 0.0,
+  "termit_win_rate": 0.0,
+  "trend_direction": "flat",
+  "latest_benchmark_id": "bench_20260614T214648Z",
+  "latest_timestamp": "2026-06-14T21:46:48.800189+00:00",
+  "window": 12,
+  "note": "Auto-refreshed from capability review history."
+}
