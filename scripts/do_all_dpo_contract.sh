@@ -26,12 +26,13 @@ EXPORT_RAW="$(
 )"
 EXPORT_JSON="$(
   printf '%s' "${EXPORT_RAW}" | "${PYTHON_BIN}" -c "
-import sys
+import json, sys
 text = sys.stdin.read().strip()
-start = text.rfind('{')
+start = text.find('{')
 if start < 0:
     sys.exit(1)
-print(text[start:])
+obj, _end = json.JSONDecoder().raw_decode(text, start)
+print(json.dumps(obj))
 "
 )"
 

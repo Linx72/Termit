@@ -269,6 +269,7 @@ class Settings:
     search_api_url: str = "http://127.0.0.1:8888"
     search_api_key: str = ""
     search_provider: str = "searxng"
+    search_cache_ttl_seconds: int = 300
     browser_backend: str = "httpx"
     assignments_dir: str = "./data/assignments"
     mcp_registry_path: str = "./data/mcp_servers.json"
@@ -739,6 +740,7 @@ def get_settings() -> Settings:
         search_api_url=os.getenv("TERMIT_SEARCH_API_URL", "http://127.0.0.1:8888"),
         search_api_key=os.getenv("TERMIT_SEARCH_API_KEY", ""),
         search_provider=os.getenv("TERMIT_SEARCH_PROVIDER", "searxng"),
+        search_cache_ttl_seconds=int(os.getenv("TERMIT_SEARCH_CACHE_TTL_SECONDS", "300")),
         browser_backend=os.getenv("TERMIT_BROWSER_BACKEND", "httpx").strip().lower(),
         assignments_dir=os.getenv("TERMIT_ASSIGNMENTS_DIR", "./data/assignments"),
         mcp_registry_path=os.getenv("TERMIT_MCP_REGISTRY_PATH", "./data/mcp_servers.json"),

@@ -36,13 +36,13 @@ SERVER_PID=$!
 disown "$SERVER_PID" 2>/dev/null || true
 echo "Server PID: ${SERVER_PID} (log: ${LOG})"
 
-for _ in $(seq 1 30); do
+for _ in $(seq 1 60); do
   if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
     echo "Termit ready: http://127.0.0.1:${PORT}"
     curl -s "http://127.0.0.1:${PORT}/healthz" | python3 -m json.tool 2>/dev/null | head -8 || true
     exit 0
   fi
-  sleep 0.3
+  sleep 0.5
 done
 
 echo "error: server did not start. Log: ${LOG}" >&2

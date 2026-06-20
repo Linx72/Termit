@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
@@ -9,6 +10,14 @@ from threading import Lock
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _token_overlap_score(left: str, right: str) -> float:
+    tokens_left = {token for token in re.findall(r"\w+", left.lower()) if len(token) > 2}
+    tokens_right = {token for token in re.findall(r"\w+", right.lower()) if len(token) > 2}
+    if not tokens_left or not tokens_right:
+        return 0.0
+    return len(tokens_left & tokens_right) / len(tokens_left)
 
 
 class AgentMemoryStore:
@@ -126,6 +135,65 @@ class AgentMemoryStore:
         for row in reversed(rows):
             lines.append(
                 f"[{row['created_at']}] {row['outcome']}: {row['summary']} — {row['detail'][:240]}"
+            )
+        return lines
+
+    def get_context_for_task(
+        self,
+        agent_id: str,
+        task_hint: str,
+        limit: int = 5,
+        workspace_scope: str | None = None,
+    ) -> list[str]:
+        """Релевантные воспоминания: overlap по task_hint, fallback на recency."""
+        hint = task_hint.strip()
+        if not hint:
+            return self.get_context(agent_id, limit=limit, workspace_scope=workspace_scope)
+
+        safe_limit = max(1, min(limit, 20))
+        pool_limit = min(self._max_entries, max(safe_limit * 4, 20))
+        scope = (workspace_scope or "").strip()
+        with self._lock, closing(self._connect()) as conn:
+            if scope:
+                rows = conn.execute(
+                    """
+                    SELECT id, outcome, summary, detail, created_at
+                    FROM agent_memory
+                    WHERE agent_id = ?
+                      AND (workspace_scope IS NULL OR workspace_scope = '' OR workspace_scope = ?)
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (agent_id, scope, pool_limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT id, outcome, summary, detail, created_at
+                    FROM agent_memory
+                    WHERE agent_id = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (agent_id, pool_limit),
+                ).fetchall()
+
+        scored: list[tuple[float, int, sqlite3.Row]] = []
+        for row in rows:
+            blob = f"{row['summary']} {row['detail']}"
+            score = _token_overlap_score(hint, blob)
+            scored.append((score, int(row["id"]), row))
+
+        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        selected = scored[:safe_limit]
+        # Хронологический порядок в prompt (старые → новые).
+        selected.sort(key=lambda item: item[1])
+
+        lines: list[str] = []
+        for score, _row_id, row in selected:
+            relevance = f"relevance={score:.2f} " if score > 0 else ""
+            lines.append(
+                f"[{row['created_at']}] {relevance}{row['outcome']}: {row['summary']} — {row['detail'][:240]}"
             )
         return lines
 

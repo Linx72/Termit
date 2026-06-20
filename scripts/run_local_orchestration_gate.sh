@@ -114,7 +114,8 @@ export TERMIT_ORCH_SPIKE_USE_FIXTURE="${TERMIT_ORCH_SPIKE_USE_FIXTURE:-true}"
   --output-file "${OUTPUT}" \
   --append-report-file "${ROOT}/data/orchestration_eval_reports.jsonl"
 
-TERMIT_ORCH_GATE_TIER="${TERMIT_ORCH_GATE_TIER:-local}" cat "${OUTPUT}" | "${PYTHON_BIN}" "${ROOT}/scripts/eval_orchestration_gate.py"
+TERMIT_ORCH_GATE_TIER="${TERMIT_ORCH_GATE_TIER:-local}" \
+  "${PYTHON_BIN}" "${ROOT}/scripts/eval_orchestration_gate.py" < "${OUTPUT}"
 
 echo ""
 echo "OK — local orchestration gate passed (report: ${OUTPUT})"

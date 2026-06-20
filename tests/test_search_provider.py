@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from app.services.search_provider import (
     DEFAULT_SEARXNG_URL,
+    CachedSearchProvider,
     PerplexitySearchProvider,
     SearxngSearchProvider,
     StubSearchProvider,
@@ -65,6 +66,25 @@ class SearchProviderTests(unittest.TestCase):
         provider.search("auth middleware", domains=["github.com"], max_results=2)
         request = urlopen_mock.call_args[0][0]
         self.assertIn("site%3Agithub.com", request.full_url)
+
+    def test_search_cache_avoids_duplicate_inner_calls(self) -> None:
+        calls = 0
+
+        class CountingProvider:
+            def search(self, query: str, *, max_results: int = 5, domains=None, recency_days=None):
+                nonlocal calls
+                calls += 1
+                return StubSearchProvider().search(query, max_results=max_results)
+
+        inner = CountingProvider()
+        cached = CachedSearchProvider(inner, ttl_seconds=60)
+        cached.search("termite eval")
+        cached.search("termite eval")
+        self.assertEqual(calls, 1)
+
+    def test_build_search_provider_wraps_cache_when_ttl_set(self) -> None:
+        provider = build_search_provider("", "", provider="searxng", cache_ttl_seconds=120)
+        self.assertIsInstance(provider, CachedSearchProvider)
 
 
 if __name__ == "__main__":

@@ -948,8 +948,9 @@ class AgentService:
         memory_context: list[str] = []
         if profile.use_long_term_memory and self._agent_memory is not None:
             scope = payload.workspace_scope or payload.retrieval_path_prefix or None
-            memory_context = self._agent_memory.get_context(
+            memory_context = self._agent_memory.get_context_for_task(
                 profile.agent_id,
+                task_hint=payload.input,
                 workspace_scope=scope,
             )
 

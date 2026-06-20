@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from threading import Lock
 from typing import Optional, Protocol
 
 
@@ -46,6 +49,50 @@ class SearchProvider(Protocol):
         domains: Optional[list[str]] = None,
         recency_days: Optional[int] = None,
     ) -> SearchResult: ...
+
+
+class CachedSearchProvider:
+    """TTL cache for web search — снижает дублирующие запросы в tool loop."""
+
+    def __init__(self, inner: SearchProvider, ttl_seconds: int = 300) -> None:
+        self._inner = inner
+        self._ttl = max(1, ttl_seconds)
+        self._cache: dict[str, tuple[float, SearchResult]] = {}
+        self._lock = Lock()
+
+    def _cache_key(
+        self,
+        query: str,
+        max_results: int,
+        domains: Optional[list[str]],
+        recency_days: Optional[int],
+    ) -> str:
+        dom = ",".join(sorted(domain.strip() for domain in (domains or []) if domain.strip()))
+        return f"{query.strip()}|{max_results}|{dom}|{recency_days}"
+
+    def search(
+        self,
+        query: str,
+        *,
+        max_results: int = 5,
+        domains: Optional[list[str]] = None,
+        recency_days: Optional[int] = None,
+    ) -> SearchResult:
+        key = self._cache_key(query, max_results, domains, recency_days)
+        now = time.monotonic()
+        with self._lock:
+            cached = self._cache.get(key)
+            if cached is not None and now - cached[0] < self._ttl:
+                return cached[1]
+        result = self._inner.search(
+            query,
+            max_results=max_results,
+            domains=domains,
+            recency_days=recency_days,
+        )
+        with self._lock:
+            self._cache[key] = (now, result)
+        return result
 
 
 class StubSearchProvider:
@@ -270,11 +317,18 @@ def _parse_generic_search_hits(raw: object, max_results: int) -> list[SearchHit]
     return hits
 
 
+def _maybe_cache_search(inner: SearchProvider, cache_ttl_seconds: int) -> SearchProvider:
+    if cache_ttl_seconds > 0 and not isinstance(inner, StubSearchProvider):
+        return CachedSearchProvider(inner, cache_ttl_seconds)
+    return inner
+
+
 def build_search_provider(
     api_url: str,
     api_key: str = "",
     *,
     provider: str = "searxng",
+    cache_ttl_seconds: int = 0,
 ) -> SearchProvider:
     provider_name = (provider or "searxng").strip().lower()
     url = api_url.strip()
@@ -283,42 +337,48 @@ def build_search_provider(
     if provider_name == "stub":
         return StubSearchProvider()
 
+    inner: SearchProvider
+
     if provider_name == "perplexity":
         if key or url:
-            return PerplexitySearchProvider(api_key=key, api_url=url or PERPLEXITY_SEARCH_URL)
-        return StubSearchProvider()
-
-    if provider_name == "exa":
+            inner = PerplexitySearchProvider(api_key=key, api_url=url or PERPLEXITY_SEARCH_URL)
+        else:
+            return StubSearchProvider()
+    elif provider_name == "exa":
         if key:
-            return ExaSearchProvider(api_key=key, api_url=url or EXA_SEARCH_URL)
-        return StubSearchProvider()
-
-    if provider_name == "searxng":
-        return SearxngSearchProvider(url or DEFAULT_SEARXNG_URL, key)
-
-    if provider_name == "http":
+            inner = ExaSearchProvider(api_key=key, api_url=url or EXA_SEARCH_URL)
+        else:
+            return StubSearchProvider()
+    elif provider_name == "searxng":
+        inner = SearxngSearchProvider(url or DEFAULT_SEARXNG_URL, key)
+    elif provider_name == "http":
         if url:
-            return HttpSearchProvider(api_url=url, api_key=key, provider_label="http")
-        return StubSearchProvider()
-
-    if provider_name == "auto":
+            inner = HttpSearchProvider(api_url=url, api_key=key, provider_label="http")
+        else:
+            return StubSearchProvider()
+    elif provider_name == "auto":
         if key and not url:
-            return PerplexitySearchProvider(api_key=key)
-        if url:
+            inner = PerplexitySearchProvider(api_key=key)
+        elif url:
             if "perplexity.ai" in url:
-                return PerplexitySearchProvider(api_key=key, api_url=url)
-            if "exa.ai" in url:
-                return ExaSearchProvider(api_key=key, api_url=url)
-            if _looks_like_searxng_url(url):
-                return SearxngSearchProvider(url, key)
-            return HttpSearchProvider(api_url=url, api_key=key, provider_label="http")
-        return SearxngSearchProvider(DEFAULT_SEARXNG_URL, key)
-
-    if url:
+                inner = PerplexitySearchProvider(api_key=key, api_url=url)
+            elif "exa.ai" in url:
+                inner = ExaSearchProvider(api_key=key, api_url=url)
+            elif _looks_like_searxng_url(url):
+                inner = SearxngSearchProvider(url, key)
+            else:
+                inner = HttpSearchProvider(api_url=url, api_key=key, provider_label="http")
+        else:
+            inner = SearxngSearchProvider(DEFAULT_SEARXNG_URL, key)
+    elif url:
         if _looks_like_searxng_url(url):
-            return SearxngSearchProvider(url, key)
-        return HttpSearchProvider(api_url=url, api_key=key, provider_label=provider_name)
-    return StubSearchProvider()
+            inner = SearxngSearchProvider(url, key)
+        else:
+            inner = HttpSearchProvider(api_url=url, api_key=key, provider_label=provider_name)
+    else:
+        return StubSearchProvider()
+
+    return _maybe_cache_search(inner, cache_ttl_seconds)
 
 
 def _looks_like_searxng_url(url: str) -> bool:

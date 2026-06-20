@@ -627,6 +627,7 @@ def _build_eval_service() -> EvalService:
         quality_judge=quality_judge,
         llm_caller=llm_caller,
         model_benchmark_scenarios_path=settings.eval_model_benchmark_scenarios_path,
+        search_provider=_build_search_provider(),
     )
 
 
@@ -1118,6 +1119,7 @@ def _build_search_provider():
         settings.search_api_url,
         settings.search_api_key,
         provider=settings.search_provider,
+        cache_ttl_seconds=settings.search_cache_ttl_seconds,
     )
 
 

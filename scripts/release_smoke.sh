@@ -48,13 +48,21 @@ else
 fi
 
 if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
-  echo "== Cursor parity eval gate =="
-  # Parity slice always uses pass-rate gate; do not inherit release/deep tier from env.
-  curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
-    -H 'Content-Type: application/json' \
-    -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
-    | env -u TERMIT_EVAL_GATE_TIER \
+    echo "== Cursor parity eval gate =="
+    # Parity slice always uses pass-rate gate; do not inherit release/deep tier from env.
+    curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
+      -H 'Content-Type: application/json' \
+      -d '{"category":"cursor_parity","limit":20,"persist_report":false}' \
+      | env -u TERMIT_EVAL_GATE_TIER \
       TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-0.95}" \
+      "${PYTHON_BIN}" scripts/eval_ci_gate.py
+
+    echo "== Online research eval slice (web_search stub) =="
+    curl -sf -X POST "$BASE_URL/api/eval/run-suite" \
+      -H 'Content-Type: application/json' \
+      -d '{"category":"online_research","persist_report":false}' \
+      | env -u TERMIT_EVAL_GATE_TIER \
+      TERMIT_EVAL_MIN_PASS_RATE="${TERMIT_EVAL_MIN_PASS_RATE:-1.0}" \
       "${PYTHON_BIN}" scripts/eval_ci_gate.py
 
   if [[ "${PROFILE}" == "extended" ]]; then

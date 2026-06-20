@@ -26,7 +26,7 @@ from app.services.eval_report_store import EvalReportStore
 from app.services.eval_quality_judge_service import EvalQualityJudgeService
 from app.services.llm_caller_service import LlmCallerService
 from app.services.mcp_registry_service import McpRegistryService
-from app.services.search_provider import StubSearchProvider
+from app.services.search_provider import SearchProvider, StubSearchProvider
 from app.services.agent_tool_schema import TOOL_DEFINITIONS
 from app.services.symbol_index_service import SymbolIndexService
 from app.services.task_service import TaskService
@@ -108,6 +108,7 @@ class EvalService:
         quality_judge: Optional[EvalQualityJudgeService] = None,
         llm_caller: Optional[LlmCallerService] = None,
         model_benchmark_scenarios_path: Optional[str] = None,
+        search_provider: Optional[SearchProvider] = None,
     ) -> None:
         self._scenarios = self._load_scenarios(scenarios_path)
         for extra_path in extra_scenarios_paths or []:
@@ -129,6 +130,7 @@ class EvalService:
         self._symbol_index = symbol_index_service
         self._quality_judge = quality_judge
         self._llm_caller = llm_caller
+        self._search_provider = search_provider or StubSearchProvider()
         self._model_benchmark_scenarios: list[EvalScenario] = []
         if model_benchmark_scenarios_path:
             benchmark_path = Path(model_benchmark_scenarios_path)
@@ -910,7 +912,7 @@ class EvalService:
     def _run_platform_web_search(
         self, scenario: EvalScenario
     ) -> tuple[str, bool, Optional[str], int, str]:
-        provider = StubSearchProvider()
+        provider = self._search_provider
         result = provider.search(scenario.prompt, max_results=3)
         passed = bool(result.citations) and len(result.hits) > 0
         return result.provider, passed, None if passed else "verification_error", 1, "semi-auto"

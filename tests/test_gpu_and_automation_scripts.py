@@ -116,6 +116,25 @@ class AutomationScriptTests(unittest.TestCase):
                 )
                 self.assertEqual(proc.returncode, 0, f"{name}: {proc.stderr}")
 
+    def test_do_all_dpo_contract_exports_valid_dataset(self) -> None:
+        python_bin = ROOT / ".venv" / "bin" / "python"
+        if not python_bin.exists():
+            python_bin = Path("python3")
+        proc = subprocess.run(
+            ["bash", str(ROOT / "scripts" / "do_all_dpo_contract.sh")],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=ROOT,
+            env={
+                **dict(__import__("os").environ),
+                "TERMIT_DPO_EXPORT_NAME": "unittest-dpo-contract",
+                "TERMIT_DPO_MIN_PAIRS": "1",
+            },
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("DPO contract gate passed", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
