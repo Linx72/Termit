@@ -10,4 +10,6 @@ export TERMIT_RUN_CLOUD_BENCHMARK=false
 export TERMIT_CAP_GATE_TIER="${TERMIT_CAP_GATE_TIER:-ci}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# На CI нет training signals — используем seed DPO contract вместо export.
+export TERMIT_DPO_DATASET="${TERMIT_DPO_DATASET:-${ROOT}/data/finetune/datasets/sample_dpo_contract.jsonl}"
 exec "${ROOT}/scripts/do_all_verify.sh"

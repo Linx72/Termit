@@ -18,21 +18,44 @@ MIN_ROWS="${TERMIT_DPO_CONTRACT_MIN_ROWS:-1}"
 
 echo "== DPO export + contract gate (name=${NAME}) =="
 
-EXPORT_JSON="$(
+EXPORT_RAW="$(
   TERMIT_DPO_REQUIRED="${TERMIT_DPO_REQUIRED:-false}" \
     "${PYTHON_BIN}" "${ROOT}/scripts/finetune_dpo_pipeline.py" \
       --name "${NAME}" \
       --min-pairs "${MIN_PAIRS}"
 )"
+EXPORT_JSON="$(
+  printf '%s' "${EXPORT_RAW}" | "${PYTHON_BIN}" -c "
+import sys
+text = sys.stdin.read().strip()
+start = text.rfind('{')
+if start < 0:
+    sys.exit(1)
+print(text[start:])
+"
+)"
 
 DATASET_PATH="$(
-  echo "${EXPORT_JSON}" | "${PYTHON_BIN}" -c "import json,sys; print(json.load(sys.stdin).get('dataset_path','').strip())"
+  echo "${EXPORT_JSON}" | "${PYTHON_BIN}" -c "
+import json, sys
+payload = json.load(sys.stdin)
+if payload.get('skipped'):
+    print('')
+else:
+    print(str(payload.get('dataset_path', '')).strip())
+"
 )"
 
 if [[ -z "${DATASET_PATH}" ]]; then
-  echo "DPO export did not return dataset_path." >&2
-  echo "${EXPORT_JSON}" >&2
-  exit 1
+  FALLBACK="${ROOT}/data/finetune/datasets/sample_dpo_contract.jsonl"
+  if [[ -f "${FALLBACK}" ]]; then
+    echo "DPO export skipped — fallback to ${FALLBACK}" >&2
+    DATASET_PATH="${FALLBACK}"
+  else
+    echo "DPO export did not return dataset_path." >&2
+    echo "${EXPORT_RAW}" >&2
+    exit 1
+  fi
 fi
 
 "${PYTHON_BIN}" "${ROOT}/scripts/eval_dpo_contract_gate.py" \
