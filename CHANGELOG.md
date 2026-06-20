@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.26] - 2026-06-20
+
+### Fixed
+- `do_all_dpo_contract.sh`: парсинг export JSON при префиксе `normalize_signals` (Release CI на macOS)
+- `finetune_dpo_pipeline.py`: stats normalize → stderr (stdout только export)
+- `agent-eval.yml`: deep gate с `limit:53` вместо полного suite (93 сценария, pass_rate 0.935)
+- `release-gate-staging.yml`: `brew install colima docker` перед deploy hosted beta
+
 ## [0.4.25] - 2026-06-20
 
 ### Added

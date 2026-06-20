@@ -53,7 +53,8 @@ def _maybe_normalize_signals() -> None:
     )
     stats = store.normalize_existing_instructions(preserve_full=True, dry_run=False)
     if int(stats.get("updated", 0)) > 0:
-        print(json.dumps({"normalize_signals": stats}, indent=2))
+        # stderr: stdout зарезервирован под итоговый JSON export для shell-парсеров
+        print(json.dumps({"normalize_signals": stats}, indent=2), file=sys.stderr)
 
 
 def main() -> int:

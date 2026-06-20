@@ -27,12 +27,28 @@ EXPORT_RAW="$(
 EXPORT_JSON="$(
   printf '%s' "${EXPORT_RAW}" | "${PYTHON_BIN}" -c "
 import json, sys
+
 text = sys.stdin.read().strip()
-start = text.find('{')
-if start < 0:
+decoder = json.JSONDecoder()
+idx = 0
+export = None
+while idx < len(text):
+    while idx < len(text) and text[idx] not in '{[':
+        idx += 1
+    if idx >= len(text):
+        break
+    try:
+        obj, end = decoder.raw_decode(text, idx)
+    except json.JSONDecodeError:
+        break
+    if isinstance(obj, dict) and any(
+        key in obj for key in ('dataset_path', 'skipped', 'pair_count')
+    ):
+        export = obj
+    idx = end
+if export is None:
     sys.exit(1)
-obj, _end = json.JSONDecoder().raw_decode(text, start)
-print(json.dumps(obj))
+print(json.dumps(export))
 "
 )"
 

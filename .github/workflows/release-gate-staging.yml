@@ -19,10 +19,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Install Colima and Docker CLI
+        run: |
+          if ! command -v docker >/dev/null 2>&1; then
+            brew install colima docker
+          fi
+
       - name: Start Colima
         run: |
           if command -v colima >/dev/null 2>&1; then
-            colima start || true
+            colima start --cpu 2 --memory 4 || true
           fi
 
       - name: Deploy hosted beta

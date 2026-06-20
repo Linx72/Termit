@@ -1,14 +1,13 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-20 — **v0.4.25 готов к коммиту**
+**Последнее обновление:** 2026-06-20 — **v0.4.26 CI/release fixes**
 
 ## Сводка
-- VERSION 0.4.25: V4 ladder, eval 3.0 (TB/SWE), eval_standalone, v4_ladder_smoke
-- CI main: шаг `v4_ladder_smoke.sh`; START_HERE §6a обновлён
-- `./scripts/v4_ladder_smoke.sh` — exit 0 (без cloud key)
-- **Не сделано:** git commit/push/tag (скажите «закоммить» / «push» / «релиз»)
+- v0.4.25 release без assets (Release workflow: DPO contract JSON parse)
+- v0.4.26: fix DPO export parse, agent-eval deep limit 53, staging docker install
+- Prod Readiness workflow — success; Release Gate Staging — docker missing (fixed in 0.4.26)
 
 ## Real prod (нужны секреты пользователя)
-- [ ] `OPENAI_COMPAT_API_KEY` в GitHub + `.env`
+- [ ] `OPENAI_COMPAT_API_KEY` → GitHub Secrets + `.env`
 - [ ] `TERMIT_BETA_PROD_URL` + 5+ real desktop users
-- [ ] GPU: `TERMIT_REMOTE_GPU_SSH` или NVIDIA → real DPO + KPI +5%
+- [ ] GPU / `TERMIT_REMOTE_GPU_SSH` → real DPO
