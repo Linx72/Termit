@@ -70,7 +70,9 @@ if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
     ./scripts/orchestration_tool_loop_smoke.sh
 
     echo "== Local orchestration preflight =="
-    TERMIT_ORCH_LOCAL_SKIP_SPIKE=true ./scripts/run_local_orchestration_gate.sh
+    TERMIT_ORCH_LOCAL_SKIP_SPIKE=true \
+    TERMIT_ORCH_SKIP_SERVER_RESTART=true \
+      ./scripts/run_local_orchestration_gate.sh
 
     echo "== DPO GPU train (dry-run if no GPU) =="
     ./scripts/dpo_gpu_train.sh || true
