@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.22] - 2026-06-20
+
+### Added
+- Ось B harness: skip enrichment, pin model, lazy tool schemas, prompt cache (TTL 300s), incremental context packing, cohesion partition, `describe_tools` + `POST /api/platform/tools/describe`
+- Ось A vLLM: провайдер `vllm:`, `docker-compose.vllm.yml`, phase B model ladder scripts
+- Learning loop 0.4.23: `learning_loop_0423.sh`, CI offline gate, KPI report, remote GPU DPO probe, workflow `gpu-dpo-learning-loop.yml`
+- Beta staging 0.4.24: `POST /api/ops/beta/activity`, desktop heartbeat, `beta_staging_gate.sh`, cohort bootstrap, hosted KPI seed
+- Release pipeline 0.4.25: `pre_release_check.sh`, `release_gate_staging.sh`, weekly staging gate workflow, `do_all_automatic` staging opt-in
+- Env: `TERMIT_LAZY_TOOL_SCHEMAS`, `TERMIT_AGENT_SKIP_STEP_ENRICHMENT`, `TERMIT_CONTEXT_PACKING_INCREMENTAL`, `TERMIT_COHESION_PARTITION_ENABLED`
+- Docs: `LEARNING_LOOP_0423_RU.md`, `BETA_STAGING_RU.md`; обновлены `RELEASE_FLOW.md`, `MODEL_LADDER_RU.md`
+
+
 ## [0.4.21] - 2026-06-20
 
 ### Added
