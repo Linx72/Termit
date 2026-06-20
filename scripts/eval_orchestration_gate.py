@@ -19,7 +19,7 @@ def _apply_tier_from_env() -> int | None:
         return None
     from app.services.eval_orchestration_gate_tiers import apply_orchestration_gate_tier
 
-    if apply_orchestration_gate_tier(tier_name, overwrite=True) is None:
+    if apply_orchestration_gate_tier(tier_name, overwrite=False) is None:
         print(f"Unknown orchestration gate tier: {tier_name}", file=sys.stderr)
         return 2
     return None
