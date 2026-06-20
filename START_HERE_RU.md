@@ -216,8 +216,10 @@ python3 -m unittest tests.test_media_studio_phase0 -q
 
 ```bash
 ./scripts/prod_readiness_check.sh
+# CI-режим (без strict plan): ./scripts/prod_readiness_ci.sh
 # с dev KPI seed: TERMIT_PROD_READINESS_DEV_SEED=true ./scripts/prod_readiness_check.sh
 # strict GPU fail: TERMIT_PROD_READINESS_STRICT_GPU=true ./scripts/prod_readiness_check.sh
+# GitHub Actions: gh workflow run prod-readiness.yml
 ```
 
 По частям:
