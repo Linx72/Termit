@@ -65,6 +65,7 @@ Override: `TERMIT_EVAL_POST_DPO_IDS=MB1,HE1`.
 
 ```bash
 ./scripts/gpu_dpo_preflight.sh   # exit 1 без GPU/SSH; exit 0 когда готов learning_loop
+# или вместе с plan/staging: ./scripts/prod_readiness_check.sh
 ```
 
 Проверяет: `gpu_probe`, `cloud_benchmark_probe`, `TERMIT_REMOTE_GPU_SSH` (из env или `.env` без `source`).

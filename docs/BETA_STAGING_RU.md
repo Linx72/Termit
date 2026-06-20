@@ -84,6 +84,7 @@ TERMIT_BETA_DEV_SEED=true ./scripts/seed_beta_cohort_dev.py --force
 
 ## Связанные скрипты
 
+- [`prod_readiness_check.sh`](file:///Users/amoros/Projects/Termit/scripts/prod_readiness_check.sh) — plan + preflight + optional staging/prod beta
 - [`deploy_hosted_beta.sh`](file:///Users/amoros/Projects/Termit/scripts/deploy_hosted_beta.sh)
 - [`hosted_smoke.sh`](file:///Users/amoros/Projects/Termit/scripts/hosted_smoke.sh) — включает `POST /api/ops/beta/activity`
 - [`plan_status_dev_green.sh`](file:///Users/amoros/Projects/Termit/scripts/plan_status_dev_green.sh) — local dev shortcut
