@@ -33,6 +33,7 @@ clients/termit-shell/release/
 data/*
 !data/eval_scenarios.json
 !data/eval_scenarios_swe.json
+!data/eval_scenarios_orchestration.json
 !data/eval_scenarios_model_benchmark.json
 !data/eval_scenarios_humaneval.json
 !data/agent_templates.json

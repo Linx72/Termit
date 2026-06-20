@@ -1,0 +1,69 @@
+[
+  {
+    "id": "ORCH1",
+    "category": "orchestration",
+    "title": "Small refactor and docs update",
+    "prompt": "Refactor utility module and update docs with changed files and verification steps."
+  },
+  {
+    "id": "ORCH2",
+    "category": "orchestration",
+    "title": "Flaky test fix path",
+    "prompt": "Fix flaky test behavior and include an explicit retry-safe verify plan."
+  },
+  {
+    "id": "ORCH3",
+    "category": "orchestration",
+    "title": "Feature flag hardening",
+    "prompt": "Add feature flag guard around risky path and provide rollback instructions."
+  },
+  {
+    "id": "ORCH4",
+    "category": "orchestration",
+    "title": "Error handling improvement",
+    "prompt": "Harden error handling in service layer and list tests to update."
+  },
+  {
+    "id": "ORCH5",
+    "category": "orchestration",
+    "title": "Schema update task",
+    "prompt": "Update request schema and include compatibility notes for old clients."
+  },
+  {
+    "id": "ORCH6",
+    "category": "orchestration",
+    "title": "Routing policy tweak",
+    "prompt": "Adjust routing fallback logic and document expected behavior change."
+  },
+  {
+    "id": "ORCH7",
+    "category": "orchestration",
+    "title": "Metrics extension task",
+    "prompt": "Add one ops metric and explain how to validate it via API endpoint."
+  },
+  {
+    "id": "ORCH8",
+    "category": "orchestration",
+    "title": "Guardrail update",
+    "prompt": "Improve guardrail validator and provide examples of accepted and rejected cases."
+  },
+  {
+    "id": "ORCH9",
+    "category": "orchestration",
+    "title": "Retry-loop scenario",
+    "prompt": "Simulate reviewer rejection and produce a corrected second-pass solution summary."
+  },
+  {
+    "id": "ORCH10",
+    "category": "orchestration",
+    "title": "Release prep flow",
+    "prompt": "Prepare release-ready summary with risk notes and smoke-test checklist."
+  },
+  {
+    "id": "ORCH11",
+    "category": "orchestration",
+    "title": "Tool-loop workspace inspect",
+    "prompt": "Inspect repository markdown files via tool actions, summarize findings, and list verification commands.",
+    "expect_tool_loop": true
+  }
+]
