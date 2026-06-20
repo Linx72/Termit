@@ -11,6 +11,10 @@
 - Env: `TERMIT_LAZY_TOOL_SCHEMAS`, `TERMIT_AGENT_SKIP_STEP_ENRICHMENT`, `TERMIT_CONTEXT_PACKING_INCREMENTAL`, `TERMIT_COHESION_PARTITION_ENABLED`
 - Docs: `LEARNING_LOOP_0423_RU.md`, `BETA_STAGING_RU.md`; обновлены `RELEASE_FLOW.md`, `MODEL_LADDER_RU.md`
 
+### Fixed
+- Flaky `confirm_run` tests: drain agent workers before manual `awaiting_confirmation`; fast `stop(grace_seconds=0.5)` in finally
+- `release_smoke`: confirm_run regression in core profile; reset `patch_sample.txt` after live eval gates
+
 
 ## [0.4.21] - 2026-06-20
 

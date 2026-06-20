@@ -287,6 +287,8 @@ class SprintTop5Tests(unittest.TestCase):
             try:
                 created = service.create_run(profile.agent_id, AgentRunRequest(input="patch"))
                 run_id = created.run_id
+                # Drain workers so manual awaiting_confirmation is not overwritten by the runner.
+                service.stop(grace_seconds=0.5)
                 checkpoint = json.dumps(
                     {
                         "history": [{"role": "user", "content": "patch"}],
@@ -317,7 +319,7 @@ class SprintTop5Tests(unittest.TestCase):
                 self.assertTrue(approved.resumed)
                 self.assertEqual(approved.state, AgentRunState.queued)
             finally:
-                service.stop()
+                service.stop(grace_seconds=0.5)
 
     def test_confirm_run_keeps_verify_retry_counter_in_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -344,6 +346,7 @@ class SprintTop5Tests(unittest.TestCase):
             try:
                 created = service.create_run(profile.agent_id, AgentRunRequest(input="patch"))
                 run_id = created.run_id
+                service.stop(grace_seconds=0.5)
                 checkpoint = json.dumps(
                     {
                         "history": [{"role": "user", "content": "patch"}],
@@ -367,7 +370,7 @@ class SprintTop5Tests(unittest.TestCase):
                     data = json.loads(record.checkpoint_json or "{}")
                 self.assertEqual(data.get("verify_retries_used"), 1)
             finally:
-                service.stop()
+                service.stop(grace_seconds=0.5)
 
     def test_child_timeline_event_is_forwarded_to_parent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -408,7 +411,7 @@ class SprintTop5Tests(unittest.TestCase):
                 parent_events = service.get_run_events(parent.run_id, limit=100)
                 self.assertTrue(any(item.event_type == "child_run_timeline" for item in parent_events))
             finally:
-                service.stop()
+                service.stop(grace_seconds=0.5)
 
     def test_reindex_path_updates_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

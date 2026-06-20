@@ -26,6 +26,8 @@ echo "== Deterministic core tests =="
   tests.test_agents_api \
   tests.test_desktop_runtime_mode_smoke \
   tests.test_desktop_runtime_state_smoke \
+  tests.test_sprint_top5.SprintTop5Tests.test_confirm_run_rejects_and_resumes \
+  tests.test_sprint_top5.SprintTop5Tests.test_confirm_run_keeps_verify_retry_counter_in_checkpoint \
   -q
 
 if [[ "${PROFILE}" == "extended" ]]; then
@@ -90,3 +92,9 @@ elif [[ "${TERMIT_SMOKE_REQUIRE_SERVER:-}" == "1" ]]; then
 else
   echo "Server not running on $BASE_URL — skip live eval gates."
 fi
+
+if curl -sf --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
+  "${ROOT}/scripts/reset_eval_patch_fixture.sh" || true
+fi
+
+echo "OK — release smoke (${PROFILE}) passed."

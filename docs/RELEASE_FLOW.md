@@ -26,6 +26,7 @@ Termit uses semantic-ish versioning in `VERSION` and git tags `v{VERSION}`.
    ./scripts/release_gate_local.sh
    TERMIT_RELEASE_RUN_STAGING=true ./scripts/pre_release_check.sh
    ```
+   После live eval в `release_smoke` fixture `data/eval_fixtures/patch_sample.txt` сбрасывается на baseline (`reset_eval_patch_fixture.sh`). Если гоняли eval вручную — `./scripts/reset_eval_patch_fixture.sh`.
 5. **Ship**:
    ```bash
    git add VERSION CHANGELOG.md docs/MIGRATION_NOTES_X.Y.Z.md docs/ROLLBACK_PLAN_X.Y.Z.md

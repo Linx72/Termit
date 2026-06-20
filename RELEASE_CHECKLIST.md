@@ -62,9 +62,10 @@
 - Release smoke profiles:
   - Pre-release bundle: `./scripts/pre_release_check.sh`
   - Staging gate: `./scripts/release_gate_staging.sh` (CI: `.github/workflows/release-gate-staging.yml`)
-  - Deterministic core (default): `./scripts/release_smoke_core.sh`
+  - Deterministic core (default): `./scripts/release_smoke_core.sh` (includes `confirm_run` regression tests)
   - Extended suite (nightly/integration): `./scripts/release_smoke_extended.sh`
   - Dedicated nightly workflow: `.github/workflows/nightly-extended-smoke.yml`
+  - После live eval: `data/eval_fixtures/patch_sample.txt` сбрасывается автоматически; вручную: `./scripts/reset_eval_patch_fixture.sh`
 
 - Parity eval gate (20 scenarios):
   - `POST /api/eval/run-suite` with payload `{"category":"cursor_parity","limit":20,"persist_report":false}`
