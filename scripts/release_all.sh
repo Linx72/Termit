@@ -59,5 +59,7 @@ else
 fi
 echo "== Optional: hosted beta =="
 echo "  ./scripts/deploy_hosted_beta.sh"
+echo "== Post-release prod handoff (real prod secrets) =="
+echo "  ./scripts/prod_handoff_after_release.sh"
 
 echo "Done."
