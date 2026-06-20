@@ -103,6 +103,9 @@ if ! "${PYTHON_BIN}" "${ROOT}/scripts/plan_status_check.py" "${PLAN_ARGS[@]}"; t
 fi
 
 echo ""
+"${ROOT}/scripts/reset_eval_patch_fixture.sh" || true
+
+echo ""
 echo "OK — do_all_plan завершён."
 echo "  Отчёты: ${TERMIT_PLAN_STATUS_BEFORE:-/tmp/termit_plan_status_before.json}"
 echo "          ${TERMIT_PLAN_STATUS_AFTER:-/tmp/termit_plan_status_after.json}"
