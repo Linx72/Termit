@@ -10,6 +10,14 @@ jobs:
     # ubuntu: встроенный Docker; macOS GH runners не поднимают Colima/VZ.
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      TERMIT_HOSTED_BASE_URL: http://127.0.0.1:8080
+      # docker.env.example: auth on; eval/* требует operator (rbac.py)
+      TERMIT_API_KEY: operator-key
+      TERMIT_HOSTED_AUTH_EXPECT: "true"
+      TERMIT_BETA_STAGING_STRICT: "false"
+      TERMIT_BETA_REQUIRE_PRODUCT_GATES: "false"
+      TERMIT_PROD_READINESS_CI: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -24,10 +32,10 @@ jobs:
         run: ./scripts/deploy_hosted_beta.sh
 
       - name: Prod readiness (plan + preflight + staging gate)
-        run: |
-          TERMIT_PROD_READINESS_STAGING=true \
-          TERMIT_PROD_READINESS_STRICT_GPU=false \
-            ./scripts/prod_readiness_check.sh
+        env:
+          TERMIT_PROD_READINESS_STAGING: "true"
+          TERMIT_PROD_READINESS_STRICT_GPU: "false"
+        run: ./scripts/prod_readiness_check.sh
 
       - name: Upload staging artifacts
         if: always()
