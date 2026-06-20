@@ -7,6 +7,7 @@
 - `finetune_bootstrap_signals.py`: bootstrap-сообщения → stderr
 - `release.yml`: `python -m venv .venv` перед unit tests и desktop build
 - DPO contract test: `TERMIT_NORMALIZE_SIGNALS_BEFORE_DPO=false`
+- `agent-eval.yml`: только fast gate (cursor_parity×20), как CI push — deep×53 давал 90.6% на ubuntu
 
 ## [0.4.26] - 2026-06-20
 
