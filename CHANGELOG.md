@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.23] - 2026-06-20
+
+### Added
+- `scripts/prod_readiness_check.sh`, `scripts/prod_readiness_ci.sh` — plan + GPU preflight + optional staging/prod beta
+- CI: `prod-readiness.yml` (weekly), `prod_readiness_ci` в `ci.yml` на main
+- `release-gate-staging.yml` → полный `prod_readiness_check`
+- Prod beta gate: `beta_prod_gate.sh`, workflow `beta-prod-gate.yml` (D30 + retention)
+- CI plan fixtures (`dev_only`): `eval_kpi_last.json`, `learning_loop_0423_last.json`, `beta_cohort_meta.json`
+- Docs: START_HERE §13, RELEASE_CHECKLIST, LEARNING_LOOP/BETA_STAGING cross-links
+
+### Fixed
+- Flaky `confirm_run` tests; `release_smoke` confirm_run regression + patch fixture reset
+- Staging `agent_run_success_rate`: KPI seed unique run ids + `outcome_class=success`
+- `prod_readiness_ci` без `--strict` plan на чистом GitHub runner
+
 ## [0.4.22] - 2026-06-20
 
 ### Added
@@ -10,14 +25,6 @@
 - Release pipeline 0.4.25: `pre_release_check.sh`, `release_gate_staging.sh`, weekly staging gate workflow, `do_all_automatic` staging opt-in
 - Env: `TERMIT_LAZY_TOOL_SCHEMAS`, `TERMIT_AGENT_SKIP_STEP_ENRICHMENT`, `TERMIT_CONTEXT_PACKING_INCREMENTAL`, `TERMIT_COHESION_PARTITION_ENABLED`
 - Docs: `LEARNING_LOOP_0423_RU.md`, `BETA_STAGING_RU.md`; обновлены `RELEASE_FLOW.md`, `MODEL_LADDER_RU.md`
-
-### Fixed
-- Flaky `confirm_run` tests: drain agent workers before manual `awaiting_confirmation`; fast `stop(grace_seconds=0.5)` in finally
-- `release_smoke`: confirm_run regression in core profile; reset `patch_sample.txt` after live eval gates
-- `seed_product_kpi_dev`: unique run ids per seed batch + `outcome_class=success` для стабильного `agent_run_success_rate` на staging
-- CI fixtures: `data/eval_kpi_last.json`, `data/learning_loop_0423_last.json`, `data/beta_cohort_meta.json` (`dev_only: true`)
-- `scripts/prod_readiness_check.sh` — единый prod readiness gate
-- CI: `.github/workflows/prod-readiness.yml` + `scripts/prod_readiness_ci.sh` (без strict plan на чистом runner)
 
 
 ## [0.4.21] - 2026-06-20
