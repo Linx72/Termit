@@ -313,6 +313,11 @@ class Settings:
     media_public_base_url: str = ""
     media_brand_kits_dir: str = "./data/media/brand_kits"
     media_eval_scenarios_path: str = "./data/eval_scenarios_media.json"
+    media_comfy_url: str = "http://127.0.0.1:8188"
+    media_comfy_workflow: str = "./data/media/workflows/sdxl_t2i_api.json"
+    media_comfy_checkpoint: str = "sd_xl_base_1.0.safetensors"
+    media_comfy_timeout_sec: float = 180.0
+    media_comfy_cost_usd: float = 0.0
     openai_api_key: str = ""
     openai_api_base_url: str = "https://api.openai.com/v1"
 
@@ -833,6 +838,20 @@ def get_settings() -> Settings:
             "TERMIT_MEDIA_EVAL_SCENARIOS_PATH",
             "./data/eval_scenarios_media.json",
         ),
+        media_comfy_url=os.getenv("TERMIT_MEDIA_COMFY_URL", "http://127.0.0.1:8188").strip().rstrip("/"),
+        media_comfy_workflow=os.getenv(
+            "TERMIT_MEDIA_COMFY_WORKFLOW",
+            "./data/media/workflows/sdxl_t2i_api.json",
+        ),
+        media_comfy_checkpoint=os.getenv(
+            "TERMIT_MEDIA_COMFY_CHECKPOINT",
+            "sd_xl_base_1.0.safetensors",
+        ),
+        media_comfy_timeout_sec=max(
+            30.0,
+            float(os.getenv("TERMIT_MEDIA_COMFY_TIMEOUT_SEC", "180")),
+        ),
+        media_comfy_cost_usd=max(0.0, float(os.getenv("TERMIT_MEDIA_COMFY_COST_USD", "0"))),
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         openai_api_base_url=os.getenv("OPENAI_API_BASE_URL", "https://api.openai.com/v1"),
     )

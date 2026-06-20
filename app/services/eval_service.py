@@ -1123,6 +1123,14 @@ while True:
             tools = raw.get("tools", [])
             names = {t.get("name") for t in tools if isinstance(t, dict)}
             passed = "generate_image" in names and "render_video" in names
+        elif scenario.stub_check == "comfy_provider_wired":
+            from app.services.agent_tool_schema import TOOL_DEFINITIONS
+            from app.services.media_provider_comfy import ComfyImageProvider
+
+            props = TOOL_DEFINITIONS["generate_image"]["function"]["parameters"]["properties"]
+            desc = str(props.get("provider", {}).get("description", ""))
+            workflow = Path("data/media/workflows/sdxl_t2i_api.json")
+            passed = "comfy" in desc and workflow.is_file() and bool(ComfyImageProvider)
         return ref, passed, None if passed else "verification_error", 1, "automated"
 
     def _run_media_agent(

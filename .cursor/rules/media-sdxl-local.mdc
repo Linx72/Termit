@@ -1,0 +1,39 @@
+---
+description: Локальный SDXL (ComfyUI) в Termit Media Studio — когда использовать provider=comfy
+globs:
+  - app/services/media_*.py
+  - data/skills/media-studio/**
+  - clients/termit-desktop/src/MediaStudioPanel.tsx
+---
+
+# Media SDXL local (ComfyUI)
+
+## Когда использовать
+
+- Пользователь просит **локальную** генерацию, offline, приватность, без OpenAI spend
+- Упоминает SDXL, Stable Diffusion, ComfyUI
+- Storyboard с несколькими сценами и есть GPU (local или remote)
+
+## Provider
+
+| provider | Когда |
+|----------|-------|
+| `comfy` или `sdxl` | Локальный ComfyUI (`TERMIT_MEDIA_COMFY_URL`) |
+| `openai` | Текст на картинке, inpaint, cloud quality |
+| `stub` | CI, тесты, нет GPU |
+
+## Перед генерацией
+
+1. `./scripts/check_comfy_health.sh` — ComfyUI жив
+2. `TERMIT_MEDIA_ENABLED=true`
+3. `confirmed=true` **не нужен** для `comfy` (cost=0)
+
+## Команды setup
+
+```bash
+./scripts/setup_comfy_sdxl.sh
+./scripts/start_comfy_sidecar.sh
+TERMIT_MEDIA_IMAGE_PROVIDER=comfy ./scripts/restart_server.sh
+```
+
+Документация: `docs/MEDIA_SDXL_LOCAL_RU.md`

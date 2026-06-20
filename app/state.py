@@ -1336,6 +1336,11 @@ def _build_media_generation_service():
         media_public_base_url=settings.media_public_base_url,
         i2v_cost_usd=settings.media_i2v_cost_usd,
         brand_kits_dir=settings.media_brand_kits_dir,
+        comfy_url=settings.media_comfy_url,
+        comfy_workflow=settings.media_comfy_workflow,
+        comfy_checkpoint=settings.media_comfy_checkpoint,
+        comfy_timeout_sec=settings.media_comfy_timeout_sec,
+        comfy_cost_usd=settings.media_comfy_cost_usd,
     )
 
 

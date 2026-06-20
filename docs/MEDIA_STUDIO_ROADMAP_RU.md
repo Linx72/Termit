@@ -47,6 +47,7 @@ python3 -m unittest discover -s tests -p 'test_eval*.py' -q  # includes MS scena
 
 ## Future (optional)
 
+- ~~Local SDXL via ComfyUI~~ — `provider=comfy`, `scripts/setup_comfy_sdxl.sh` (0.4.27)
 - ~~Fal I2V with public image URL upload~~ — `TERMIT_MEDIA_PUBLIC_BASE_URL` or Fal CDN upload (0.4.2)
 - ~~Lottie export path~~ — `POST /api/media/export-lottie`, tool `export_lottie` (0.4.2)
 - ~~Human approve gate in Desktop before cloud spend~~ — Desktop confirm UI on HTTP 428 (0.3.9)

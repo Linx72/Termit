@@ -60,7 +60,7 @@ description: >-
 
 ## Cloud (studio default)
 
-- Images: OpenAI Images; A/B Flux via Fal
+- Images: OpenAI Images; A/B Flux via Fal; **local SDXL via ComfyUI** (`provider=comfy`)
 - I2V: Fal/Replicate
 - TTS: ElevenLabs
 - Subs: Whisper API
@@ -69,6 +69,7 @@ description: >-
 ## Локально всегда
 
 - `compose_media` — ffmpeg
+- `generate_image` с `provider=comfy` — SDXL через ComfyUI (`./scripts/start_comfy_sidecar.sh`)
 - Проверка: `ffprobe` duration, resolution, audio loudness
 
 ## Запреты

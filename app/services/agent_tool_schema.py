@@ -230,7 +230,10 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
                     "height": {"type": "integer"},
                     "project_id": {"type": "string"},
                     "scene_id": {"type": "string"},
-                    "provider": {"type": "string", "description": "openai or stub"},
+                    "provider": {
+                        "type": "string",
+                        "description": "openai, comfy (local SDXL via ComfyUI), sdxl (alias comfy), or stub",
+                    },
                     "confirmed": {"type": "boolean"},
                 },
                 "required": ["prompt"],

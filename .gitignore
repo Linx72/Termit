@@ -37,6 +37,7 @@ data/*
 !data/eval_scenarios_model_benchmark.json
 !data/eval_scenarios_humaneval.json
 !data/eval_scenarios_terminal.json
+!data/eval_scenarios_media.json
 !data/agent_templates.json
 !data/skills/
 !data/skills/**/SKILL.md
@@ -62,6 +63,10 @@ data/eval_fixtures/*
 !data/eval_kpi_last.json
 !data/learning_loop_0423_last.json
 !data/beta_cohort_meta.json
+!data/media/
+data/media/*
+!data/media/workflows/
+!data/media/workflows/*.json
 
 # Cursor rules — keep
 !.cursor/

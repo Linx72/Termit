@@ -26,7 +26,7 @@ type PendingMediaAction =
 export function MediaStudioPanel({ client, connected, locale }: MediaStudioPanelProps) {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [provider, setProvider] = useState<"stub" | "openai">("stub");
+  const [provider, setProvider] = useState<"stub" | "openai" | "comfy">("stub");
   const [projectId, setProjectId] = useState("desktop-studio");
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [kits, setKits] = useState<BrandKit[]>([]);
@@ -207,9 +207,10 @@ export function MediaStudioPanel({ client, connected, locale }: MediaStudioPanel
                 <select
                   id="mediaProvider"
                   value={provider}
-                  onChange={(e) => setProvider(e.target.value as "stub" | "openai")}
+                  onChange={(e) => setProvider(e.target.value as "stub" | "openai" | "comfy")}
                 >
                   <option value="stub">{t(locale, "mediaStudioProviderStub")}</option>
+                  <option value="comfy">{t(locale, "mediaStudioProviderComfy")}</option>
                   <option value="openai">{t(locale, "mediaStudioProviderOpenai")}</option>
                 </select>
               </div>

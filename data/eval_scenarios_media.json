@@ -1,0 +1,117 @@
+[
+  {
+    "id": "MS1",
+    "category": "media",
+    "title": "Validate storyboard example schema",
+    "prompt": "Ensure example storyboard matches storyboard.schema.json.",
+    "runner": "media_schema",
+    "schema_path": "data/media/schemas/storyboard.schema.json",
+    "fixture_path": "data/media/examples/storyboard.example.json"
+  },
+  {
+    "id": "MS2",
+    "category": "media",
+    "title": "Validate creative brief example schema",
+    "prompt": "Ensure example brief matches creative_brief.schema.json.",
+    "runner": "media_schema",
+    "schema_path": "data/media/schemas/creative_brief.schema.json",
+    "fixture_path": "data/media/examples/creative_brief.example.json"
+  },
+  {
+    "id": "MS3",
+    "category": "media",
+    "title": "Validate brand kit example schema",
+    "prompt": "Ensure brand kit example matches brand_kit.schema.json.",
+    "runner": "media_schema",
+    "schema_path": "data/media/schemas/brand_kit.schema.json",
+    "fixture_path": "data/media/examples/brand_kit.termit-default.json"
+  },
+  {
+    "id": "MS4",
+    "category": "media",
+    "title": "Tools v1 registry present",
+    "prompt": "Verify media tools contract file lists generate_image.",
+    "runner": "media_stub",
+    "stub_check": "tools_v1_has_generate_image"
+  },
+  {
+    "id": "MS5",
+    "category": "media",
+    "title": "Generate app icon 512",
+    "prompt": "Generate 512x512 app icon from brief; vision QA score >= 0.75.",
+    "runner": "media_agent",
+    "phase": 1,
+    "task_type": "creative_media",
+    "enabled_tools": ["generate_image", "vision_qa_media"],
+    "expect_asset_mime": "image/png",
+    "expect_min_dimension": 512
+  },
+  {
+    "id": "MS6",
+    "category": "media",
+    "title": "Social banner 1200x628",
+    "prompt": "Generate marketing banner with brand kit colors.",
+    "runner": "media_agent",
+    "phase": 1,
+    "task_type": "creative_media",
+    "enabled_tools": ["generate_image", "list_media_assets"]
+  },
+  {
+    "id": "MS7",
+    "category": "media",
+    "title": "Cost estimate under cap",
+    "prompt": "Estimate cost for storyboard example; must be <= 25 USD.",
+    "runner": "media_agent",
+    "phase": 1,
+    "enabled_tools": ["estimate_media_cost"],
+    "max_cost_usd": 25
+  },
+  {
+    "id": "MS8",
+    "category": "media",
+    "title": "Slideshow compose 15s",
+    "prompt": "Compose 15s slideshow from 3 PNG assets with crossfade.",
+    "runner": "media_agent",
+    "phase": 2,
+    "enabled_tools": ["compose_media"],
+    "expect_asset_mime": "video/mp4"
+  },
+  {
+    "id": "MS9",
+    "category": "media",
+    "title": "I2V scene 5s",
+    "prompt": "Render 5s I2V clip from hero frame; wait job; vision QA.",
+    "runner": "media_agent",
+    "phase": 4,
+    "enabled_tools": ["generate_image", "render_video", "wait_media_job", "vision_qa_media"]
+  },
+  {
+    "id": "MS10",
+    "category": "media",
+    "title": "Full promo pipeline stub",
+    "prompt": "Run studio-pack: brief to storyboard to 45s master (integration).",
+    "runner": "media_agent",
+    "phase": 4,
+    "multi_agent_preset": "studio-pack",
+    "brief_fixture": "data/media/examples/creative_brief.example.json",
+    "storyboard_fixture": "data/media/examples/storyboard.example.json"
+  },
+  {
+    "id": "MS11",
+    "category": "media",
+    "title": "Lottie export from PNG frames",
+    "prompt": "Export Lottie JSON animation from 3 PNG frames.",
+    "runner": "media_agent",
+    "phase": 3,
+    "enabled_tools": ["export_lottie"],
+    "expect_asset_mime": "application/json"
+  },
+  {
+    "id": "MS12",
+    "category": "media",
+    "title": "Comfy SDXL provider wired",
+    "prompt": "Verify ComfyUI SDXL provider is registered in tool schema and workflow exists.",
+    "runner": "media_stub",
+    "stub_check": "comfy_provider_wired"
+  }
+]

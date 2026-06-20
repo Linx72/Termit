@@ -23,6 +23,7 @@ from app.services.media_compose_service import (
 )
 from app.services.media_cost_service import MediaCostEstimate, estimate_from_storyboard, estimate_storyboard_path
 from app.services.media_png_util import write_solid_png
+from app.services.media_provider_comfy import ComfyImageProvider
 from app.services.media_provider_openai import MediaProviderError, OpenAIImageProvider
 from app.services.media_provider_transcribe import MediaTranscribeError, OpenAITranscribeProvider
 from app.services.media_provider_tts import MediaTtsError, OpenAITtsProvider
@@ -136,6 +137,11 @@ class MediaGenerationService:
         media_public_base_url: str = "",
         i2v_cost_usd: float = 0.50,
         brand_kits_dir: str = "./data/media/brand_kits",
+        comfy_url: str = "http://127.0.0.1:8188",
+        comfy_workflow: str = "./data/media/workflows/sdxl_t2i_api.json",
+        comfy_checkpoint: str = "sd_xl_base_1.0.safetensors",
+        comfy_timeout_sec: float = 180.0,
+        comfy_cost_usd: float = 0.0,
         run_cost_ledger: Optional[dict[str, float]] = None,
         trace_span_store: Optional[TraceSpanStore] = None,
     ) -> None:
@@ -151,6 +157,13 @@ class MediaGenerationService:
             base_url=openai_base_url,
             image_model=openai_image_model,
             default_cost_usd=image_cost_usd,
+        )
+        self._comfy = ComfyImageProvider(
+            base_url=comfy_url,
+            workflow_path=comfy_workflow,
+            checkpoint=comfy_checkpoint,
+            timeout_sec=comfy_timeout_sec,
+            default_cost_usd=comfy_cost_usd,
         )
         self._tts = OpenAITtsProvider(
             api_key=openai_api_key,
@@ -276,6 +289,8 @@ class MediaGenerationService:
             if not clean_prompt:
                 raise MediaStudioError("generate_image requires non-empty prompt.")
             chosen = (provider or self._image_provider_name).strip().lower()
+            if chosen == "sdxl":
+                chosen = "comfy"
             est_cost = self._image_cost_usd if chosen == "openai" else 0.0
             if est_cost >= self._confirm_threshold and not confirmed:
                 raise MediaConfirmationRequired(
@@ -298,6 +313,19 @@ class MediaGenerationService:
                 provider_used = gen.provider
                 cost = gen.cost_usd
                 revised = gen.revised_prompt
+            elif chosen == "comfy":
+                if not self._comfy.available:
+                    raise MediaStudioError(
+                        "ComfyUI недоступен — запустите ./scripts/start_comfy_sidecar.sh "
+                        f"({self._comfy.base_url})."
+                    )
+                try:
+                    gen = self._comfy.generate(prompt=clean_prompt, width=width, height=height)
+                except MediaProviderError as exc:
+                    raise MediaStudioError(str(exc)) from exc
+                target.write_bytes(gen.bytes_data)
+                provider_used = gen.provider
+                cost = gen.cost_usd
             else:
                 write_solid_png(target, width, height, (30, 64, 175))
                 provider_used = "stub"

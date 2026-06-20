@@ -26,6 +26,7 @@ _RELAX_ENV_WARNING_IDS = frozenset({
     "finetune_kpi_dev_seed",
     "beta_cohort_dev_seed",
     "dpo_dry_run",
+    "comfy_sdxl_down",
 })
 
 
@@ -80,6 +81,7 @@ class PlanStatusService:
         beta_meta = self._load_beta_cohort_meta()
         gpu = self._gpu_probe()
         cloud = self._cloud_probe()
+        comfy = self._comfy_probe()
 
         blockers: list[dict[str, str]] = []
         warnings: list[dict[str, str]] = []
@@ -107,6 +109,19 @@ class PlanStatusService:
                 cloud.get("hint") or "Cloud benchmark не готов."
             )
             warnings.append({"id": "cloud_benchmark", "message": hint})
+
+        image_provider = (self._settings.media_image_provider or "").strip().lower()
+        if self._settings.media_enabled and image_provider in {"comfy", "sdxl"}:
+            if not comfy.get("ready"):
+                warnings.append(
+                    {
+                        "id": "comfy_sdxl_down",
+                        "message": (
+                            f"TERMIT_MEDIA_IMAGE_PROVIDER={image_provider}, "
+                            "но ComfyUI недоступен — ./scripts/start_comfy_sidecar.sh"
+                        ),
+                    }
+                )
 
         if finetune_kpi is not None and finetune_kpi.get("dev_only"):
             warnings.append(
@@ -281,6 +296,24 @@ class PlanStatusService:
             return payload if isinstance(payload, dict) else None
         except (json.JSONDecodeError, OSError):
             return None
+
+    def _comfy_probe(self) -> dict[str, Any]:
+        """Проверить ComfyUI sidecar для локального SDXL."""
+        from app.services.media_provider_comfy import ComfyImageProvider
+
+        settings = self._settings
+        provider = ComfyImageProvider(
+            base_url=settings.media_comfy_url,
+            workflow_path=settings.media_comfy_workflow,
+            checkpoint=settings.media_comfy_checkpoint,
+            timeout_sec=min(10.0, settings.media_comfy_timeout_sec),
+        )
+        ready = provider.health_check()
+        return {
+            "ready": ready,
+            "url": settings.media_comfy_url,
+            "checkpoint": settings.media_comfy_checkpoint,
+        }
 
     @staticmethod
     def _default_gpu_probe() -> dict[str, Any]:
