@@ -49,10 +49,14 @@ else
   echo "Install gh CLI: gh release create $TAG --title 'Termit ${VERSION}' --generate-notes"
 fi
 
-echo "== Optional: clients =="
-echo "  cd clients/termit-client && npm install && npm run build && npm test"
-echo "  cd ../vscode-extension && npm install && npm run build"
-echo "  cd ../termit-desktop && npm install && npm run build"
+if [[ "${TERMIT_RELEASE_BUILD_CLIENTS:-false}" == "true" ]]; then
+  echo "== 5/5 Clients build =="
+  "$ROOT/scripts/build_clients.sh"
+else
+  echo "== Optional: clients =="
+  echo "  TERMIT_RELEASE_BUILD_CLIENTS=true ./scripts/release_all.sh"
+  echo "  или: ./scripts/build_clients.sh"
+fi
 echo "== Optional: hosted beta =="
 echo "  ./scripts/deploy_hosted_beta.sh"
 

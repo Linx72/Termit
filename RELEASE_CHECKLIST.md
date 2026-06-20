@@ -74,3 +74,15 @@
   - `max_queued_age_seconds` and `max_running_age_seconds` stay below SLA budget
 - Confirm stable desktop profile exists:
   - template id `desktop-cursor-parity-stable`
+
+## 7) Clients (optional before tag)
+
+```bash
+./scripts/build_clients.sh
+# или в release_all:
+TERMIT_RELEASE_BUILD_CLIENTS=true ./scripts/release_all.sh
+```
+
+- `termit-client`: `npm test` (12 tests)
+- `vscode-extension`: `tsc` build
+- `termit-desktop`: `vite build` → `dist/`

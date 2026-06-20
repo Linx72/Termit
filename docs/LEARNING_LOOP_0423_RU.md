@@ -61,6 +61,14 @@ Override: `TERMIT_EVAL_POST_DPO_IDS=MB1,HE1`.
 - KPI summary: `data/eval_kpi_last.json`
 - Strict: `TERMIT_FINETUNE_KPI_STRICT=true`
 
+## Preflight (real DPO)
+
+```bash
+./scripts/gpu_dpo_preflight.sh   # exit 1 без GPU/SSH; exit 0 когда готов learning_loop
+```
+
+Проверяет: `gpu_probe`, `cloud_benchmark_probe`, `TERMIT_REMOTE_GPU_SSH` (из env или `.env` без `source`).
+
 ## CI (offline tools + dry-run DPO)
 
 ```bash

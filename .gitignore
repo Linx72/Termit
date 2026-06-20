@@ -47,6 +47,7 @@ data/finetune/*
 !data/finetune/recipes/
 !data/finetune/recipes/*.Modelfile
 !data/finetune/datasets/
+data/finetune/datasets/*
 !data/finetune/datasets/sample_dpo_contract.jsonl
 !data/eval_fixtures/
 data/eval_fixtures/*

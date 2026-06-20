@@ -169,7 +169,13 @@ class PlanStatusLearningLoopTests(unittest.TestCase):
 
 class LearningLoopScriptSyntaxTests(unittest.TestCase):
     def test_bash_syntax(self) -> None:
-        for name in ("learning_loop_0423.sh", "learning_loop_0423_ci.sh", "remote_gpu_dpo.sh"):
+        for name in (
+            "learning_loop_0423.sh",
+            "learning_loop_0423_ci.sh",
+            "remote_gpu_dpo.sh",
+            "gpu_dpo_preflight.sh",
+            "build_clients.sh",
+        ):
             proc = subprocess.run(
                 ["bash", "-n", str(ROOT / "scripts" / name)],
                 capture_output=True,
@@ -177,6 +183,20 @@ class LearningLoopScriptSyntaxTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 0, f"{name}: {proc.stderr}")
+
+    def test_gpu_dpo_preflight_fails_without_gpu(self) -> None:
+        env = os.environ.copy()
+        env.pop("TERMIT_REMOTE_GPU_SSH", None)
+        proc = subprocess.run(
+            [str(ROOT / "scripts" / "gpu_dpo_preflight.sh")],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+            cwd=str(ROOT),
+        )
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("BLOCKER", proc.stderr)
 
 
 if __name__ == "__main__":

@@ -126,6 +126,13 @@ if curl -sf --max-time 5 "${BASE_URL}/health" >/dev/null 2>&1; then
     ./scripts/learning_loop_0423_ci.sh \
       || echo "WARN: learning loop 0.4.23 CI failed (non-blocking)."
   fi
+
+  if [[ "${TERMIT_DO_ALL_BUILD_CLIENTS:-false}" == "true" ]]; then
+    echo ""
+    echo "== 11/11 Clients build =="
+    ./scripts/build_clients.sh \
+      || echo "WARN: clients build failed (non-blocking)."
+  fi
 else
   echo "Server not reachable at ${BASE_URL} — skip HTTP/gate steps."
   echo "Start: ./scripts/restart_server.sh"
