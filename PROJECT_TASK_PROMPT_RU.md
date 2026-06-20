@@ -547,6 +547,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 
 - [x] Push + tagged release v0.4.22 (`release_all.sh`)
 - [x] `scripts/pre_release_check.sh` + `release-gate-staging.yml` (weekly CI)
+- [x] `scripts/prod_readiness_check.sh` — plan + GPU preflight + optional staging/prod beta
 - [x] `scripts/release_gate_staging.sh` — smoke + KPI seed + beta bootstrap + gates
 - [x] TERMIT_RELEASE_PLAN_STRICT opt-in в `release_gate_local.sh`
 - [x] Agent run success gate (`agent_run_success_rate` из `by_outcome_class`)
