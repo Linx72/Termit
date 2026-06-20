@@ -32,7 +32,7 @@ echo "== Finetune KPI dev seed =="
 
 echo ""
 echo "== Product KPI dev seed (tool-loop + workflow, без chat) =="
-"${PYTHON_BIN}" "${ROOT}/scripts/seed_product_kpi_dev.py" --force --runs 10 --chats 0 --base-url "${BASE_URL}"
+"${PYTHON_BIN}" "${ROOT}/scripts/seed_product_kpi_dev.py" --force --runs 25 --chats 0 --base-url "${BASE_URL}"
 
 if curl -sf --max-time 3 "${BASE_URL}/health" >/dev/null 2>&1; then
   if [[ "${TERMIT_PRODUCT_KPI_LIVE_CHATS:-false}" == "true" ]]; then

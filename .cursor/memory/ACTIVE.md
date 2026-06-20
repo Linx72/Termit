@@ -1,11 +1,11 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-20 — **SDXL ComfyUI E2E green**
+**Последнее обновление:** 2026-06-20 — **do_all_automatic green + plan overall_ok**
 
 ## Сводка
-- **SDXL E2E:** ComfyUI :8188 + checkpoint 6.5 GB + `generate_image provider=comfy` → PNG OK (~25s @512²)
-- Commit `61e1531`: media_provider_comfy, scripts, Desktop, MS12 eval
-- **do_all_automatic** — exit 0; v0.4.27 Release green
+- **do_all_automatic** (plan + dev green): exit 0 ~5 min; verify CI + training loop + orch gate OK
+- **plan status:** overall_ok=true (после KPI re-seed 20 runs; local_dev_kpi_seed → 25)
+- **SDXL:** ComfyUI :8188 up, media provider=comfy
 
 ## Открытые задачи
 - [ ] `OPENAI_COMPAT_API_KEY` в `.env` + GitHub Secrets
