@@ -209,3 +209,29 @@ python3 -m unittest tests.test_media_studio_phase0 -q
 - Документация override: [docs/FLAKY_WATCH_OVERRIDES_RU.md](docs/FLAKY_WATCH_OVERRIDES_RU.md)
 - Runbook инцидента (первые 10 минут): [docs/NIGHTLY_FLAKY_GATE_RUNBOOK_RU.md](docs/NIGHTLY_FLAKY_GATE_RUNBOOK_RU.md)
 - Конфиг override: `data/flaky_watch_gate_overrides.json`
+
+## 13. Prod readiness (фаза 5)
+
+Локальный зелёный контур без prod-секретов:
+
+```bash
+./scripts/plan_status_dev_green.sh
+./scripts/release_gate_local.sh
+TERMIT_RELEASE_RUN_STAGING=auto ./scripts/pre_release_check.sh   # staging если :8080 up
+./scripts/do_all_verify_ci.sh
+```
+
+Перед real prod — blockers из `./scripts/gpu_dpo_preflight.sh`:
+
+- `TERMIT_REMOTE_GPU_SSH` или локальный NVIDIA → `learning_loop_0423.sh`
+- `OPENAI_COMPAT_API_KEY` → cloud benchmark
+- `TERMIT_BETA_PROD_URL` + ≥5 real desktop users → `./scripts/beta_prod_gate.sh` (CI: `beta-prod-gate.yml`, secret `TERMIT_BETA_PROD_URL`)
+
+Staging hosted beta:
+
+```bash
+./scripts/start_colima_and_deploy_beta.sh
+./scripts/release_gate_staging.sh
+```
+
+Док: [`docs/BETA_STAGING_RU.md`](docs/BETA_STAGING_RU.md), [`docs/RELEASE_FLOW.md`](docs/RELEASE_FLOW.md).
