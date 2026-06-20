@@ -54,6 +54,10 @@ jobs:
         if: github.ref_name == 'main' || github.ref_name == 'master'
         run: ./scripts/smoke_http_extended.sh
 
+      - name: Prod readiness CI (plan + preflight)
+        if: github.ref_name == 'main' || github.ref_name == 'master'
+        run: ./scripts/prod_readiness_ci.sh
+
       - name: Eval fast gate (PR/main)
         env:
           TERMIT_EVAL_GATE_TIER: "fast"
