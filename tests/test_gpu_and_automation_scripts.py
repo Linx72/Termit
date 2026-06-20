@@ -92,6 +92,7 @@ class AutomationScriptTests(unittest.TestCase):
             "seed_finetune_kpi_dev.py",
             "local_dev_kpi_seed.sh",
             "plan_status_dev_green.sh",
+            "reset_eval_patch_fixture.sh",
             "deploy_hosted_beta.sh",
             "gpu_probe.py",
         ):

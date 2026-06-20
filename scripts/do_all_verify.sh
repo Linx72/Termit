@@ -124,4 +124,7 @@ else
 fi
 
 echo ""
+"${ROOT}/scripts/reset_eval_patch_fixture.sh" || true
+
+echo ""
 echo "OK — do-all verify complete."

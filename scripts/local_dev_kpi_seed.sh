@@ -13,7 +13,7 @@ cd "$ROOT"
 source "${ROOT}/.venv/bin/activate" 2>/dev/null || true
 
 # Eval M2 может оставить patch_sample в hello staged — вернуть baseline для C1–C12.
-printf 'hello world\n' > "${ROOT}/data/eval_fixtures/patch_sample.txt"
+"${ROOT}/scripts/reset_eval_patch_fixture.sh"
 
 export TERMIT_BETA_DEV_SEED=true
 export TERMIT_PRODUCT_KPI_DEV_SEED=true
