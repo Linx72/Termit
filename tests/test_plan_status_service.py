@@ -33,21 +33,33 @@ class PlanStatusServiceTests(unittest.TestCase):
         self.assertFalse(any(item["id"] == "api_down" for item in payload["blockers"]))
 
     def test_relax_env_warnings_filters_gpu_and_cloud(self) -> None:
-        service = PlanStatusService(
-            kpi_gate_service=MagicMock(
-                evaluate_gates=MagicMock(return_value={"overall_passed": True, "gates": []})
-            ),
-            beta_service=MagicMock(
-                build_metrics=MagicMock(return_value={"cohort_size_d30": 10, "d30_retention_rate": 0.4})
-            ),
-            automation_service=MagicMock(
-                snapshot=MagicMock(return_value={"automatic_mode_enabled": True})
-            ),
-            gpu_probe=lambda: {"gpu_available": False},
-            cloud_probe=lambda: {"ready": False, "reason": "missing_api_key"},
-        )
-        with patch.dict(os.environ, {"TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS": "true"}, clear=False):
-            payload = service.collect(from_running_api=True)
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "data").mkdir()
+            (root / "data" / "eval_kpi_last.json").write_text(
+                json.dumps({"kpi_passed": True, "delta": 0.06}),
+                encoding="utf-8",
+            )
+            service = PlanStatusService(
+                project_root=root,
+                kpi_gate_service=MagicMock(
+                    evaluate_gates=MagicMock(return_value={"overall_passed": True, "gates": []})
+                ),
+                beta_service=MagicMock(
+                    build_metrics=MagicMock(
+                        return_value={"cohort_size_d30": 10, "d30_retention_rate": 0.4}
+                    )
+                ),
+                automation_service=MagicMock(
+                    snapshot=MagicMock(return_value={"automatic_mode_enabled": True})
+                ),
+                gpu_probe=lambda: {"gpu_available": False},
+                cloud_probe=lambda: {"ready": False, "reason": "missing_api_key"},
+            )
+            with patch.dict(os.environ, {"TERMIT_PLAN_STATUS_RELAX_ENV_WARNINGS": "true"}, clear=False):
+                payload = service.collect(from_running_api=True)
         self.assertTrue(payload["relax_env_warnings_enabled"])
         self.assertEqual(len(payload["warnings"]), 0)
         self.assertEqual(len(payload["relaxed_env_warnings"]), 2)
