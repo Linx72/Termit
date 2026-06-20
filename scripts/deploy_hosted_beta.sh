@@ -54,12 +54,24 @@ fi
 
 echo ""
 echo "== 3/4 Hosted smoke =="
-TERMIT_HOSTED_BASE_URL="${BASE_URL}" "${ROOT}/scripts/hosted_smoke.sh"
+HOSTED_API_KEY="${TERMIT_API_KEY:-${TERMIT_HOSTED_API_KEY:-}}"
+if [[ -z "${HOSTED_API_KEY}" ]] && grep -qE '^TERMIT_AUTH_ENABLED=true' "${ROOT}/.env" 2>/dev/null; then
+  HOSTED_API_KEY="viewer-key"
+  export TERMIT_HOSTED_AUTH_EXPECT="${TERMIT_HOSTED_AUTH_EXPECT:-true}"
+fi
+TERMIT_HOSTED_BASE_URL="${BASE_URL}" \
+TERMIT_API_KEY="${HOSTED_API_KEY}" \
+  "${ROOT}/scripts/hosted_smoke.sh"
 
 echo ""
 echo "== 4/4 Plan status snapshot =="
-if curl -sf --max-time 10 "${BASE_URL}/api/ops/plan-status" >/dev/null 2>&1; then
+PLAN_CURL=(curl -sf --max-time 10)
+if [[ -n "${HOSTED_API_KEY}" ]]; then
+  PLAN_CURL+=(-H "X-API-Key: ${HOSTED_API_KEY}")
+fi
+if "${PLAN_CURL[@]}" "${BASE_URL}/api/ops/plan-status" >/dev/null 2>&1; then
   TERMIT_BASE_URL="${BASE_URL}" \
+  TERMIT_API_KEY="${HOSTED_API_KEY}" \
   TERMIT_PLAN_STATUS_SNAPSHOT="${ROOT}/data/plan_status_hosted.json" \
     "${ROOT}/scripts/capture_plan_status_snapshot.sh" || true
 fi
