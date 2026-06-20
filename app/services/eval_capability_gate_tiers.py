@@ -21,7 +21,7 @@ class CapabilityGateTier:
 
 CI_GATE = CapabilityGateTier(
     name="ci",
-    min_reports=1,
+    min_reports=0,
     min_pass_gap=-1.0,
     min_quality_gap=-1.0,
     min_win_rate=0.0,

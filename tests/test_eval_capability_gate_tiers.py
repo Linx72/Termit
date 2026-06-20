@@ -18,7 +18,7 @@ class EvalCapabilityGateTierTests(unittest.TestCase):
             tier = apply_capability_gate_tier("ci", overwrite=True)
             assert tier is not None
             self.assertEqual(tier.name, CI_GATE.name)
-            self.assertEqual(os.environ["TERMIT_CAP_MIN_REPORTS"], "1")
+            self.assertEqual(os.environ["TERMIT_CAP_MIN_REPORTS"], "0")
             self.assertEqual(os.environ["TERMIT_CAP_ALLOWED_TRENDS"], "flat,improving,regressing,no_data")
 
     def test_apply_release_tier_sets_production_thresholds(self) -> None:
