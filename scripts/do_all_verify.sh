@@ -54,6 +54,12 @@ if [[ "${TERMIT_DO_ALL_SKIP_MODEL_BOUND:-false}" != "true" ]]; then
     "${PYTHON_BIN}" "${ROOT}/scripts/model_bound_eval_gate.py"
 fi
 
+if [[ "${TERMIT_DO_ALL_SKIP_SWE:-false}" != "true" ]]; then
+  echo ""
+  echo "== 2c/8 SWE bench slice (offline fixtures) =="
+  "${PYTHON_BIN}" "${ROOT}/scripts/swe_eval_gate.py"
+fi
+
 if [[ "${TERMIT_DO_ALL_TRY_DPO_TRAIN:-false}" == "true" ]]; then
   echo ""
   echo "== 3/8 DPO dry train (GPU probe) =="

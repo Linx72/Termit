@@ -66,6 +66,7 @@ class AutomationScriptTests(unittest.TestCase):
             "plan_status_check.py",
             "capture_plan_status_snapshot.sh",
             "seed_beta_cohort_dev.py",
+            "local_dev_kpi_seed.sh",
             "deploy_hosted_beta.sh",
             "gpu_probe.py",
         ):

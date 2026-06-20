@@ -102,7 +102,9 @@ TERMIT_SKIP_SETUP_TESTS=1 TERMIT_INSTALL_LAUNCH_AGENT=1 "${ROOT}/scripts/do_all_
 echo ""
 echo "== 2/6 Automation flags in .env =="
 set_env_key TERMIT_STAGE1_SCHEDULE_ENABLED true
-set_env_key TERMIT_STAGE1_SCHEDULE_BASE_MODEL "ollama:deepseek-coder"
+set_env_key TERMIT_STAGE1_SCHEDULE_BASE_MODEL "ollama:qwen2.5-coder:14b"
+set_env_key TERMIT_CODE_FALLBACK_MODEL "ollama:qwen2.5-coder:14b"
+set_env_key TERMIT_DUAL_PASS_ENABLED true
 set_env_key TERMIT_RETRIEVAL_AUTO_REINDEX true
 set_env_key TERMIT_AGENT_SCHEDULES_ENABLED true
 set_env_key TERMIT_AGENT_MAINTENANCE_ENABLED true
@@ -152,6 +154,12 @@ TERMIT_DO_ALL_CI=true "${ROOT}/scripts/do_all_verify_ci.sh"
 if [[ "${TERMIT_DO_ALL_PLAN:-false}" == "true" ]]; then
   echo ""
   echo "== 7/7 Do-all plan (фаза 5) =="
+  if [[ -f "${ROOT}/.env" ]]; then
+    # shellcheck disable=SC1090
+    set -a
+    source "${ROOT}/.env"
+    set +a
+  fi
   TERMIT_PLAN_TRY_STRICT_LIVE="${TERMIT_PLAN_TRY_STRICT_LIVE:-false}" \
     "${ROOT}/scripts/do_all_plan.sh"
   TERMIT_DO_ALL_DEPLOY_HOSTED="${TERMIT_DO_ALL_DEPLOY_HOSTED:-true}"
@@ -226,7 +234,10 @@ echo "  Do-all CI:       scripts/do_all_verify_ci.sh"
 echo "  Do-all full:     scripts/do_all_verify_full.sh"
 echo "  Do-all plan:     scripts/do_all_plan.sh"
 echo "  Deploy hosted:   scripts/deploy_hosted_beta.sh"
-echo "  Plan status:     scripts/plan_status_check.py"
+echo "  SWE eval gate:   scripts/swe_eval_gate.py"
+echo "  Beta dev seed:   TERMIT_BETA_DEV_SEED=true scripts/seed_beta_cohort_dev.py"
+echo "  Product KPI dev: TERMIT_PRODUCT_KPI_DEV_SEED=true scripts/seed_product_kpi_dev.py"
+echo "  Local KPI bundle: ./scripts/local_dev_kpi_seed.sh"
 echo "  DPO contract:    scripts/do_all_dpo_contract.sh"
 echo "  macOS live orch: scripts/nightly_macos_live_orchestration.sh"
 echo "  Strict live orch: scripts/run_strict_live_orchestration_gate.sh"

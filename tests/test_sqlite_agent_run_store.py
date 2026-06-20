@@ -154,6 +154,63 @@ class SQLiteAgentRunStoreTests(unittest.TestCase):
             self.assertEqual(recent["tool_loop_runs"], 1)
             self.assertEqual(recent["tool_loop_completion_rate"], 1.0)
 
+    def test_tool_loop_metrics_recent_run_window(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SQLiteAgentRunStore(str(Path(tmp) / "agent_runs.db"))
+            for index, run_id in enumerate(("arun_a", "arun_b", "arun_c")):
+                store.put_run(
+                    AgentRunRecordResponse(
+                        run_id=run_id,
+                        agent_id="agt_1",
+                        agent_name="Agent",
+                        state=AgentRunState.completed,
+                        created_at=f"2026-06-{10 + index}T00:00:00+00:00",
+                        updated_at=f"2026-06-{10 + index}T00:01:00+00:00",
+                        input=run_id,
+                        session_id=f"sess_{index}",
+                        provider="ollama",
+                        model="ollama:qwen",
+                        attempts=1,
+                        max_attempts=3,
+                        response="ok",
+                    )
+                )
+                if run_id == "arun_a":
+                    store.append_event(
+                        run_id,
+                        AgentRunEvent(
+                            event_type="tool_loop_tool_error",
+                            state=AgentRunState.running,
+                            message="fail",
+                            timestamp="2026-06-10T00:00:30+00:00",
+                            attempt=1,
+                        ),
+                    )
+                else:
+                    store.append_event(
+                        run_id,
+                        AgentRunEvent(
+                            event_type="tool_loop_tool",
+                            state=AgentRunState.running,
+                            message="ok",
+                            timestamp=f"2026-06-{10 + index}T00:00:30+00:00",
+                            attempt=1,
+                        ),
+                    )
+                    store.append_event(
+                        run_id,
+                        AgentRunEvent(
+                            event_type="tool_loop_final",
+                            state=AgentRunState.completed,
+                            message="done",
+                            timestamp=f"2026-06-{10 + index}T00:01:00+00:00",
+                            attempt=1,
+                        ),
+                    )
+            window = store.tool_loop_event_metrics(recent_run_limit=2)
+            self.assertEqual(window["tool_loop_runs"], 2)
+            self.assertEqual(window["tool_loop_completion_rate"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

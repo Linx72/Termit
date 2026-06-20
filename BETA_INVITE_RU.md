@@ -26,7 +26,7 @@ http://localhost:5173/#beta-onboard
 ## 5 минут для тестера
 
 1. Клонировать репозиторий, `./scripts/do_all_setup.sh`
-2. `ollama pull qwen2.5-coder` (или `termit-core-ft`)
+2. `./scripts/upgrade_model_ladder_phase_a.sh` (или `ollama pull qwen2.5-coder:14b` + recreate `termit-core-ft`)
 3. API: `http://127.0.0.1:8765/health` → `ok`
 4. Desktop: `cd clients/termit-desktop && npm run dev` → `#beta-onboard`
 5. API key (если auth): `viewer-key` из `.env.example`

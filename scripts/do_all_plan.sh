@@ -14,6 +14,20 @@ source "${ROOT}/.venv/bin/activate" 2>/dev/null || true
 
 echo "== Termit do_all_plan (фаза 5) =="
 
+if [[ "${TERMIT_BETA_DEV_SEED:-false}" == "true" ]]; then
+  echo ""
+  echo "== 0/7 Beta dev cohort seed (local only) =="
+  "${PYTHON_BIN}" "${ROOT}/scripts/seed_beta_cohort_dev.py" --force \
+    || echo "WARN: beta dev seed failed (non-blocking)."
+fi
+
+if [[ "${TERMIT_PRODUCT_KPI_DEV_SEED:-false}" == "true" ]]; then
+  echo ""
+  echo "== 0b/7 Product KPI dev seed (local only) =="
+  "${PYTHON_BIN}" "${ROOT}/scripts/seed_product_kpi_dev.py" --force \
+    || echo "WARN: product KPI dev seed failed (non-blocking)."
+fi
+
 echo ""
 echo "== 1/7 Статус плана (до) =="
 "${PYTHON_BIN}" "${ROOT}/scripts/plan_status_check.py" --summary-only \
@@ -37,7 +51,7 @@ echo ""
 echo "== 5/7 Live orchestration gate (fallback разрешён) =="
 if [[ "${TERMIT_PLAN_SKIP_LIVE_ORCH:-false}" != "true" ]]; then
   TERMIT_ORCH_TOOL_LOOP_FALLBACK=true \
-  TERMIT_ORCH_LIVE_MODEL="${TERMIT_ORCH_LIVE_MODEL:-ollama:qwen2.5-coder}" \
+  TERMIT_ORCH_LIVE_MODEL="${TERMIT_ORCH_LIVE_MODEL:-ollama:termit-core-ft}" \
     "${ROOT}/scripts/run_live_orchestration_gate.sh" \
     || echo "WARN: live orchestration gate не прошёл (non-blocking)."
 else
@@ -47,7 +61,7 @@ fi
 echo ""
 echo "== 6/7 Strict live gate (opt-in) =="
 if [[ "${TERMIT_PLAN_TRY_STRICT_LIVE:-false}" == "true" ]]; then
-  TERMIT_ORCH_LIVE_MODEL="${TERMIT_ORCH_LIVE_MODEL:-ollama:qwen2.5-coder}" \
+  TERMIT_ORCH_LIVE_MODEL="${TERMIT_ORCH_LIVE_MODEL:-ollama:termit-core-ft}" \
     "${ROOT}/scripts/run_strict_live_orchestration_gate.sh" \
     || echo "WARN: strict live gate не прошёл (non-blocking)."
 else

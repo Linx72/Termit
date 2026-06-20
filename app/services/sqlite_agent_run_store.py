@@ -236,7 +236,11 @@ class SQLiteAgentRunStore:
             ).fetchall()
         return {str(row["state"]): int(row["c"]) for row in rows}
 
-    def tool_loop_event_metrics(self, recent_days: int | None = None) -> dict[str, object]:
+    def tool_loop_event_metrics(
+        self,
+        recent_days: int | None = None,
+        recent_run_limit: int | None = None,
+    ) -> dict[str, object]:
         cutoff_iso: str | None = None
         if recent_days is not None and recent_days > 0:
             from datetime import datetime, timedelta, timezone
@@ -244,8 +248,38 @@ class SQLiteAgentRunStore:
             cutoff_iso = (
                 datetime.now(timezone.utc) - timedelta(days=recent_days)
             ).isoformat()
+        recent_run_ids: set[str] | None = None
+        if recent_run_limit is not None and recent_run_limit > 0:
+            with self._lock, closing(self._connect()) as conn:
+                run_rows = conn.execute(
+                    """
+                    SELECT run_id
+                    FROM agent_run_events
+                    WHERE event_type LIKE 'tool_loop_%'
+                       OR event_type = 'verify_retry_scheduled'
+                    GROUP BY run_id
+                    ORDER BY MAX(timestamp) DESC
+                    LIMIT ?
+                    """,
+                    (recent_run_limit,),
+                ).fetchall()
+            recent_run_ids = {str(row["run_id"]) for row in run_rows}
         with self._lock, closing(self._connect()) as conn:
-            if cutoff_iso:
+            if recent_run_ids is not None:
+                if not recent_run_ids:
+                    return empty_tool_loop_metrics()
+                placeholders = ",".join("?" for _ in recent_run_ids)
+                event_rows = conn.execute(
+                    f"""
+                    SELECT run_id, event_type, message
+                    FROM agent_run_events
+                    WHERE (event_type LIKE 'tool_loop_%'
+                       OR event_type = 'verify_retry_scheduled')
+                      AND run_id IN ({placeholders})
+                    """,
+                    tuple(recent_run_ids),
+                ).fetchall()
+            elif cutoff_iso:
                 event_rows = conn.execute(
                     """
                     SELECT run_id, event_type, message

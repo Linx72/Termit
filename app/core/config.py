@@ -239,6 +239,7 @@ class Settings:
     ollama_warm_max_models: int = 3
     chat_latency_recent_window: int = 50
     tool_loop_metrics_recent_days: int = 7
+    tool_loop_metrics_recent_run_window: int = 5
     routing_max_candidates: int = 4
     routing_cost_aware_enabled: bool = False
     routing_model_costs: str = ""
@@ -681,6 +682,9 @@ def get_settings() -> Settings:
         chat_latency_recent_window=max(10, int(os.getenv("TERMIT_CHAT_LATENCY_RECENT_WINDOW", "50"))),
         tool_loop_metrics_recent_days=max(
             0, int(os.getenv("TERMIT_TOOL_LOOP_METRICS_RECENT_DAYS", "7"))
+        ),
+        tool_loop_metrics_recent_run_window=max(
+            0, int(os.getenv("TERMIT_TOOL_LOOP_METRICS_RECENT_RUN_WINDOW", "5"))
         ),
         alert_webhook_url=os.getenv("TERMIT_ALERT_WEBHOOK_URL", ""),
         routing_max_candidates=int(os.getenv("TERMIT_ROUTING_MAX_CANDIDATES", "4")),

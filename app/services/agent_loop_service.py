@@ -21,6 +21,12 @@ from app.services.json_safe import json_safe
 from app.services.loop_step_budget import should_escalate_model
 from app.services.tool_json_parser import ToolJsonParseError, parse_loop_action
 
+
+def _model_supports_native_tool_calls(model: str) -> bool:
+    """OpenAI-compat cloud + Ollama chat API with tools (qwen2.5-coder, etc.)."""
+    return model.startswith("openai_compat:") or model.startswith("ollama:")
+
+
 _LOOP_TOOL_EXAMPLES: dict[str, str] = {
     "list_files": '{"action":"tool","tool":"list_files","arguments":{"path":".","pattern":"*.py"}}',
     "read_file": '{"action":"tool","tool":"read_file","arguments":{"path":"app","file":"main.py"}}',
@@ -656,7 +662,11 @@ class AgentLoopService:
                 history=list(history),
             )
 
-            if native_chat_fn is not None and active_model and str(active_model).startswith("openai_compat:"):
+            if (
+                native_chat_fn is not None
+                and active_model
+                and _model_supports_native_tool_calls(str(active_model))
+            ):
                 native_result = await native_chat_fn(chat_request)
                 last_provider = native_result.provider
                 last_model = native_result.model

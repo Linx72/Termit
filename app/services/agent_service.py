@@ -173,6 +173,7 @@ class AgentService:
         media_generation_service: Optional[object] = None,
         reasoning_orchestrator: Optional[object] = None,
         tool_loop_metrics_recent_days: int = 7,
+        tool_loop_metrics_recent_run_window: int = 5,
     ) -> None:
         self._chat_service = chat_service
         self._registry = registry
@@ -212,6 +213,7 @@ class AgentService:
         self._media = media_generation_service
         self._reasoning_orchestrator = reasoning_orchestrator
         self._tool_loop_metrics_recent_days = max(0, tool_loop_metrics_recent_days)
+        self._tool_loop_metrics_recent_run_window = max(0, tool_loop_metrics_recent_run_window)
         self._ssh = SshWorkspaceService(tooling)
         self._notifier = AgentRunNotifier.get()
         self._queue_capacity = max(1, max_queue_size)
@@ -470,6 +472,12 @@ class AgentService:
             )
             for key, value in recent_tl.items():
                 metrics[f"{key}_recent"] = value
+        if self._tool_loop_metrics_recent_run_window > 0:
+            window_tl = self._run_store.tool_loop_event_metrics(
+                recent_run_limit=self._tool_loop_metrics_recent_run_window
+            )
+            for key, value in window_tl.items():
+                metrics[f"{key}_recent_window"] = value
         metrics.update(self._run_store.mcp_usage_metrics())
         return metrics
 

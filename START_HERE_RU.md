@@ -98,6 +98,7 @@ TERMIT_RETRIEVAL_EMBED_MODEL=nomic-embed-text
 ```bash
 ./scripts/upgrade_model_ladder_phase_a.sh   # pull 14B + recreate termit-core-ft
 # В .env: TERMIT_DUAL_PASS_ENABLED=true, OPENAI_COMPAT_API_KEY для cloud validator
+# Verify: scripts/swe_eval_gate.py (SWE1–5), do_all_verify.sh шаг 2c
 ```
 
 ## 7. Кроссплатформа (iOS / macOS / Windows / Android)

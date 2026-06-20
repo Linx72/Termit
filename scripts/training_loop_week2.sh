@@ -54,7 +54,7 @@ job = service.create_job(
     name="$DATASET_NAME",
     dataset_path="$DATASET_PATH",
     sample_count=int("$SAMPLE_COUNT"),
-    base_model=os.getenv("TERMIT_STAGE1_BASE_MODEL", "ollama:deepseek-coder"),
+    base_model=os.getenv("TERMIT_STAGE1_BASE_MODEL", "ollama:qwen2.5-coder:14b"),
     notes="training_loop_week2.sh",
 )
 completed = service.run_job(job.job_id)

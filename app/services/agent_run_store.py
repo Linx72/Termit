@@ -5,7 +5,11 @@ from threading import Lock
 from typing import Optional, Protocol
 
 from app.domain.schemas import AgentRunEvent, AgentRunRecordResponse, AgentRunState
-from app.services.tool_loop_metrics import aggregate_tool_loop_events, empty_tool_loop_metrics
+from app.services.tool_loop_metrics import (
+    aggregate_tool_loop_events,
+    classify_tool_loop_event,
+    empty_tool_loop_metrics,
+)
 from app.services.mcp_usage_metrics import aggregate_mcp_usage_events, empty_mcp_usage_metrics
 
 
@@ -37,7 +41,11 @@ class AgentRunStore(Protocol):
     def count_runs_by_state(self) -> dict[str, int]:
         ...
 
-    def tool_loop_event_metrics(self, recent_days: int | None = None) -> dict[str, object]:
+    def tool_loop_event_metrics(
+        self,
+        recent_days: int | None = None,
+        recent_run_limit: int | None = None,
+    ) -> dict[str, object]:
         ...
 
     def mcp_usage_metrics(self) -> dict[str, object]:
@@ -115,14 +123,37 @@ class InMemoryAgentRunStore:
             counts[key] = counts.get(key, 0) + 1
         return counts
 
-    def tool_loop_event_metrics(self, recent_days: int | None = None) -> dict[str, object]:
+    def tool_loop_event_metrics(
+        self,
+        recent_days: int | None = None,
+        recent_run_limit: int | None = None,
+    ) -> dict[str, object]:
         cutoff: datetime | None = None
         if recent_days is not None and recent_days > 0:
             cutoff = datetime.now(timezone.utc) - timedelta(days=recent_days)
+        recent_run_ids: set[str] | None = None
+        if recent_run_limit is not None and recent_run_limit > 0:
+            with self._lock:
+                last_ts: dict[str, datetime] = {}
+                for run_id, events in self._events.items():
+                    for event in events:
+                        if classify_tool_loop_event(event.event_type, event.message) is None:
+                            continue
+                        try:
+                            event_dt = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
+                        except ValueError:
+                            continue
+                        prev = last_ts.get(run_id)
+                        if prev is None or event_dt > prev:
+                            last_ts[run_id] = event_dt
+                ordered = sorted(last_ts.items(), key=lambda item: item[1], reverse=True)
+                recent_run_ids = {run_id for run_id, _ in ordered[:recent_run_limit]}
         with self._lock:
             rows: list[tuple[str, str, str]] = []
             completed_run_ids: set[str] = set()
             for run_id, events in self._events.items():
+                if recent_run_ids is not None and run_id not in recent_run_ids:
+                    continue
                 run = self._runs.get(run_id)
                 if run and run.state == AgentRunState.completed:
                     completed_run_ids.add(run_id)

@@ -50,7 +50,7 @@ if [[ "${TERMIT_FINETUNE_AUTO_TRAIN:-false}" == "true" ]]; then
   USE_MODEL_KPI=true
   echo ""
   echo "== 1b/5 Model KPI baseline (pre-train, MB1-MB3) =="
-  PRE_TRAIN_MODEL="${TERMIT_EVAL_PRE_TRAIN_MODEL:-ollama:deepseek-coder}"
+  PRE_TRAIN_MODEL="${TERMIT_EVAL_PRE_TRAIN_MODEL:-ollama:qwen2.5-coder:14b}"
   KPI_BASELINE_PATH="${TERMIT_EVAL_KPI_BASELINE:-$ROOT/data/eval_kpi_baseline.json}"
   python3 "$ROOT/scripts/post_train_model_eval.py" \
     --model "${PRE_TRAIN_MODEL}" \

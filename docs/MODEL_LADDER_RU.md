@@ -39,6 +39,10 @@ Embeddings        → nomic-embed-text
 
 `TERMIT_DUAL_PASS_ENABLED=true` — draft local → validator (`analysis` chain). С cloud key validator идёт в 32B; без ключа — локальный analysis model.
 
+## Native tool calling (Ollama)
+
+Agent tool loop для `ollama:*` использует Ollama `/api/chat` с `tools` (qwen2.5-coder, termit-core-ft). При ошибке API — fallback на JSON action loop.
+
 ## Сравнение с внешними моделями
 
 | Модель | Coding + tools | Online | Local |

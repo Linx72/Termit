@@ -46,6 +46,10 @@ TERMIT_API_KEY=viewer-key TERMIT_HOSTED_AUTH_EXPECT=true ./scripts/hosted_smoke.
 
 **Локальная отладка beta cohort (не prod):** `TERMIT_BETA_DEV_SEED=true ./scripts/seed_beta_cohort_dev.py --force`
 
+**Локальная отладка Product KPI gates (не prod):** `TERMIT_PRODUCT_KPI_DEV_SEED=true ./scripts/seed_product_kpi_dev.py --force` — tool-loop window, chat p95 recent, local-only share.
+
+**Оба seed + plan status:** `./scripts/local_dev_kpi_seed.sh`
+
 See [`HOSTED_DEPLOYMENT.md`](HOSTED_DEPLOYMENT.md).
 
 ## Beta invite (one page)

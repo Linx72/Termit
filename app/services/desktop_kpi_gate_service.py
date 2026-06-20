@@ -53,7 +53,15 @@ class DesktopKpiGateService:
         tool_loop_completion = float(agent_metrics.get("tool_loop_completion_rate") or 0.0)
         tool_loop_success = float(agent_metrics.get("tool_loop_tool_success_rate") or 0.0)
         tl_runs_recent = int(agent_metrics.get("tool_loop_runs_recent", 0) or 0)
-        if tl_runs_recent >= 5:
+        tl_window_runs = int(agent_metrics.get("tool_loop_runs_recent_window", 0) or 0)
+        if tl_window_runs >= 5:
+            tool_loop_completion = float(
+                agent_metrics.get("tool_loop_completion_rate_recent_window") or tool_loop_completion
+            )
+            tool_loop_success = float(
+                agent_metrics.get("tool_loop_tool_success_rate_recent_window") or tool_loop_success
+            )
+        elif tl_runs_recent >= 5:
             tool_loop_completion = float(
                 agent_metrics.get("tool_loop_completion_rate_recent") or tool_loop_completion
             )
