@@ -42,6 +42,7 @@ jobs:
         env:
           TERMIT_ORCH_TOOL_LOOP_EXECUTION_ENABLED: "true"
           TERMIT_ORCH_EVAL_FIXTURE_CODER: "true"
+          TERMIT_SKIP_OLLAMA_CHECK: "1"
         run: |
           uvicorn app.main:app --host 127.0.0.1 --port 8765 &
           for i in $(seq 1 30); do
