@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -28,8 +29,9 @@ def _utc_now() -> str:
 
 def seed_tool_loop_runs(store: SQLiteAgentRunStore, runs: int) -> int:
     created = 0
+    batch_prefix = f"arun_kpi_seed_{int(time.time())}"
     for index in range(runs):
-        run_id = f"arun_kpi_seed_{index:02d}"
+        run_id = f"{batch_prefix}_{index:04d}"
         ts = _utc_now()
         store.put_run(
             AgentRunRecordResponse(
@@ -46,6 +48,7 @@ def seed_tool_loop_runs(store: SQLiteAgentRunStore, runs: int) -> int:
                 attempts=1,
                 max_attempts=3,
                 response="ok",
+                outcome_class="success",
             )
         )
         store.append_event(

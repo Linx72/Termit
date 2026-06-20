@@ -212,7 +212,15 @@ python3 -m unittest tests.test_media_studio_phase0 -q
 
 ## 13. Prod readiness (фаза 5)
 
-Локальный зелёный контур без prod-секретов:
+Единый чек (plan + preflight + optional staging/prod beta):
+
+```bash
+./scripts/prod_readiness_check.sh
+# с dev KPI seed: TERMIT_PROD_READINESS_DEV_SEED=true ./scripts/prod_readiness_check.sh
+# strict GPU fail: TERMIT_PROD_READINESS_STRICT_GPU=true ./scripts/prod_readiness_check.sh
+```
+
+По частям:
 
 ```bash
 ./scripts/plan_status_dev_green.sh

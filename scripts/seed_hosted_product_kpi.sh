@@ -15,7 +15,7 @@ fi
 
 echo "== Seed product KPI in container (tool-loop + chat metrics) =="
 docker compose -f "${COMPOSE_FILES}" exec -T termit \
-  python scripts/seed_product_kpi_dev.py --force --runs "${TERMIT_HOSTED_KPI_SEED_RUNS:-80}" --chats 0
+  python scripts/seed_product_kpi_dev.py --force --runs "${TERMIT_HOSTED_KPI_SEED_RUNS:-150}" --chats 0
 
 echo ""
 echo "== Reload dev metrics seed via proxy =="

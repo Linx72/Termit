@@ -14,6 +14,8 @@
 ### Fixed
 - Flaky `confirm_run` tests: drain agent workers before manual `awaiting_confirmation`; fast `stop(grace_seconds=0.5)` in finally
 - `release_smoke`: confirm_run regression in core profile; reset `patch_sample.txt` after live eval gates
+- `seed_product_kpi_dev`: unique run ids per seed batch + `outcome_class=success` для стабильного `agent_run_success_rate` на staging
+- `scripts/prod_readiness_check.sh` — единый prod readiness gate
 
 
 ## [0.4.21] - 2026-06-20
