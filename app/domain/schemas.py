@@ -1323,6 +1323,11 @@ class AgentRunRecordResponse(BaseModel):
     error: Optional[str] = None
     checkpoint_json: Optional[str] = None
     parent_run_id: Optional[str] = None
+    lifecycle_status: str = "active"
+
+
+class AgentRunLifecycleUpdate(BaseModel):
+    lifecycle_status: str
 
 
 class AgentRunConfirmRequest(BaseModel):

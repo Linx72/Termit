@@ -18,6 +18,7 @@ from app.domain.schemas import (
     AgentRunCreateResponse,
     AgentRunResumeResponse,
     AgentRunEvent,
+    AgentRunLifecycleUpdate,
     AgentRunListResponse,
     AgentRunRecordResponse,
     AgentRunRequest,
@@ -376,6 +377,16 @@ class AgentService:
         children.sort(key=lambda item: item.updated_at, reverse=True)
         selected = children[:safe_limit]
         return AgentRunListResponse(runs=selected, total=len(children))
+
+    def list_all_runs(self, limit: int = 100, lifecycle_status: str | None = None) -> AgentRunListResponse:
+        safe_limit = max(1, min(limit, 200))
+        with self._lock:
+            selected = self._run_store.list_all_runs(limit=safe_limit, lifecycle_status=lifecycle_status)
+        return AgentRunListResponse(runs=selected, total=len(selected))
+
+    def set_lifecycle_status(self, run_id: str, lifecycle_status: str) -> bool:
+        with self._lock:
+            return self._run_store.set_lifecycle_status(run_id, lifecycle_status)
 
     def list_dlq_runs(self, limit: int = 50) -> AgentRunListResponse:
         safe_limit = max(1, min(limit, 200))

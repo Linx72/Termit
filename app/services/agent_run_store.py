@@ -59,6 +59,12 @@ class AgentRunStore(Protocol):
     ) -> tuple[int, int]:
         ...
 
+    def set_lifecycle_status(self, run_id: str, lifecycle_status: str) -> bool:
+        ...
+
+    def list_all_runs(self, limit: int = 100, lifecycle_status: str | None = None) -> list[AgentRunRecordResponse]:
+        ...
+
 
 class InMemoryAgentRunStore:
     def __init__(self) -> None:
@@ -211,3 +217,21 @@ class InMemoryAgentRunStore:
                     self._runs.pop(run_id, None)
                     self._events.pop(run_id, None)
         return deleted_runs, deleted_events
+
+    def set_lifecycle_status(self, run_id: str, lifecycle_status: str) -> bool:
+        with self._lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                return False
+            run.lifecycle_status = lifecycle_status
+            from datetime import datetime, timezone
+            run.updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return True
+
+    def list_all_runs(self, limit: int = 100, lifecycle_status: str | None = None) -> list[AgentRunRecordResponse]:
+        with self._lock:
+            runs = list(self._runs.values())
+        if lifecycle_status:
+            runs = [r for r in runs if getattr(r, 'lifecycle_status', 'active') == lifecycle_status]
+        runs.sort(key=lambda item: item.updated_at, reverse=True)
+        return [AgentRunRecordResponse.model_validate(item.model_dump()) for item in runs[:limit]]

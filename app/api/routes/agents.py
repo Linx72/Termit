@@ -15,6 +15,7 @@ from app.domain.schemas import (
     AgentRunCreateResponse,
     AgentRunDlqReplayResponse,
     AgentRunEvent,
+    AgentRunLifecycleUpdate,
     AgentRunListResponse,
     AgentRunRecordResponse,
     AgentRunRequest,
@@ -63,6 +64,15 @@ async def create_agent(
     service: AgentService = Depends(get_agent_service),
 ) -> AgentProfileResponse:
     return service.create_agent(payload)
+
+
+@router.get("/runs", response_model=AgentRunListResponse)
+async def list_all_runs(
+    limit: int = 100,
+    lifecycle_status: str | None = None,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRunListResponse:
+    return service.list_all_runs(limit=limit, lifecycle_status=lifecycle_status)
 
 
 @router.get("/{agent_id}", response_model=AgentProfileResponse)
@@ -386,3 +396,31 @@ async def run_web_automation_as_agent(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except (AgentNotFoundError, AgentOnlineError, ToolingError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── Runtime lifecycle (archive / trash / restore) ────────────────────
+
+@router.patch("/runs/{run_id}/lifecycle", response_model=AgentRunLifecycleUpdate)
+async def set_run_lifecycle(
+    run_id: str,
+    payload: AgentRunLifecycleUpdate,
+    service: AgentService = Depends(get_agent_service),
+) -> AgentRunLifecycleUpdate:
+    """
+    Move a run to *archived* or *trash*, or restore it back to *active*.
+    Body: ``{"lifecycle_status": "archived"}``  |  ``"trashed"``  |  ``"active"``
+    """
+    try:
+        service.get_run(run_id)
+    except AgentRunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    allowed = {"active", "archived", "trashed"}
+    if payload.lifecycle_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"lifecycle_status must be one of {sorted(allowed)}, got {payload.lifecycle_status!r}",
+        )
+    ok = service.set_lifecycle_status(run_id, payload.lifecycle_status)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to update lifecycle_status")
+    return AgentRunLifecycleUpdate(lifecycle_status=payload.lifecycle_status, run_id=run_id)

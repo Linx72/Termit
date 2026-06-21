@@ -74,6 +74,11 @@ class SQLiteAgentRunStore:
             self._ensure_column(conn, "agent_runs", "checkpoint_json", "TEXT")
             self._ensure_column(conn, "agent_runs", "parent_run_id", "TEXT")
             self._ensure_column(conn, "agent_runs", "outcome_class", "TEXT")
+            self._ensure_column(conn, "agent_runs", "lifecycle_status", "TEXT NOT NULL DEFAULT 'active'")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_agent_runs_lifecycle "
+                "ON agent_runs(lifecycle_status, updated_at DESC)"
+            )
             conn.commit()
 
     def put_run(self, run: AgentRunRecordResponse) -> None:
@@ -84,8 +89,9 @@ class SQLiteAgentRunStore:
                 INSERT INTO agent_runs(
                     run_id, agent_id, agent_name, state, created_at, updated_at,
                     input, session_id, provider, model, attempts, max_attempts, failure_class,
-                    attempted_models, response, error, checkpoint_json, parent_run_id, outcome_class
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    attempted_models, response, error, checkpoint_json, parent_run_id, outcome_class,
+                    lifecycle_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
                     agent_id=excluded.agent_id,
                     agent_name=excluded.agent_name,
@@ -104,7 +110,8 @@ class SQLiteAgentRunStore:
                     error=excluded.error,
                     checkpoint_json=excluded.checkpoint_json,
                     parent_run_id=excluded.parent_run_id,
-                    outcome_class=excluded.outcome_class
+                    outcome_class=excluded.outcome_class,
+                    lifecycle_status=excluded.lifecycle_status
                 """,
                 (
                     run.run_id,
@@ -126,6 +133,7 @@ class SQLiteAgentRunStore:
                     run.checkpoint_json,
                     run.parent_run_id,
                     run.outcome_class,
+                    getattr(run, 'lifecycle_status', 'active'),
                 ),
             )
             conn.commit()
@@ -372,6 +380,33 @@ class SQLiteAgentRunStore:
             conn.commit()
             return deleted_runs, deleted_events
 
+    def set_lifecycle_status(self, run_id: str, lifecycle_status: str) -> bool:
+        with self._lock, closing(self._connect()) as conn:
+            cur = conn.execute(
+                "UPDATE agent_runs SET lifecycle_status = ?, updated_at = ? WHERE run_id = ?",
+                (lifecycle_status, _utc_now(), run_id),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def list_all_runs(
+        self,
+        limit: int = 100,
+        lifecycle_status: Optional[str] = None,
+    ) -> list[AgentRunRecordResponse]:
+        with self._lock, closing(self._connect()) as conn:
+            if lifecycle_status:
+                rows = conn.execute(
+                    "SELECT * FROM agent_runs WHERE lifecycle_status = ? ORDER BY updated_at DESC LIMIT ?",
+                    (lifecycle_status, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM agent_runs ORDER BY updated_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [self._row_to_run(row) for row in rows]
+
     def _row_to_run(self, row: sqlite3.Row) -> AgentRunRecordResponse:
         attempted = [item for item in str(row["attempted_models"] or "").split("\n") if item]
         return AgentRunRecordResponse(
@@ -394,7 +429,9 @@ class SQLiteAgentRunStore:
             error=row["error"],
             checkpoint_json=row["checkpoint_json"] if "checkpoint_json" in row.keys() else None,
             parent_run_id=row["parent_run_id"] if "parent_run_id" in row.keys() else None,
+            lifecycle_status=row["lifecycle_status"] if "lifecycle_status" in row.keys() else "active",
         )
+
 
     @staticmethod
     def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -402,3 +439,8 @@ class SQLiteAgentRunStore:
         existing = {row[1] for row in rows}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _utc_now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
