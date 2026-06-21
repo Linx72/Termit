@@ -1,9 +1,8 @@
 {
-  "dev_only": true,
-  "baseline_pass_rate": 0.8,
-  "current_pass_rate": 0.86,
+  "baseline_pass_rate": 1.0,
+  "current_pass_rate": 1.0,
   "min_improvement_required": 0.05,
-  "delta": 0.06,
-  "kpi_passed": true,
-  "reason": "KPI met (dev seed): improvement +6.00% >= 5.00%."
+  "delta": 0.0,
+  "kpi_passed": false,
+  "reason": "KPI not met: improvement +0.00% below target 5.00%."
 }

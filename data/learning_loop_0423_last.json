@@ -1,11 +1,81 @@
 {
   "phase": "0.4.23",
-  "dev_only": true,
-  "dpo_real_train": false,
-  "kpi_measurable": false,
-  "post_dpo_pass_rate": 1.0,
+  "generated_at": "2026-06-20T20:00:19.720211+00:00",
+  "model": "ollama:termit-core-ft",
+  "scenario_ids": [
+    "HE1",
+    "HE2",
+    "MBPP1",
+    "MBPP2",
+    "SWE1",
+    "SWE3",
+    "SWE5",
+    "TB1",
+    "TB2",
+    "TB3"
+  ],
   "gpu": {
     "gpu_available": false,
-    "backend": "none"
+    "backend": "none",
+    "devices": [],
+    "detail": "No NVIDIA GPU detected (nvidia-smi/torch.cuda)."
+  },
+  "cloud_benchmark_probe": {
+    "ready": false,
+    "reason": "missing_api_key",
+    "reference_model": "openai_compat:deepseek-ai/DeepSeek-V4-Pro",
+    "frontier_chain": [
+      "openai_compat:deepseek-ai/DeepSeek-V4-Pro",
+      "openai_compat:deepseek-ai/DeepSeek-V4-Flash",
+      "openai_compat:deepseek-ai/DeepSeek-V3"
+    ],
+    "hint": "Задайте OPENAI_COMPAT_API_KEY или OPENAI_API_KEY для cloud benchmark."
+  },
+  "cloud_benchmark_ran": false,
+  "remote_gpu": false,
+  "dpo_train": {
+    "trainer_mode": "hf_dpo",
+    "status": "completed",
+    "output_model": "termit-core-ft",
+    "modelfile_path": "data/finetune/modelfiles/dpo_20260620T200018Z.Modelfile",
+    "adapter_path": "data/finetune/adapters/termit-core-ft",
+    "command": "/Users/amoros/Projects/Termit/.venv/bin/python /Users/amoros/Projects/Termit/scripts/unsloth_dpo_train.py --dataset data/finetune/datasets/weekly-dpo-gpu_dpo_20260620T200018Z.jsonl --base-model termit-core-ft --output-dir data/finetune/adapters/termit-core-ft --epochs 1 --lora-rank 16 --max-samples 500",
+    "stdout": "",
+    "stderr": "",
+    "duration_ms": 0,
+    "detail": "HF DPO dry-run: Unsloth DPO command prepared. Set TERMIT_FINETUNE_HF_DRY_RUN=false and install unsloth to execute.",
+    "contract": {
+      "dataset_path": "data/finetune/datasets/weekly-dpo-gpu_dpo_20260620T200018Z.jsonl",
+      "contract_version": "1.0",
+      "valid": true,
+      "total": 23,
+      "valid_rows": 23,
+      "invalid_rows": 0,
+      "missing_field_rows": 0,
+      "too_short_rows": 0,
+      "same_answer_rows": 0
+    },
+    "dataset_path": "data/finetune/datasets/weekly-dpo-gpu_dpo_20260620T200018Z.jsonl"
+  },
+  "dpo_real_train": false,
+  "baseline_report": "/Users/amoros/Projects/Termit/data/eval_kpi_baseline_dpo.json",
+  "baseline_pass_rate": 1.0,
+  "post_dpo_report": "/Users/amoros/Projects/Termit/data/eval_post_dpo_last.json",
+  "post_dpo_pass_rate": 1.0,
+  "eval_kpi": {
+    "baseline_pass_rate": 1.0,
+    "current_pass_rate": 1.0,
+    "min_improvement_required": 0.05,
+    "delta": 0.0,
+    "kpi_passed": false,
+    "reason": "KPI not met: improvement +0.00% below target 5.00%."
+  },
+  "kpi_passed": false,
+  "kpi_measurable": false,
+  "dev_kpi_seed": false,
+  "paths": {
+    "baseline": "/Users/amoros/Projects/Termit/data/eval_kpi_baseline_dpo.json",
+    "post_dpo": "/Users/amoros/Projects/Termit/data/eval_post_dpo_last.json",
+    "kpi": "/Users/amoros/Projects/Termit/data/eval_kpi_last.json"
   }
 }
