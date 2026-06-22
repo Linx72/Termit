@@ -73,6 +73,25 @@ export function getSidebarHtml(webviewCssNonce: string): string {
     .list-item:hover { background: var(--vscode-list-hoverBackground); }
     .muted { color: var(--vscode-descriptionForeground); font-size: 11px; }
     label { display: block; margin-bottom: 4px; font-size: 11px; }
+    .activity-summary { font-size: 11px; color: var(--vscode-descriptionForeground); margin-bottom: 6px; }
+    .activity-tools { margin-bottom: 6px; font-size: 11px; }
+    .activity-files { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .file-pill {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--vscode-panel-border);
+      font-size: 10px;
+      background: var(--vscode-editor-background);
+    }
+    .file-pill.pending { opacity: 0.7; }
+    .file-add { color: var(--vscode-gitDecoration-addedResourceForeground, #3fb950); }
+    .file-del { color: var(--vscode-gitDecoration-deletedResourceForeground, #f85149); }
+    .file-pill.clickable { cursor: pointer; }
+    .file-pill.clickable:hover { border-color: var(--vscode-focusBorder); }
+    .chat-activity { min-height: 64px; max-height: 180px; margin-top: 0; }
   </style>
 </head>
 <body>
@@ -97,6 +116,7 @@ export function getSidebarHtml(webviewCssNonce: string): string {
     <label for="model">Model</label>
     <select id="model" class="model-select"><option value="">Auto (router)</option></select>
     <div class="log" id="chatLog">Ask Termit about your codebase.</div>
+    <div class="log chat-activity" id="chatActivity" style="display:none;"></div>
     <textarea id="chatInput" placeholder="Message... (Cmd/Ctrl+Enter to send)"></textarea>
     <div class="row">
       <button id="sendChat">Send</button>
@@ -148,7 +168,7 @@ export function getSidebarHtml(webviewCssNonce: string): string {
       <button id="runAgent">Run agent</button>
     </div>
     <pre class="log" id="agentDetail">Select an agent.</pre>
-    <pre class="log" id="agentTimeline">Run timeline appears here.</pre>
+    <div class="log" id="agentTimeline">Run timeline appears here.</div>
   </section>
 
   <script nonce="${webviewCssNonce}">
@@ -176,7 +196,10 @@ export function getSidebarHtml(webviewCssNonce: string): string {
     });
 
     const chatLog = document.getElementById('chatLog');
+    const chatActivity = document.getElementById('chatActivity');
     const chatInput = document.getElementById('chatInput');
+    let activityFeedEnabled = true;
+    let activityFeedDetail = 'detailed';
 
     function appendChat(prefix, text) {
       chatLog.textContent += '\\n\\n' + prefix + text;
@@ -386,19 +409,122 @@ export function getSidebarHtml(webviewCssNonce: string): string {
       });
     }
 
+    function reduceActivity(events) {
+      const fileMap = new Map();
+      const tools = [];
+      let summary = null;
+      for (const event of events || []) {
+        const payload = event.payload;
+        if (!payload || typeof payload !== 'object') continue;
+        if (payload.kind === 'file_edit' && payload.path) {
+          fileMap.set(payload.path, payload);
+        } else if (payload.kind === 'tool') {
+          tools.push(payload);
+        } else if (payload.kind === 'activity_summary') {
+          summary = payload;
+        }
+      }
+      return {
+        files: Array.from(fileMap.values()),
+        tools: tools.slice(-4),
+        summary,
+      };
+    }
+
+    function attachFilePillHandlers(container) {
+      if (!container) return;
+      container.querySelectorAll('[data-file-path]').forEach((el) => {
+        el.addEventListener('click', () => {
+          const path = el.getAttribute('data-file-path');
+          if (path) {
+            vscode.postMessage({ type: 'openFileDiff', path });
+          }
+        });
+      });
+    }
+
+    function buildActivityHtml(activity, compact) {
+      if (!activityFeedEnabled) {
+        return '';
+      }
+      const summaryText = activity.summary
+        ? activity.summary.label
+        : activity.files.length
+          ? activity.files.length + ' files · +' +
+            activity.files.reduce((s, f) => s + (f.lines_added || 0), 0) +
+            ' −' +
+            activity.files.reduce((s, f) => s + (f.lines_removed || 0), 0)
+          : (compact ? '' : 'No structured activity yet');
+      const toolsHtml = activity.tools.length
+        ? '<div class="activity-tools">' +
+          activity.tools.map((t) => '<div>🔧 ' + (t.label || t.tool) + '</div>').join('') +
+          '</div>'
+        : '';
+      const showStats = activityFeedDetail === 'detailed' || activityFeedDetail === 'verbose';
+      const showVerbose = activityFeedDetail === 'verbose';
+      const filesHtml = activity.files.length
+        ? '<div class="activity-files">' +
+          activity.files
+            .map((f) => {
+              const name = String(f.path).split('/').pop();
+              const pending = f.pending ? ' pending' : '';
+              const stats = f.pending
+                ? '…'
+                : showStats
+                  ? (f.lines_added ? '<span class="file-add">+' + f.lines_added + '</span>' : '') +
+                    (f.lines_removed ? '<span class="file-del">−' + f.lines_removed + '</span>' : '')
+                  : '';
+              const op = activityFeedDetail === 'compact' ? '' : (f.operation || 'edit') + ' ';
+              const hunks = showVerbose && f.hunks_applied ? ' ' + f.hunks_applied + 'h' : '';
+              return '<button type="button" class="file-pill clickable' + pending + '" data-file-path="' +
+                String(f.path).replace(/"/g, '&quot;') + '"><strong>' + name + '</strong> ' +
+                op + stats + hunks + '</button>';
+            })
+            .join('') +
+          '</div>'
+        : '';
+      const summaryBlock = summaryText
+        ? '<div class="activity-summary">' + summaryText + '</div>'
+        : '';
+      return summaryBlock + toolsHtml + filesHtml;
+    }
+
+    function renderChatActivity(run, events) {
+      if (!chatActivity || !activityFeedEnabled) {
+        if (chatActivity) chatActivity.style.display = 'none';
+        return;
+      }
+      chatActivity.style.display = 'block';
+      const activity = reduceActivity(events);
+      const header = run
+        ? '<div class="muted">Agent · ' + run.run_id + ' · ' + run.state + '</div>'
+        : '';
+      chatActivity.innerHTML = header + buildActivityHtml(activity, true);
+      attachFilePillHandlers(chatActivity);
+      chatActivity.scrollTop = chatActivity.scrollHeight;
+    }
+
     function renderAgentTimeline(run, events) {
+      const activity = reduceActivity(events);
       const lines = [
         'run: ' + run.run_id,
         'state: ' + run.state,
         run.model ? 'model: ' + run.model : '',
         run.error ? 'error: ' + run.error : '',
-        '',
-        '--- timeline ---',
       ].filter(Boolean);
-      events.forEach((ev) => {
-        lines.push('[' + ev.timestamp + '] ' + ev.state + ' · ' + ev.event_type + ': ' + ev.message);
-      });
-      document.getElementById('agentTimeline').textContent = lines.join('\\n');
+
+      const timelineHtml = (events || [])
+        .slice(-8)
+        .map((ev) => '<div class="muted">[' + ev.timestamp + '] ' + ev.event_type + ': ' + (ev.message || '') + '</div>')
+        .join('');
+
+      document.getElementById('agentTimeline').innerHTML =
+        '<pre style="margin:0 0 8px 0;white-space:pre-wrap;">' + lines.join('\\n') + '</pre>' +
+        buildActivityHtml(activity, false) +
+        '<div style="margin-top:8px;font-size:11px;"><strong>--- timeline ---</strong></div>' +
+        timelineHtml;
+      attachFilePillHandlers(document.getElementById('agentTimeline'));
+      renderChatActivity(run, events);
     }
 
     window.addEventListener('message', (event) => {
@@ -406,6 +532,10 @@ export function getSidebarHtml(webviewCssNonce: string): string {
       switch (msg.type) {
         case 'status':
           setStatus(msg.text);
+          break;
+        case 'activityFeedConfig':
+          activityFeedEnabled = msg.enabled !== false;
+          activityFeedDetail = msg.detail || 'detailed';
           break;
         case 'token':
           chatLog.textContent += msg.text;
@@ -438,6 +568,9 @@ export function getSidebarHtml(webviewCssNonce: string): string {
         case 'agentRunCreated':
           document.getElementById('agentDetail').textContent =
             'Run queued: ' + msg.runId + ' (' + msg.state + ')';
+          activeTab('chat');
+          appendChat('Agent run: ', msg.runId + ' · ' + msg.state);
+          renderChatActivity({ run_id: msg.runId, state: msg.state }, []);
           break;
         case 'agentRuns':
           renderAgentRuns(msg.runs || []);

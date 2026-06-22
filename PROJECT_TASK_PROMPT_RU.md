@@ -117,7 +117,11 @@ User task → Planner (optional) → Loop: think → tool → observe → … �
 
 - [x] UI: project rules + user rules в desktop sidebar (skills — через platform API)
 - [x] API: `GET/POST /api/projects/{id}/rules`, inject в chat/agent prompts
-- [x] Шаблоны агентов: «fix CI», «write tests», «security review»
+- [x] API: `GET/POST /api/projects/{id}/skills` (pinned + catalog)
+- [x] Platform: `GET /api/platform/skills`, `POST /skills/select`, `invoke_skill` tool
+- [x] Auto-select skills + progressive inject + `scripts/sync_cursor_skills.sh`
+- [x] Runtime catalog `data/skills/` (включая termit-agent, termit-automation, termit-prompts)
+- [x] Шаблоны агентов: «fix CI», «write tests», «security review» + `skill_ids` + `invoke_skill`
 
 **Файлы:** `data/agent_templates.json`, `app/services/project_rules_store.py`, `app/api/routes/projects.py`
 

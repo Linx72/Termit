@@ -5,11 +5,40 @@ export interface PlatformSkillSummary {
 }
 
 export interface PlatformSkillDetail extends PlatformSkillSummary {
-  body: string;
+  content: string;
 }
 
 export interface PlatformSkillListResponse {
   skills: PlatformSkillSummary[];
+}
+
+export interface PlatformSkillSelectRequest {
+  instruction: string;
+  task_type?: string;
+  pinned_skill_ids?: string[];
+  changed_files?: string[];
+  max_skills?: number;
+  auto_select_enabled?: boolean;
+}
+
+export interface PlatformSkillSelectionItem {
+  skill_id: string;
+  name: string;
+  score: number;
+  matched_terms: string[];
+  source: string;
+}
+
+export interface PlatformSkillSelectResponse {
+  selected_skill_ids: string[];
+  selections: PlatformSkillSelectionItem[];
+  auto_select_enabled: boolean;
+}
+
+export interface ProjectSkillsResponse {
+  project_id: string;
+  pinned_skill_ids: string[];
+  available_skills: PlatformSkillSummary[];
 }
 
 export interface PlatformTraceSpan {

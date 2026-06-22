@@ -1,6 +1,6 @@
 {
   "phase": "0.4.23",
-  "generated_at": "2026-06-20T20:00:19.720211+00:00",
+  "generated_at": "2026-06-21T14:21:00.441190+00:00",
   "model": "ollama:termit-core-ft",
   "scenario_ids": [
     "HE1",
@@ -37,15 +37,15 @@
     "trainer_mode": "hf_dpo",
     "status": "completed",
     "output_model": "termit-core-ft",
-    "modelfile_path": "data/finetune/modelfiles/dpo_20260620T200018Z.Modelfile",
+    "modelfile_path": "data/finetune/modelfiles/dpo_20260621T142059Z.Modelfile",
     "adapter_path": "data/finetune/adapters/termit-core-ft",
-    "command": "/Users/amoros/Projects/Termit/.venv/bin/python /Users/amoros/Projects/Termit/scripts/unsloth_dpo_train.py --dataset data/finetune/datasets/weekly-dpo-gpu_dpo_20260620T200018Z.jsonl --base-model termit-core-ft --output-dir data/finetune/adapters/termit-core-ft --epochs 1 --lora-rank 16 --max-samples 500",
+    "command": "/Users/amoros/Projects/Termit/.venv/bin/python /Users/amoros/Projects/Termit/scripts/unsloth_dpo_train.py --dataset data/finetune/datasets/weekly-dpo-gpu_dpo_20260621T142059Z.jsonl --base-model termit-core-ft --output-dir data/finetune/adapters/termit-core-ft --epochs 1 --lora-rank 16 --max-samples 500",
     "stdout": "",
     "stderr": "",
     "duration_ms": 0,
     "detail": "HF DPO dry-run: Unsloth DPO command prepared. Set TERMIT_FINETUNE_HF_DRY_RUN=false and install unsloth to execute.",
     "contract": {
-      "dataset_path": "data/finetune/datasets/weekly-dpo-gpu_dpo_20260620T200018Z.jsonl",
+      "dataset_path": "data/finetune/datasets/weekly-dpo-gpu_dpo_20260621T142059Z.jsonl",
       "contract_version": "1.0",
       "valid": true,
       "total": 23,
@@ -55,7 +55,7 @@
       "too_short_rows": 0,
       "same_answer_rows": 0
     },
-    "dataset_path": "data/finetune/datasets/weekly-dpo-gpu_dpo_20260620T200018Z.jsonl"
+    "dataset_path": "data/finetune/datasets/weekly-dpo-gpu_dpo_20260621T142059Z.jsonl"
   },
   "dpo_real_train": false,
   "baseline_report": "/Users/amoros/Projects/Termit/data/eval_kpi_baseline_dpo.json",
@@ -68,14 +68,16 @@
     "min_improvement_required": 0.05,
     "delta": 0.0,
     "kpi_passed": false,
-    "reason": "KPI not met: improvement +0.00% below target 5.00%."
+    "reason": "KPI not met: improvement +0.00% below target 5.00%.",
+    "dev_only": true
   },
   "kpi_passed": false,
   "kpi_measurable": false,
-  "dev_kpi_seed": false,
+  "dev_kpi_seed": true,
   "paths": {
     "baseline": "/Users/amoros/Projects/Termit/data/eval_kpi_baseline_dpo.json",
     "post_dpo": "/Users/amoros/Projects/Termit/data/eval_post_dpo_last.json",
     "kpi": "/Users/amoros/Projects/Termit/data/eval_kpi_last.json"
-  }
+  },
+  "dev_only": true
 }

@@ -87,6 +87,28 @@ class SkillSelectorServiceTests(unittest.TestCase):
         )
         self.assertIn("termit-platform", result.selected_skill_ids)
 
+    def test_selects_media_studio_for_promo_task(self) -> None:
+        result = self.selector.select_skills(
+            instruction="Create promo video storyboard with ffmpeg compose_media and SDXL assets",
+            task_type=TaskType.creative_media,
+        )
+        self.assertIn("media-studio", result.selected_skill_ids)
+
+    def test_selects_termit_next_iteration_for_roadmap(self) -> None:
+        result = self.selector.select_skills(
+            instruction="Continue PROJECT_TASK_PROMPT roadmap and update ACTIVE.md with sprint backlog",
+            task_type=TaskType.coding,
+            changed_files=["PROJECT_TASK_PROMPT_RU.md"],
+        )
+        self.assertIn("termit-next-iteration", result.selected_skill_ids)
+
+    def test_selects_termit_automation_for_do_all_automatic(self) -> None:
+        result = self.selector.select_skills(
+            instruction="Run do all automatic and disable daily improvement schedulers",
+            task_type=TaskType.general,
+        )
+        self.assertIn("termit-automation", result.selected_skill_ids)
+
     def test_relative_cutoff_drops_weak_matches(self) -> None:
         result = self.selector.select_skills(
             instruction="Add pytest unit tests for finetune_service",

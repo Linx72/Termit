@@ -155,6 +155,17 @@
           "type": "string",
           "default": "",
           "description": "Optional model override for inline completion"
+        },
+        "termit.activityFeed.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show live agent activity (file pills, tool steps, line stats) during agent runs"
+        },
+        "termit.activityFeed.detail": {
+          "type": "string",
+          "enum": ["compact", "detailed", "verbose"],
+          "default": "detailed",
+          "description": "Activity feed detail: compact (paths only), detailed (+/− lines), verbose (+ hunks)"
         }
       }
     }

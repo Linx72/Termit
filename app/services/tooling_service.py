@@ -21,6 +21,7 @@ from app.domain.schemas import (
     ToolAuditEvent,
     ToolRiskLevel,
 )
+from app.services.agent_activity_events import count_line_diff
 
 
 class ToolingError(Exception):
@@ -240,6 +241,7 @@ class ToolingService:
         )
         preview_excerpt = new_text[:500]
         created = not file_exists
+        lines_added, lines_removed = count_line_diff(current_text, new_text)
 
         if payload.dry_run:
             self._record_audit(
@@ -259,6 +261,8 @@ class ToolingService:
                 hunks_applied=hunks_applied,
                 bytes_written=len(new_text.encode("utf-8")),
                 preview_excerpt=preview_excerpt,
+                lines_added=lines_added,
+                lines_removed=lines_removed,
             )
 
         if not payload.confirmed:
@@ -280,6 +284,8 @@ class ToolingService:
                 hunks_applied=hunks_applied,
                 bytes_written=len(new_text.encode("utf-8")),
                 preview_excerpt=preview_excerpt,
+                lines_added=lines_added,
+                lines_removed=lines_removed,
             )
 
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -306,6 +312,8 @@ class ToolingService:
             hunks_applied=hunks_applied,
             bytes_written=len(new_text.encode("utf-8")),
             preview_excerpt=preview_excerpt,
+            lines_added=lines_added,
+            lines_removed=lines_removed,
         )
 
     def get_audit_events(self, limit: int = 100) -> list[ToolAuditEvent]:

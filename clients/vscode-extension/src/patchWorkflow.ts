@@ -76,6 +76,27 @@ export async function previewAndApplyPatch(
   );
 }
 
+export async function openWorkspaceFileDiff(path: string): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    void vscode.window.showWarningMessage("Open a workspace folder to view diffs.");
+    return;
+  }
+  const uri = vscode.Uri.joinPath(folder.uri, path);
+  try {
+    await vscode.commands.executeCommand("git.openChange", uri);
+    return;
+  } catch {
+    // Fall through to opening the file directly.
+  }
+  try {
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document, { preview: false });
+  } catch {
+    void vscode.window.showWarningMessage(`Could not open ${path}`);
+  }
+}
+
 export async function promptPatchFromUser(client: TermitClient): Promise<void> {
   const pathInput = await vscode.window.showInputBox({
     prompt: "Relative file path",

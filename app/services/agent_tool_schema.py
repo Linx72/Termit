@@ -446,11 +446,31 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
             },
         },
     },
+    "invoke_skill": {
+        "type": "function",
+        "function": {
+            "name": "invoke_skill",
+            "description": (
+                "Load full instructions for a Termit agent skill by skill_id. "
+                "Use when task matches an available skill or user references a slash skill."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_id": {
+                        "type": "string",
+                        "description": "Skill folder id, e.g. fix-ci, write-tests, media-studio.",
+                    }
+                },
+                "required": ["skill_id"],
+            },
+        },
+    },
 }
 
 
 # Группы для lazy tool schemas (ось B harness): старт с core, расширение по heuristics/usage.
-TOOL_TIER_CORE = frozenset({"list_files", "read_file", "describe_tools"})
+TOOL_TIER_CORE = frozenset({"list_files", "read_file", "describe_tools", "invoke_skill"})
 TOOL_TIER_MUTATE = frozenset({"apply_patch", "execute_command", "browser_click"})
 TOOL_TIER_BROWSER = frozenset({"browser_navigate", "browser_snapshot", "browser_click", "web_automation"})
 TOOL_TIER_ONLINE = frozenset({"web_search"})

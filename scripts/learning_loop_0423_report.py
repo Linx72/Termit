@@ -135,6 +135,8 @@ def main() -> int:
         cloud_benchmark_ran=args.cloud_ran,
         remote_gpu=args.remote_gpu,
     )
+    if not report.get("dpo_real_train"):
+        report["dev_only"] = True
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

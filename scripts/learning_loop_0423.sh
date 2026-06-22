@@ -101,6 +101,8 @@ KPI_ARGS=(
 )
 if [[ "${TERMIT_FINETUNE_KPI_STRICT:-false}" == "true" ]]; then
   KPI_ARGS+=(--strict)
+else
+  KPI_ARGS+=(--dev-only)
 fi
 if ! "${PYTHON_BIN}" "${ROOT}/scripts/finetune_eval_kpi_gate.py" "${KPI_ARGS[@]}"; then
   if [[ "${TERMIT_FINETUNE_KPI_STRICT:-false}" == "true" ]]; then

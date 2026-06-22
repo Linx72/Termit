@@ -6,12 +6,21 @@ from app.domain.schemas import (
     ProjectRulesImportRequest,
     ProjectRulesResponse,
     ProjectRulesUpdateRequest,
+    ProjectSkillsResponse,
+    ProjectSkillsUpdateRequest,
+    SkillSummaryResponse,
 )
 from app.services.agent_registry_store import AgentRegistryStore
 from app.services.agent_templates_store import AgentTemplatesStore
 from app.services.cursor_rules_importer import CursorRulesImporter
 from app.services.project_rules_store import ProjectRulesStore
-from app.state import get_agent_registry_store, get_agent_templates_store, get_project_rules_store
+from app.services.skill_store import SkillStore
+from app.state import (
+    get_agent_registry_store,
+    get_agent_templates_store,
+    get_project_rules_store,
+    get_skill_store,
+)
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -74,6 +83,45 @@ async def update_project_rules(
         skills=body.skills,
     )
     return ProjectRulesResponse.model_validate(payload)
+
+
+@router.get("/{project_id}/skills", response_model=ProjectSkillsResponse)
+async def get_project_skills(
+    project_id: str,
+    rules_store: ProjectRulesStore = Depends(get_project_rules_store),
+    skill_store: SkillStore = Depends(get_skill_store),
+) -> ProjectSkillsResponse:
+    payload = rules_store.get_rules(project_id)
+    skills = payload.get("skills", [])
+    pinned: list[str] = []
+    if isinstance(skills, list):
+        pinned = [str(item).strip() for item in skills if str(item).strip()]
+    available = [
+        SkillSummaryResponse(skill_id=item.skill_id, name=item.name, description=item.description)
+        for item in skill_store.list_skills()
+    ]
+    return ProjectSkillsResponse(
+        project_id=project_id,
+        pinned_skill_ids=pinned,
+        available_skills=available,
+    )
+
+
+@router.post("/{project_id}/skills", response_model=ProjectSkillsResponse)
+async def update_project_skills(
+    project_id: str,
+    body: ProjectSkillsUpdateRequest,
+    rules_store: ProjectRulesStore = Depends(get_project_rules_store),
+    skill_store: SkillStore = Depends(get_skill_store),
+) -> ProjectSkillsResponse:
+    current = rules_store.get_rules(project_id)
+    rules_store.save_rules(
+        project_id,
+        project_rules=str(current.get("project_rules", "")),
+        user_rules=str(current.get("user_rules", "")),
+        skills=[str(item).strip() for item in body.skill_ids if str(item).strip()],
+    )
+    return await get_project_skills(project_id, rules_store, skill_store)
 
 
 @router.post("/{project_id}/rules/import-cursor", response_model=ProjectRulesResponse)

@@ -1,5 +1,7 @@
 export type TaskType = "coding" | "review" | "debug" | "explain" | "general";
 
+export type ActivityFeedDetail = "compact" | "detailed" | "verbose";
+
 export interface StoredSettings {
   baseUrl: string;
   apiKey: string;
@@ -13,6 +15,8 @@ export interface StoredSettings {
   selectedModel: string;
   repoProfile: string;
   inlineCompletionEnabled: boolean;
+  activityFeedEnabled: boolean;
+  activityFeedDetail: ActivityFeedDetail;
   locale: import("./i18n").Locale;
   policyPreset: string;
   teamName: string;
@@ -29,6 +33,7 @@ export interface StoredSettings {
   runtimeMode: "auto" | "desktop" | "web";
   defaultAgentTemplate: string;
   mcpContextInject: boolean;
+  autoSelectSkills: boolean;
 }
 
 export const STORAGE_KEY = "termit-app-settings";
@@ -48,6 +53,8 @@ export function loadSettings(): StoredSettings {
     selectedModel: "",
     repoProfile: "",
     inlineCompletionEnabled: false,
+    activityFeedEnabled: true,
+    activityFeedDetail: "detailed",
     locale: "ru",
     policyPreset: "solo",
     teamName: "default",
@@ -64,6 +71,7 @@ export function loadSettings(): StoredSettings {
     runtimeMode: "auto",
     defaultAgentTemplate: "desktop-cursor-parity-stable",
     mcpContextInject: true,
+    autoSelectSkills: true,
   };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

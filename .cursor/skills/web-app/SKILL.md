@@ -1,35 +1,37 @@
 ---
-name: web-app
-description: >-
-  Build Vite/React web apps in Termit: web-app skill, web-app-vite agent template,
-  npm dev/test/build verify, workspace-scripts API, Terminal quick commands.
+name: Web App
+description: Scaffold and iterate Vite/React (or Node) web applications with dev server and verify loop
 ---
 
-# Termit Web App Builder
+# Web App
 
-## When to use
+Use for **SPA / frontend** work: Vite, React, TypeScript, Tailwind, component libraries.
 
-- User builds SPA, React, Vite, frontend, landing, dashboard
-- Template `web-app-vite`, skill `web-app`
+## Stack detection
 
-## Docs
+1. `read_file` `package.json` — scripts: `dev`, `build`, `test`, `lint`
+2. Prefer existing conventions (paths, router, state library)
 
-- [WEB_APPS_RU.md](../../../WEB_APPS_RU.md)
-- Prompt: [data/prompts/web-app-builder.md](../../../data/prompts/web-app-builder.md)
-- Skill: [data/skills/web-app/SKILL.md](../../../data/skills/web-app/SKILL.md)
+## Workflow
 
-## API
+1. **Scaffold** (greenfield): `npm create vite@latest` or extend existing `src/`
+2. **Dev** — `npm run dev` in background; note URL (often `:5173`)
+3. **Implement** — small patches per component/route; use retrieval for large repos
+4. **Verify** — `npm test` → `npm run lint` → `npm run build` (chain from package.json)
+5. **Preview** — `browser_navigate` + `browser_snapshot` on dev URL when `allow_online=true`
 
-```bash
-curl -s http://127.0.0.1:8765/api/tools/workspace-scripts
-```
+## File layout (Vite default)
 
-Returns `dev_command`, `verify_command` from `package.json`.
+- `src/App.tsx`, `src/main.tsx`, `index.html`
+- Tests: `*.test.tsx` next to components or `src/__tests__/`
 
-## Agent
+## Rules
 
-Create from template **web-app-vite**; enable **allow_online** for browser preview of `npm run dev`.
+- Do not commit `node_modules` or `.env` secrets
+- Prefer accessible markup (labels, aria) for forms
+- Mobile-first CSS when user asks for responsive UI
+- After `apply_patch`, assume verify runs automatically — keep builds green
 
-## Desktop
+## Composer output
 
-Terminal tab loads **npm run dev**, verify, lint, build as quick buttons when `package.json` exists.
+For multi-file UI changes, return JSON patches with `path` under `src/`.

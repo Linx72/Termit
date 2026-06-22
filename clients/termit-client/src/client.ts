@@ -442,6 +442,29 @@ export class TermitClient {
     return this.request(`/api/platform/skills/${encodeURIComponent(skillId)}`);
   }
 
+  selectPlatformSkills(
+    payload: import("./platform").PlatformSkillSelectRequest
+  ): Promise<import("./platform").PlatformSkillSelectResponse> {
+    return this.request("/api/platform/skills/select", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  getProjectSkills(projectId: string): Promise<import("./platform").ProjectSkillsResponse> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/skills`);
+  }
+
+  updateProjectSkills(
+    projectId: string,
+    skillIds: string[]
+  ): Promise<import("./platform").ProjectSkillsResponse> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/skills`, {
+      method: "POST",
+      body: JSON.stringify({ skill_ids: skillIds }),
+    });
+  }
+
   listPlatformMcpServers(): Promise<import("./platform").PlatformMcpServerListResponse> {
     return this.request("/api/platform/mcp/servers");
   }

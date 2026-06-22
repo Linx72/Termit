@@ -16,7 +16,7 @@
 | Repo RAG | ✅ keyword/semantic | — | symbol graph, auto-reindex |
 | Web | ✅ SearXNG (self-host) + stub | Perplexity Search | fetch+extract rerank, desktop citations UI |
 | MCP | ✅ registry + stdio_json transport | Cursor, Antigravity, OpenAI | RBAC per profile; resources/prompts/ping via session |
-| Skills/Rules в продукте | ✅ API + inject MVP | Antigravity, OpenAI Skills | UI inject, project-scoped routes |
+| Skills/Rules в продукте | ✅ API + inject + invoke_skill + UI | Antigravity, OpenAI Skills | embeddings auto-select, skills CRUD API |
 | SDK Agent.create/resume | ✅ termit-client v2 MVP | Cursor SDK | stream-only (no poll fallback removal) |
 | Scheduled agents | ✅ cron service + API | Antigravity cron | desktop UI badge |
 | Tracing spans | ✅ SQLite spans per run | OpenAI Tracing | OTEL export, Prometheus per tool |
@@ -73,9 +73,10 @@ Learning: training_signals → curator → finetune → regression gate
 
 | Задача | Файлы | Exit |
 |--------|-------|------|
-| `GET/POST /api/projects/{root}/skills` | `app/api/routes/skills.py` | |
+| `GET/POST /api/projects/{id}/skills` | `app/api/routes/projects.py` | ✅ |
 | Формат SKILL.md (как `.cursor/skills/`) | `data/skills/` | |
-| Inject skills в agent profile system prompt | `agent_loop_service.py` | |
+| Inject skills в agent profile system prompt | `agent_service.py` | |
+| `invoke_skill` tool (mid-run load) | `agent_tool_schema.py` | ✅ |
 | 3 шаблона: fix-ci, write-tests, security-review | `data/agents.json` presets | |
 
 **Sprint A exit criteria**

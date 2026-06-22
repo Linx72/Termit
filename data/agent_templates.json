@@ -8,10 +8,14 @@
     "enabled_tools": [
       "read_file",
       "search_repo",
-      "apply_patch"
+      "apply_patch",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
-    "use_retrieval": true
+    "use_retrieval": true,
+    "skill_ids": [
+      "fix-ci"
+    ]
   },
   {
     "template_id": "write-tests",
@@ -22,10 +26,14 @@
     "enabled_tools": [
       "read_file",
       "search_repo",
-      "apply_patch"
+      "apply_patch",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
-    "use_retrieval": true
+    "use_retrieval": true,
+    "skill_ids": [
+      "write-tests"
+    ]
   },
   {
     "template_id": "security-review",
@@ -38,7 +46,10 @@
       "search_repo"
     ],
     "use_tool_loop": false,
-    "use_retrieval": true
+    "use_retrieval": true,
+    "skill_ids": [
+      "security-review"
+    ]
   },
   {
     "template_id": "cross-platform-flutter",
@@ -50,7 +61,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -68,7 +80,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -86,7 +99,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -104,7 +118,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -122,7 +137,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -140,7 +156,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -164,7 +181,8 @@
       "web_automation",
       "browser_navigate",
       "browser_snapshot",
-      "mcp_invoke"
+      "mcp_invoke",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -181,7 +199,8 @@
     "system_prompt": "You are Termit Research (fast). Use skill online-research: web_search then web_automation. Cite sources; report blockers. Full prompt: data/prompts/research-fast.md",
     "enabled_tools": [
       "web_search",
-      "web_automation"
+      "web_automation",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": false,
@@ -200,7 +219,8 @@
       "web_search",
       "web_automation",
       "browser_navigate",
-      "browser_snapshot"
+      "browser_snapshot",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": false,
@@ -225,7 +245,8 @@
       "list_files",
       "apply_patch",
       "execute_command",
-      "mcp_invoke"
+      "mcp_invoke",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -244,7 +265,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -265,7 +287,8 @@
       "apply_patch",
       "execute_command",
       "web_automation",
-      "web_search"
+      "web_search",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": false,
@@ -285,7 +308,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -305,7 +329,8 @@
       "read_file",
       "search_repo",
       "apply_patch",
-      "execute_command"
+      "execute_command",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -328,7 +353,8 @@
       "apply_patch",
       "execute_command",
       "web_search",
-      "web_automation"
+      "web_automation",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,
@@ -352,7 +378,8 @@
       "tts_generate",
       "transcribe_media",
       "compose_media",
-      "read_file"
+      "read_file",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": false,
@@ -379,12 +406,15 @@
       "export_gif",
       "export_lottie",
       "vision_qa_media",
-      "list_media_assets"
+      "list_media_assets",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": false,
     "allow_online": false,
-    "skill_ids": ["media-studio"]
+    "skill_ids": [
+      "media-studio"
+    ]
   },
   {
     "template_id": "termit-next-iteration",
@@ -399,7 +429,8 @@
       "apply_patch",
       "execute_command",
       "web_search",
-      "web_automation"
+      "web_automation",
+      "invoke_skill"
     ],
     "use_tool_loop": true,
     "use_retrieval": true,

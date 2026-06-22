@@ -101,7 +101,10 @@ function formatTapeLine(locale: "ru" | "en", ev: AgentRunEvent, index: number): 
       return `${index + 1}. 🛑 Нужна проверка человека: ${message}`;
     }
     if (eventType === "skills_mounted") {
-      return `${index + 1}. 🧩 Подключены skills: ${message}`;
+      return `${index + 1}. 🧩 Подключены skills: ${formatSkillsMountedMessage(locale, message)}`;
+    }
+    if (eventType === "invoke_skill") {
+      return `${index + 1}. 📖 Skill загружен: ${message}`;
     }
     if (eventType === "spawn_agent") {
       return `${index + 1}. 🧵 Запущен дочерний агент: ${message}`;
@@ -135,7 +138,10 @@ function formatTapeLine(locale: "ru" | "en", ev: AgentRunEvent, index: number): 
       return `${index + 1}. 🛑 Human confirmation required: ${message}`;
     }
     if (eventType === "skills_mounted") {
-      return `${index + 1}. 🧩 Skills mounted: ${message}`;
+      return `${index + 1}. 🧩 Skills mounted: ${formatSkillsMountedMessage(locale, message)}`;
+    }
+    if (eventType === "invoke_skill") {
+      return `${index + 1}. 📖 Skill loaded: ${message}`;
     }
     if (eventType === "spawn_agent") {
       return `${index + 1}. 🧵 Child agent started: ${message}`;
@@ -176,6 +182,12 @@ function formatLoopTrace(locale: "ru" | "en", trace: LoopTracePayload): string {
 
   if (locale === "ru") {
     if (action === "tool") {
+      if (tool === "invoke_skill") {
+        const skillId = parseInvokeSkillId(observation);
+        return skillId
+          ? `${prefix}: invoke_skill · ${skillId}`
+          : `${prefix}: invoke_skill`;
+      }
       return tool
         ? `${prefix}: действие — вызов инструмента ${tool}${observation ? ` · ${shortObservation(observation)}` : ""}`
         : `${prefix}: действие — вызов инструмента`;
@@ -202,6 +214,12 @@ function formatLoopTrace(locale: "ru" | "en", trace: LoopTracePayload): string {
   }
 
   if (action === "tool") {
+    if (tool === "invoke_skill") {
+      const skillId = parseInvokeSkillId(observation);
+      return skillId
+        ? `${prefix}: invoke_skill · ${skillId}`
+        : `${prefix}: invoke_skill`;
+    }
     return tool
       ? `${prefix}: action — calling ${tool}${observation ? ` · ${shortObservation(observation)}` : ""}`
       : `${prefix}: action — tool call`;
@@ -410,4 +428,48 @@ export function buildCompletionSuggestions(
   actions.push("Prepare deploy and smoke-check");
 
   return { text: lines.join("\n"), actions };
+}
+
+function formatSkillsMountedMessage(locale: "ru" | "en", raw: string): string {
+  try {
+    const data = JSON.parse(raw) as {
+      skill_ids?: string[];
+      selections?: Array<{ skill_id?: string; name?: string; source?: string; score?: number }>;
+    };
+    if (Array.isArray(data.selections) && data.selections.length > 0) {
+      return data.selections
+        .map((item) => {
+          const id = item.skill_id ?? item.name ?? "?";
+          const src = item.source ?? "";
+          const score =
+            typeof item.score === "number" && item.source === "auto"
+              ? ` ${item.score.toFixed(1)}`
+              : "";
+          return `${id}${src ? ` (${src}${score})` : ""}`;
+        })
+        .join(", ");
+    }
+    if (Array.isArray(data.skill_ids) && data.skill_ids.length > 0) {
+      return data.skill_ids.join(", ");
+    }
+  } catch {
+    // fallback to raw
+  }
+  return raw;
+}
+
+function parseInvokeSkillId(observation: string): string {
+  if (!observation) {
+    return "";
+  }
+  try {
+    const data = JSON.parse(observation) as { skill_id?: string; ok?: boolean };
+    if (data.ok && data.skill_id) {
+      return data.skill_id;
+    }
+  } catch {
+    // noop
+  }
+  const match = observation.match(/"skill_id"\s*:\s*"([^"]+)"/);
+  return match?.[1] ?? "";
 }

@@ -1,51 +1,34 @@
 ---
-name: online-project
-description: >-
-  Run Termit online assignments end-to-end: web_search, browser tools, assignment
-  workspaces under data/assignments/, deliverables and journal. Use when the user
-  wants internet research, online projects, web automation, or online-project-manager agent.
+name: Online Project
+description: Execute internet-wide assignments with research, build, and deliverables
 ---
 
-# Termit Online Project
+# Online Project
 
-## When to use
+Use when the user gives an **assignment** that spans the web and local workspace (research → implement → deliver → report).
 
-- User asks for online project, web research, assignment, deliverables
-- Working with `POST /api/assignments`, `task_type: online_project` or `online_research`
-- Agent templates: `online-project-manager`, `research-fast`, `research-deep`
+## Prerequisites
 
-## Setup (once per machine)
+- Agent profile: `allow_online=true`
+- Tools: `web_search`, `web_automation`, `browser_navigate`, `browser_snapshot`, `read_file`, `list_files`, `apply_patch`, `execute_command`
+- Optional: `browser_click` only with `confirmed=true`
 
-```bash
-cd ~/Projects/Termit
-./scripts/setup_online_stack.sh
-TERMIT_INSTALL_PLAYWRIGHT=1 ./scripts/setup_online_stack.sh  # optional JS sites
-./scripts/restart_server.sh
-```
+## Workflow
 
-Guide: [ONLINE_PROJECTS_RU.md](../../../ONLINE_PROJECTS_RU.md)
+1. **Brief** — If no assignment folder exists, tell the user to `POST /api/assignments` or create under `data/assignments/<id>/` with `brief.md`.
+2. **Plan** — 3–7 steps: research → evidence → build → verify → report. State success criteria from `brief.md`.
+3. **Research** — `web_search` with citations; open top URLs via `web_automation` or `browser_navigate` + `browser_snapshot` for JS sites. Optional MCP: enable `termit-browser` preset and use `mcp_invoke` (see `docs/MCP_BROWSER_RU.md`).
+4. **Build** — Artifacts in `deliverables/` (markdown, code, exports). Use `apply_patch` / `execute_command` in repo when needed.
+5. **Journal** — Append progress to `journal/log.md` (what was tried, URLs, blockers).
+6. **Verify** — Check success criteria; run project tests if code changed.
+7. **Report** — Summary with links, files created, and explicit **blockers** (login, captcha, paywall).
 
-## Create assignment
+## Safety
 
-```bash
-curl -s -X POST http://127.0.0.1:8765/api/assignments \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"...","brief":"...","success_criteria":["..."]}'
-```
+- Stop on login/CAPTCHA; do not guess credentials.
+- No `browser_click` or destructive shell without confirmation.
+- Cite every external fact with URL.
 
-## Agent profile
+## Blockers
 
-From template `online-project-manager`:
-
-- `allow_online=true` (required)
-- `skill_ids`: `["online-project"]`
-- Full system prompt: [data/prompts/online-project-manager.md](../../../data/prompts/online-project-manager.md)
-
-Bundled skills: `data/skills/online-project/`, `data/skills/online-research/`
-
-## Verify
-
-```bash
-curl -s http://127.0.0.1:8765/health
-curl -s "http://127.0.0.1:8888/search?q=test&format=json" | head -c 200
-```
+Report clearly: `login_required`, `captcha`, `access_denied`, `search_unavailable` (start SearXNG or set search API key).

@@ -8,7 +8,7 @@ import {
 } from "@termit/client";
 import { applyAllComposerPatches, previewComposerPatch } from "./composerWorkflow";
 import { appendContextToMessage, buildEditorContext } from "./editorContext";
-import { previewAndApplyPatch } from "./patchWorkflow";
+import { previewAndApplyPatch, openWorkspaceFileDiff } from "./patchWorkflow";
 import { checkTermitHealth, getClient, getSessionId, setSessionId } from "./termitClient";
 import { getSidebarHtml } from "./webviewContent";
 
@@ -34,7 +34,8 @@ type WebviewInbound =
   | { type: "composerApplyAll" }
   | { type: "listAgentRuns"; agentId: string }
   | { type: "watchAgentRun"; runId: string }
-  | { type: "stopAgentWatch" };
+  | { type: "stopAgentWatch" }
+  | { type: "openFileDiff"; path: string };
 
 export class TermitSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = "termit.sidebar";
@@ -106,6 +107,15 @@ export class TermitSidebarProvider implements vscode.WebviewViewProvider, vscode
     this.stopAgentWatch();
   }
 
+  private postActivityFeedConfig(): void {
+    const config = vscode.workspace.getConfiguration("termit");
+    this.postMessage({
+      type: "activityFeedConfig",
+      enabled: config.get<boolean>("activityFeed.enabled", true),
+      detail: config.get<string>("activityFeed.detail", "detailed"),
+    });
+  }
+
   private stopAgentWatch(): void {
     if (this.agentWatchAbort) {
       this.agentWatchAbort.abort();
@@ -145,6 +155,7 @@ export class TermitSidebarProvider implements vscode.WebviewViewProvider, vscode
         const models = providers.flatMap((item) => item.models);
         this.postMessage({ type: "status", text: `Termit · ${health}` });
         this.postMessage({ type: "models", models });
+        this.postActivityFeedConfig();
         return;
       }
 
@@ -311,6 +322,11 @@ export class TermitSidebarProvider implements vscode.WebviewViewProvider, vscode
 
       if (message.type === "stopAgentWatch") {
         this.stopAgentWatch();
+        return;
+      }
+
+      if (message.type === "openFileDiff") {
+        await openWorkspaceFileDiff(message.path);
         return;
       }
 

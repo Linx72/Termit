@@ -37,6 +37,10 @@ from app.domain.schemas import (
     WebAutomationRequest,
     WebAutomationResponse,
 )
+from app.services.agent_activity_events import (
+    activity_summary_from_events,
+    events_for_loop_step,
+)
 from app.services.agent_policy_preset_service import AgentPolicyPresetService
 from app.services.agent_registry_store import AgentRegistryStore
 from app.services.agent_run_store import AgentRunStore
@@ -877,8 +881,17 @@ class AgentService:
         resolved_model, _escalation = self._resolve_run_model(profile, payload)
         skill_selection = self._resolve_mounted_skills(profile, payload)
         system_prompt = profile.system_prompt
+        pinned_ids: frozenset[str] = frozenset()
+        if skill_selection is not None:
+            pinned_ids = frozenset(
+                item.skill_id for item in skill_selection.selections if item.source == "pinned"
+            )
         if skill_selection is not None and skill_selection.selected_skill_ids:
-            profile_with_skills = self._append_skill_block(profile, skill_selection.selected_skill_ids)
+            profile_with_skills = self._append_skill_block(
+                profile,
+                skill_selection.selected_skill_ids,
+                pinned_skill_ids=pinned_ids,
+            )
             system_prompt = profile_with_skills.system_prompt
         chat_request = ChatRequest(
             message=payload.input,
@@ -940,13 +953,23 @@ class AgentService:
         self,
         profile: AgentProfileResponse,
         skill_ids: list[str],
+        *,
+        pinned_skill_ids: frozenset[str] | None = None,
     ) -> AgentProfileResponse:
         if not skill_ids or self._skills is None:
             return profile
-        skill_block = self._skills.build_prompt_block(skill_ids)
+        discovery = self._skills.build_discovery_block()
+        skill_block = self._skills.build_prompt_block(
+            skill_ids,
+            full_body_skill_ids=pinned_skill_ids,
+        )
         if not skill_block:
             return profile
-        return profile.model_copy(update={"system_prompt": f"{profile.system_prompt}\n\n{skill_block}"})
+        parts = [profile.system_prompt]
+        if discovery:
+            parts.append(discovery)
+        parts.append(skill_block)
+        return profile.model_copy(update={"system_prompt": "\n\n".join(parts)})
 
     async def _run_with_tool_loop(
         self,
@@ -969,8 +992,17 @@ class AgentService:
         profile_for_loop = profile.model_copy(update={"model": resolved_model})
 
         skill_selection = self._resolve_mounted_skills(profile, payload)
+        pinned_ids: frozenset[str] = frozenset()
+        if skill_selection is not None:
+            pinned_ids = frozenset(
+                item.skill_id for item in skill_selection.selections if item.source == "pinned"
+            )
         if skill_selection is not None and skill_selection.selected_skill_ids:
-            profile_for_loop = self._append_skill_block(profile_for_loop, skill_selection.selected_skill_ids)
+            profile_for_loop = self._append_skill_block(
+                profile_for_loop,
+                skill_selection.selected_skill_ids,
+                pinned_skill_ids=pinned_ids,
+            )
             if run_id:
                 self._append_event(
                     run_id=run_id,
@@ -1315,6 +1347,20 @@ class AgentService:
                 message=message,
                 attempt=attempt,
             )
+            if step.action == "tool" and step.tool and not str(step.observation).startswith("Tool error"):
+                for act_type, act_msg, act_payload in events_for_loop_step(
+                    tool=step.tool,
+                    observation=str(step.observation or ""),
+                    step_message=message,
+                ):
+                    self._append_event(
+                        run_id=run_id,
+                        event_type=act_type,
+                        state=AgentRunState.running,
+                        message=act_msg,
+                        attempt=attempt,
+                        payload=act_payload,
+                    )
             trace_payload = json_dumps(
                 {
                     "step": step.step,
@@ -1776,6 +1822,45 @@ class AgentService:
             result_json = McpContextService.serialize_prompt_result(payload)
             side_effects.append(("mcp_get_prompt", f"server={server_id} name={prompt_name}"))
             return result_json, side_effects
+        if tool_name == "invoke_skill":
+            if self._skills is None:
+                raise AgentPermissionError("Skill store is not configured.")
+            skill_id = str(arguments.get("skill_id", "")).strip()
+            if not skill_id:
+                raise AgentPermissionError("invoke_skill requires skill_id.")
+            skill = self._skills.get_skill(skill_id)
+            if skill is None:
+                return (
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "skill_id": skill_id,
+                            "error": f"Skill not found: {skill_id}",
+                            "available": [
+                                {"skill_id": item.skill_id, "name": item.name, "description": item.description}
+                                for item in self._skills.list_skills()
+                            ],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    side_effects,
+                )
+            body = self._skills.skill_body(skill)
+            side_effects.append(("invoke_skill", skill_id))
+            return (
+                json.dumps(
+                    {
+                        "ok": True,
+                        "skill_id": skill.skill_id,
+                        "name": skill.name,
+                        "description": skill.description,
+                        "path": skill.path,
+                        "content": body,
+                    },
+                    ensure_ascii=False,
+                ),
+                side_effects,
+            )
         built = build_tool_arguments(tool_name, arguments)
         ssh_cfg = _active_ssh_config.get()
         if tool_name == "list_files":
@@ -2067,6 +2152,17 @@ class AgentService:
                         message="Run completed successfully.",
                         attempt=attempt,
                     )
+                    completion_events = self._run_store.get_events(run_id, limit=500)
+                    summary_payload = activity_summary_from_events(completion_events, in_progress=False)
+                    if summary_payload.get("files_count", 0) > 0:
+                        self._append_event(
+                            run_id=run_id,
+                            event_type="activity_summary",
+                            state=AgentRunState.completed,
+                            message=summary_payload["label"],
+                            attempt=attempt,
+                            payload=summary_payload,
+                        )
                     self._emit_run_hook(
                         event_type="run.stop",
                         run_id=run_id,
@@ -2354,6 +2450,7 @@ class AgentService:
         state: AgentRunState,
         message: str,
         attempt: int,
+        payload: dict[str, object] | None = None,
     ) -> None:
         event = AgentRunEvent(
             event_type=event_type,
@@ -2361,6 +2458,7 @@ class AgentService:
             message=message,
             timestamp=_utc_now_iso(),
             attempt=attempt,
+            payload=payload,
         )
         self._run_store.append_event(run_id=run_id, event=event)
         self._run_store.trim_events(run_id=run_id, max_events=self._max_events_per_run)
@@ -2380,6 +2478,7 @@ class AgentService:
             message=f"{run.run_id} · {event.event_type} · {event.message}",
             timestamp=event.timestamp,
             attempt=event.attempt,
+            payload=event.payload,
         )
         self._run_store.append_event(parent.run_id, child_event)
         self._run_store.trim_events(parent.run_id, max_events=self._max_events_per_run)

@@ -1,69 +1,64 @@
 ---
-name: termit-desktop
-description: >-
-  Termit Desktop Electron app: i18n RU/EN, SectionGuide per tab, Guided/Autopilot
-  modes, policy presets, npm build and package_desktop. Use when editing
-  termit-desktop UI, section guides, Russian translations, or App.tsx tabs.
+name: Termit Desktop
+description: Use Termit Desktop app tabs, i18n, SectionGuide, Guided vs Autopilot agent modes, and policy presets
 ---
 
-# Termit Desktop (Cursor)
+# Termit Desktop
 
-## When to apply
+Use when the user works in **Termit.app** (Electron client) or asks about desktop tabs, Russian UI, or agent run modes.
 
-- Правки `clients/termit-desktop/` — UI, i18n, SectionGuide, sidebar
-- «переведи интерфейс», «опиши раздел», «Guided / Autopilot toggle»
-- Сборка `.app`: `./scripts/package_desktop.sh`
+## Tabs (RU labels)
 
-**Platform skill (agents):** [`data/skills/termit-desktop/SKILL.md`](../../data/skills/termit-desktop/SKILL.md)
+| Tab | Purpose |
+|-----|---------|
+| Чат | Streaming chat, @attachments, queue task |
+| Компоновщик | Multi-file patches, preview, apply/rollback |
+| Редактор | Monaco + inline edit + tab completion |
+| План | Plan without code → Build to Composer |
+| Терминал | `execute_command` via API |
+| Задачи | Background task queue |
+| Агенты | Tool loop, confirm, resume |
+| Онлайн | Shared runs, heavy eval jobs |
+| Задания | Brief → deliverables |
+| Справка | Bundled PDF help |
 
-**Authoring prompt:** [`data/prompts/desktop-ux-authoring.md`](../../data/prompts/desktop-ux-authoring.md)
+Each tab shows **SectionGuide** (зачем + как пользоваться) from `i18n.ts` keys `sg*`.
 
-## Architecture
+## Agent modes (sidebar)
 
-```
-clients/termit-desktop/src/
-  i18n.ts           # ru + en messages, tabLabel(), t()
-  SectionGuide.tsx  # sg* keys per tab
-  App.tsx           # tabs, sidebar, agent runs
-  settings.ts       # locale default "ru", agentRunMode
-  WorkspaceFilePickerModal.tsx  # unified file/folder picker
-  PromptInputModal.tsx          # unified text input modal
-```
+| Mode | Preset | Behavior |
+|------|--------|----------|
+| **Guided** | solo / team / strict | Risky tools need confirm |
+| **Autopilot** | autopilot | `auto_confirm_risky_tools=true`, verify after patch |
 
-Policy presets → API: `data/desktop_policy_presets.json`
+API fields: `policy_preset`, `auto_confirm_risky_tools`, `verify_after_patch` on agent run.
 
-## UI parity baseline (current)
+## Key paths
 
-- Файловые потоки (`Open file`, `@file`, `@folder`, `Composer @file`) идут через единый встроенный picker, без platform-specific диалогов.
-- Текстовые вводы (`@symbol`, `@web`, path inputs) идут через `PromptInputModal`, без `window.prompt`.
-- `runtimeMode` (`auto|desktop|web`) остаётся в настройках для server-control поведения, но UI-потоки едины в desktop и web.
-- Renderer desktop API минимизирован: удалены legacy picker/restart/log IPC методы, оставлены только реально используемые операции.
+- Settings: `clients/termit-desktop/src/settings.ts` (`locale: "ru"` default)
+- i18n: `clients/termit-desktop/src/i18n.ts`
+- Presets: `data/desktop_policy_presets.json`
+- Unified file picker: `clients/termit-desktop/src/WorkspaceFilePickerModal.tsx`
+- Unified text modal: `clients/termit-desktop/src/PromptInputModal.tsx`
 
-## Add / change section guide
+## UX parity guardrails
 
-1. Keys in `i18n.ts`: `sgChatTitle`, `sgChatPurpose`, `sgChatSteps` (steps newline-separated)
-2. Register in `SectionGuide.tsx` → `SECTION_META`
-3. `<SectionGuide locale={locale} section="chat" />` in tab body
-
-## Agent modes in UI
-
-- `settings.agentRunMode`: `"guided"` | `"autopilot"`
-- Autopilot forces `policy_preset: "autopilot"` on `createAgentRun`
+- Keep desktop/web UX identical for core flows (attach/open/select/input).
+- Avoid `window.prompt` and platform-only picker branches in tab workflows.
+- Use `runtimeMode` for backend-control semantics only (server control), not for divergent UI interaction models.
 
 ## Verify
 
 ```bash
 cd clients/termit-desktop && npm run build
-./scripts/package_desktop.sh
 cd ../.. && python3 -m unittest tests.test_desktop_runtime_mode_smoke -q
 ```
 
-## Related prompts
+## Connect checklist
 
-| Prompt | Use |
-|--------|-----|
-| [desktop-guided-agent.md](../../data/prompts/desktop-guided-agent.md) | Guided agent system text |
-| [desktop-autopilot-agent.md](../../data/prompts/desktop-autopilot-agent.md) | Autopilot agent system text |
-| [desktop-ux-authoring.md](../../data/prompts/desktop-ux-authoring.md) | UI/i18n edits |
+1. API `http://127.0.0.1:8765` green
+2. Ollama models present
+3. Workspace folder selected
+4. Connect → run agent or chat
 
-Master doc: [DESKTOP_UX_TASK_PROMPT_RU.md](../../DESKTOP_UX_TASK_PROMPT_RU.md)
+Prompt: `data/prompts/desktop-guided-agent.md` or `desktop-autopilot-agent.md`

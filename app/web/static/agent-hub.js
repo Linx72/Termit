@@ -14,6 +14,7 @@ window.TermitAgentHub = (function () {
   let pollTimer = null;
   let selectedAgentId = null;
   let agentsCache = [];
+  let runEvents = [];
 
   const els = {};
 
@@ -305,28 +306,100 @@ window.TermitAgentHub = (function () {
     }
   }
 
+  function activityFeedDetail() {
+    try {
+      return localStorage.getItem("termit.activityFeed.detail") || "detailed";
+    } catch (_err) {
+      return "detailed";
+    }
+  }
+
+  function reduceRunActivity(events) {
+    const fileMap = new Map();
+    const tools = [];
+    let summary = null;
+    for (const event of events || []) {
+      const payload = event.payload;
+      if (!payload || typeof payload !== "object") continue;
+      if (payload.kind === "file_edit" && payload.path) {
+        fileMap.set(payload.path, payload);
+      } else if (payload.kind === "tool") {
+        tools.push(payload);
+      } else if (payload.kind === "activity_summary") {
+        summary = payload;
+      }
+    }
+    return { files: Array.from(fileMap.values()), tools: tools.slice(-4), summary };
+  }
+
   function renderTimeline(events) {
     if (!els.timeline) return;
-    if (!events || !events.length) {
+    const list = events || runEvents;
+    if (!list || !list.length) {
       els.timeline.innerHTML = `<p class="timeline-empty">${t("agentHub.timelineEmpty")}</p>`;
       return;
     }
-    els.timeline.innerHTML = events
-      .slice(-12)
-      .map((ev) => {
-        const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : "";
-        return `
+    const activity = reduceRunActivity(list);
+    const summaryText = activity.summary
+      ? activity.summary.label
+      : activity.files.length
+        ? `${activity.files.length} files · +${activity.files.reduce((s, f) => s + (f.lines_added || 0), 0)} −${activity.files.reduce((s, f) => s + (f.lines_removed || 0), 0)}`
+        : "";
+
+    const summaryHtml = summaryText
+      ? `<div class="timeline-activity-summary">${summaryText}</div>`
+      : "";
+
+    const showStats = activityFeedDetail() !== "compact";
+    const showVerbose = activityFeedDetail() === "verbose";
+
+    const filesHtml = activity.files.length
+      ? `<div class="timeline-activity-files">${activity.files
+          .map((f) => {
+            const name = String(f.path).split("/").pop();
+            const pending = f.pending ? " pending" : "";
+            const stats = f.pending
+              ? "…"
+              : showStats
+                ? `${f.lines_added ? `<span class="review-add">+${f.lines_added}</span>` : ""}${f.lines_removed ? `<span class="review-del">−${f.lines_removed}</span>` : ""}`
+                : "";
+            const op = activityFeedDetail() === "compact" ? "" : `${f.operation || "edit"} `;
+            const hunks = showVerbose && f.hunks_applied ? ` ${f.hunks_applied}h` : "";
+            return `<span class="timeline-file-pill${pending}"><strong>${name}</strong> ${op}${stats}${hunks}</span>`;
+          })
+          .join("")}</div>`
+      : "";
+
+    const toolsHtml = activity.tools.length
+      ? `<div class="timeline-activity-tools">${activity.tools
+          .map((tool) => `<div>🔧 ${tool.label || tool.tool}</div>`)
+          .join("")}</div>`
+      : "";
+
+    els.timeline.innerHTML =
+      summaryHtml +
+      toolsHtml +
+      filesHtml +
+      list
+        .slice(-12)
+        .map((ev) => {
+          const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : "";
+          const payloadHint =
+            ev.payload && ev.payload.kind === "file_edit"
+              ? `<span class="timeline-file-hint">${ev.payload.path}</span>`
+              : "";
+          return `
           <div class="timeline-item state-${ev.state}">
             <div class="timeline-dot"></div>
             <div class="timeline-body">
               <strong>${ev.event_type}</strong>
               <span class="timeline-state">${stateLabel(ev.state)}</span>
-              <p>${ev.message || ""}</p>
+              <p>${ev.message || ""}${payloadHint}</p>
               <time>${ts}</time>
             </div>
           </div>`;
-      })
-      .join("");
+        })
+        .join("");
     els.timeline.scrollTop = els.timeline.scrollHeight;
   }
 
@@ -381,6 +454,17 @@ window.TermitAgentHub = (function () {
         if (!resp.ok) return;
         const data = await resp.json();
         renderRunStatus(data);
+        try {
+          const eventsResp = await fetch(`/api/agents/runs/${encodeURIComponent(runId)}/events`, {
+            headers: authHeadersFn(),
+          });
+          if (eventsResp.ok) {
+            runEvents = await eventsResp.json();
+            renderTimeline(runEvents);
+          }
+        } catch (_eventsErr) {
+          /* ignore */
+        }
         if (isTerminalState(data.state)) {
           stopRunStream();
           refresh();
@@ -398,6 +482,7 @@ window.TermitAgentHub = (function () {
   function startRunStream(runId) {
     stopRunStream();
     if (!runId) return;
+    runEvents = [];
 
     if (hasApiKey()) {
       startRunPolling(runId);
@@ -412,6 +497,15 @@ window.TermitAgentHub = (function () {
     runStream.addEventListener("status", (event) => {
       try {
         renderRunStatus(JSON.parse(event.data));
+      } catch (_e) {
+        /* ignore */
+      }
+    });
+    runStream.addEventListener("timeline", (event) => {
+      try {
+        const item = JSON.parse(event.data);
+        runEvents = [...runEvents, item];
+        renderTimeline(runEvents);
       } catch (_e) {
         /* ignore */
       }
@@ -435,7 +529,10 @@ window.TermitAgentHub = (function () {
       const resp = await fetch(`/api/agents/runs/${encodeURIComponent(runId)}/events`, {
         headers: authHeadersFn(),
       });
-      if (resp.ok) renderTimeline(await resp.json());
+      if (resp.ok) {
+        runEvents = await resp.json();
+        renderTimeline(runEvents);
+      }
     } catch (_err) {
       /* ignore */
     }

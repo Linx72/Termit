@@ -268,6 +268,95 @@
   text-decoration-color: rgba(77, 163, 255, 0.55);
 }
 
+.agent-activity-panel {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-activity-summary {
+  font-size: 0.82rem;
+  color: #9a9a9a;
+}
+
+.agent-activity-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-activity-tool {
+  font-size: 0.78rem;
+  color: #bdbdbd;
+}
+
+.agent-activity-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-file-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #e6e6e6;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.agent-file-pill.pending {
+  border-color: #4a4a2a;
+  animation: agent-pill-pulse 1.4s ease-in-out infinite;
+}
+
+.agent-file-pill:hover {
+  border-color: #4da3ff;
+}
+
+.agent-file-name {
+  font-weight: 600;
+}
+
+.agent-file-op {
+  color: #888;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+}
+
+.agent-file-add {
+  color: #3fb950;
+  font-weight: 600;
+}
+
+.agent-file-del {
+  color: #f85149;
+  font-weight: 600;
+}
+
+.agent-file-pending {
+  color: #888;
+}
+
+@keyframes agent-pill-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.agent-activity-empty {
+  font-size: 0.78rem;
+}
+
 .cursor-chat-scroll .message-block.suggestions {
   background: #161616;
   border: 1px solid #2d4a3e;

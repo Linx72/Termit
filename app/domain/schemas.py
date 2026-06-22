@@ -1061,6 +1061,8 @@ class ApplyPatchResponse(BaseModel):
     hunks_applied: int = 0
     bytes_written: int = 0
     preview_excerpt: str = ""
+    lines_added: int = 0
+    lines_removed: int = 0
 
 
 class ToolAuditEvent(BaseModel):
@@ -1352,6 +1354,7 @@ class AgentRunEvent(BaseModel):
     message: str
     timestamp: str
     attempt: int = 0
+    payload: Optional[dict[str, Any]] = None
 
 
 class AgentRunCreateResponse(BaseModel):
@@ -1787,6 +1790,16 @@ class SkillDetailResponse(BaseModel):
     name: str
     description: str = ""
     content: str
+
+
+class ProjectSkillsResponse(BaseModel):
+    project_id: str
+    pinned_skill_ids: list[str] = Field(default_factory=list)
+    available_skills: list[SkillSummaryResponse] = Field(default_factory=list)
+
+
+class ProjectSkillsUpdateRequest(BaseModel):
+    skill_ids: list[str] = Field(default_factory=list)
 
 
 class HookStatusResponse(BaseModel):

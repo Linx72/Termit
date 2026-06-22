@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -75,6 +76,7 @@ class SQLiteAgentRunStore:
             self._ensure_column(conn, "agent_runs", "parent_run_id", "TEXT")
             self._ensure_column(conn, "agent_runs", "outcome_class", "TEXT")
             self._ensure_column(conn, "agent_runs", "lifecycle_status", "TEXT NOT NULL DEFAULT 'active'")
+            self._ensure_column(conn, "agent_run_events", "payload_json", "TEXT")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_agent_runs_lifecycle "
                 "ON agent_runs(lifecycle_status, updated_at DESC)"
@@ -162,11 +164,12 @@ class SQLiteAgentRunStore:
         return [self._row_to_run(row) for row in rows]
 
     def append_event(self, run_id: str, event: AgentRunEvent) -> None:
+        payload_json = json.dumps(event.payload, ensure_ascii=False) if event.payload is not None else None
         with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """
-                INSERT INTO agent_run_events(run_id, event_type, state, message, timestamp, attempt)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO agent_run_events(run_id, event_type, state, message, timestamp, attempt, payload_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -175,6 +178,7 @@ class SQLiteAgentRunStore:
                     event.message,
                     event.timestamp,
                     event.attempt,
+                    payload_json,
                 ),
             )
             conn.commit()
@@ -184,7 +188,7 @@ class SQLiteAgentRunStore:
         with self._lock, closing(self._connect()) as conn:
             rows = conn.execute(
                 """
-                SELECT event_type, state, message, timestamp, attempt
+                SELECT event_type, state, message, timestamp, attempt, payload_json
                 FROM agent_run_events
                 WHERE run_id = ?
                 ORDER BY id ASC
@@ -192,16 +196,28 @@ class SQLiteAgentRunStore:
                 """,
                 (run_id, safe_limit),
             ).fetchall()
-        return [
-            AgentRunEvent(
-                event_type=row["event_type"],
-                state=AgentRunState(row["state"]),
-                message=row["message"],
-                timestamp=row["timestamp"],
-                attempt=row["attempt"],
+        events: list[AgentRunEvent] = []
+        for row in rows:
+            payload = None
+            raw_payload = row["payload_json"]
+            if raw_payload:
+                try:
+                    parsed = json.loads(raw_payload)
+                    if isinstance(parsed, dict):
+                        payload = parsed
+                except json.JSONDecodeError:
+                    payload = None
+            events.append(
+                AgentRunEvent(
+                    event_type=row["event_type"],
+                    state=AgentRunState(row["state"]),
+                    message=row["message"],
+                    timestamp=row["timestamp"],
+                    attempt=row["attempt"],
+                    payload=payload,
+                )
             )
-            for row in rows
-        ]
+        return events
 
     def trim_events(self, run_id: str, max_events: int) -> int:
         safe_max = max(1, max_events)

@@ -120,6 +120,8 @@ export interface AgentRunRequest {
   ssh_remote_path?: string;
   run_mode?: "agent" | "ask" | "plan";
   mcp_context_inject?: boolean;
+  skill_ids?: string[];
+  auto_select_skills?: boolean;
 }
 
 export interface AgentRunCreateResponse {
@@ -163,6 +165,7 @@ export interface AgentRunEvent {
   message: string;
   timestamp: string;
   attempt?: number;
+  payload?: Record<string, unknown>;
 }
 
 export interface AgentRunStreamEvent {
@@ -205,6 +208,8 @@ export interface ApplyPatchResponse {
   hunks_applied?: number;
   bytes_written?: number;
   preview_excerpt?: string;
+  lines_added?: number;
+  lines_removed?: number;
 }
 
 export interface ListFilesRequest {

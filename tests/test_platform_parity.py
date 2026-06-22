@@ -42,6 +42,8 @@ class PlatformParityTests(unittest.TestCase):
         self.assertIn("agent-guided", ids)
         self.assertIn("agent-autopilot", ids)
         self.assertIn("termit-platform", ids)
+        self.assertIn("termit-agent", ids)
+        self.assertIn("termit-automation", ids)
         platform_block = store.build_prompt_block(["termit-platform"])
         self.assertIn("Termit Platform", platform_block)
         online_block = store.build_prompt_block(["online-project"])
@@ -65,6 +67,34 @@ class PlatformParityTests(unittest.TestCase):
         payload = response.json()
         self.assertIn("fix-ci", payload["selected_skill_ids"])
         self.assertTrue(payload["auto_select_enabled"])
+
+    def test_project_skills_endpoint(self) -> None:
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        client = TestClient(app)
+        project_id = "skills-test-project"
+        response = client.post(
+            f"/api/projects/{project_id}/skills",
+            json={"skill_ids": ["fix-ci", "write-tests"]},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["project_id"], project_id)
+        self.assertEqual(payload["pinned_skill_ids"], ["fix-ci", "write-tests"])
+        self.assertTrue(len(payload["available_skills"]) >= 10)
+
+        loaded = client.get(f"/api/projects/{project_id}/skills")
+        self.assertEqual(loaded.status_code, 200)
+        self.assertEqual(loaded.json()["pinned_skill_ids"], ["fix-ci", "write-tests"])
+
+    def test_invoke_skill_tool_definition(self) -> None:
+        from app.services.agent_tool_schema import TOOL_DEFINITIONS, build_openai_tools
+
+        self.assertIn("invoke_skill", TOOL_DEFINITIONS)
+        schemas = build_openai_tools(["invoke_skill"])
+        self.assertEqual(len(schemas), 1)
+        self.assertEqual(schemas[0]["function"]["name"], "invoke_skill")
 
     def test_stub_search_returns_citations(self) -> None:
         provider = StubSearchProvider()

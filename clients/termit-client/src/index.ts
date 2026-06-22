@@ -6,6 +6,7 @@ export { parseSseStream } from "./sse";
 export { parseAgentRunSseStream } from "./agentSse";
 export * from "./composer";
 export * from "./patchUtils";
+export * from "./activity";
 export * from "./types";
 export * from "./platform";
 export {

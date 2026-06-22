@@ -1305,6 +1305,14 @@ button.linkish {
   padding-top: 12px;
 }
 
+.skill-select-preview {
+  margin-top: 0.35rem;
+  max-height: 8rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.75rem;
+}
+
 .platform-skill-grid {
   display: grid;
   gap: 4px;

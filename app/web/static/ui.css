@@ -659,6 +659,47 @@ pre {
   margin: 0;
 }
 
+.timeline-activity-summary {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.timeline-activity-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.timeline-file-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  background: rgba(8, 13, 20, 0.8);
+}
+
+.timeline-file-pill.pending {
+  opacity: 0.75;
+}
+
+.timeline-activity-tools {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.timeline-file-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
 .timeline-item {
   display: grid;
   grid-template-columns: 14px 1fr;

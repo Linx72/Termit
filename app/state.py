@@ -1052,7 +1052,10 @@ def get_daily_improvement_scheduler_service() -> DailyImprovementSchedulerServic
 @lru_cache
 def _build_skill_store() -> SkillStore:
     settings = get_settings()
-    return SkillStore(settings.skills_dir)
+    return SkillStore(
+        settings.skills_dir,
+        inject_max_chars=settings.skill_inject_max_chars,
+    )
 
 
 def get_skill_store() -> SkillStore:

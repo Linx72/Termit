@@ -74,6 +74,11 @@ def main() -> int:
         default=float(__import__("os").getenv("TERMIT_FINETUNE_MIN_EVAL_IMPROVEMENT", "0.05")),
     )
     parser.add_argument("--strict", action="store_true", help="Exit 1 when KPI not met")
+    parser.add_argument(
+        "--dev-only",
+        action="store_true",
+        help="Mark KPI JSON as dev-only fixture (CI plan-status check).",
+    )
     parser.add_argument("--output", default="")
     args = parser.parse_args()
 
@@ -91,6 +96,8 @@ def main() -> int:
         current_pass_rate=current_rate,
         min_improvement=max(0.0, float(args.min_improvement)),
     )
+    if args.dev_only:
+        summary["dev_only"] = True
     print(json.dumps(summary, indent=2, ensure_ascii=False))
     if args.output:
         Path(args.output).write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

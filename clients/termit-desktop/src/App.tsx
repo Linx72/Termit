@@ -9,6 +9,13 @@ import {
   stripComposerJsonBlock,
   formatAgentTimeline,
   watchAgentRun,
+  reduceAgentActivity,
+  reduceAgentActivityWithFallback,
+  formatActivitySummaryLabel,
+  formatToolActivityLabel,
+  shouldShowLineStats,
+  shouldShowVerboseMeta,
+  fileBasename,
   type AgentProfile,
   type AgentRunRecord,
   type AgentRunEvent,
@@ -116,6 +123,7 @@ type ChatBlock =
   | { id: string; kind: "user"; text: string }
   | { id: string; kind: "assistant"; text: string }
   | { id: string; kind: "tape"; text: string }
+  | { id: string; kind: "activity"; events: AgentRunEvent[]; runState: string }
   | { id: string; kind: "suggestions"; text: string; actions?: string[] }
   | { id: string; kind: "meta" | "error"; text: string };
 
@@ -313,6 +321,7 @@ export function App() {
   const [projectRulesText, setProjectRulesText] = useState("");
   const [userRulesText, setUserRulesText] = useState("");
   const [selectedProjectSkills, setSelectedProjectSkills] = useState<string[]>([]);
+  const [runSkillIds, setRunSkillIds] = useState<string[]>([]);
   const [rulesSaving, setRulesSaving] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
   const [folderDraft, setFolderDraft] = useState("");
@@ -337,6 +346,8 @@ export function App() {
 
   const locale = settings.locale;
   const [platformSkills, setPlatformSkills] = useState<Array<{ skill_id: string; name: string }>>([]);
+  const [skillSelectPreview, setSkillSelectPreview] = useState("");
+  const [skillPreviewBusy, setSkillPreviewBusy] = useState(false);
   const [platformSchedules, setPlatformSchedules] = useState<
     Array<{ schedule_id: string; agent_id: string; cron: string; enabled: boolean }>
   >([]);
@@ -616,6 +627,14 @@ export function App() {
           setProjectRulesText(rules.project_rules ?? "");
           setUserRulesText(rules.user_rules ?? "");
           setSelectedProjectSkills(Array.isArray(rules.skills) ? rules.skills : []);
+          try {
+            const projectSkills = await client.getProjectSkills(projectId);
+            if (projectSkills.pinned_skill_ids?.length) {
+              setSelectedProjectSkills(projectSkills.pinned_skill_ids);
+            }
+          } catch {
+            // fallback to rules.skills above
+          }
         } catch {
           setProjectRulesText("");
           setUserRulesText("");
@@ -758,6 +777,8 @@ export function App() {
       retrieval_path_prefix: settings.workspace || undefined,
       run_mode: runMode,
       mcp_context_inject: settings.mcpContextInject,
+      auto_select_skills: settings.autoSelectSkills,
+      ...(runSkillIds.length > 0 ? { skill_ids: runSkillIds } : {}),
       auto_confirm_risky_tools: true,
       verify_after_patch: true,
       use_tool_loop: true,
@@ -1167,10 +1188,53 @@ export function App() {
     setPlatformStatus(locale === "ru" ? "Prompt вставлен в Agent input (plan)." : "Prompt inserted into Agent input (plan).");
   };
 
+  const toggleRunSkill = (skillId: string) => {
+    setRunSkillIds((prev) =>
+      prev.includes(skillId) ? prev.filter((item) => item !== skillId) : [...prev, skillId]
+    );
+  };
+
   const toggleProjectSkill = (skillId: string) => {
     setSelectedProjectSkills((prev) =>
       prev.includes(skillId) ? prev.filter((item) => item !== skillId) : [...prev, skillId]
     );
+  };
+
+  const previewSkillSelection = async () => {
+    const input = (agentInput.trim() || composerInput.trim()).trim();
+    if (!connected || skillPreviewBusy) {
+      return;
+    }
+    if (!input) {
+      setSkillSelectPreview(t(locale, "skillSelectPreviewEmpty"));
+      return;
+    }
+    setSkillPreviewBusy(true);
+    try {
+      const result = await client.selectPlatformSkills({
+        instruction: input,
+        task_type: settings.taskType,
+        pinned_skill_ids: selectedProjectSkills,
+        changed_files: attachmentPaths(attachments),
+        auto_select_enabled: settings.autoSelectSkills,
+      });
+      const lines = result.selections.map(
+        (item) =>
+          `${item.name} (${item.skill_id}) · ${item.source} · score ${item.score.toFixed(1)} · ${item.matched_terms.join(", ")}`
+      );
+      setSkillSelectPreview(
+        lines.length > 0
+          ? lines.join("\n")
+          : locale === "ru"
+            ? "Нет подходящих skills"
+            : "No matching skills"
+      );
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setSkillSelectPreview(text);
+    } finally {
+      setSkillPreviewBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -1697,6 +1761,7 @@ export function App() {
         user_rules: userRulesText,
         skills: selectedProjectSkills,
       });
+      await client.updateProjectSkills(projectId, selectedProjectSkills);
       setStatusLine(`Project rules saved for ${projectId}`);
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
@@ -2092,6 +2157,7 @@ export function App() {
     const effectivePolicyPreset = effectivePolicyPresetFromSettings();
     const runMetaId = blockId();
     const runTapeId = blockId();
+    const runActivityId = blockId();
     const runOutputId = blockId();
     const runSuggestionsId = blockId();
 
@@ -2105,6 +2171,16 @@ export function App() {
             ? `Запускаю агента «${agents.find((a) => a.agent_id === agentId)?.name ?? agentId}» · режим ${settings.executionMode} · ${runMode.toUpperCase()}${isBuildTask(input) ? " · plan→research→scaffold→build" : ""}…`
             : `Starting agent «${agents.find((a) => a.agent_id === agentId)?.name ?? agentId}» · mode ${settings.executionMode} · ${runMode.toUpperCase()}${isBuildTask(input) ? " · plan→research→scaffold→build" : ""}…`,
       },
+      ...(settings.activityFeedEnabled
+        ? [
+            {
+              id: runActivityId,
+              kind: "activity" as const,
+              events: [] as AgentRunEvent[],
+              runState: "queued",
+            },
+          ]
+        : []),
       {
         id: runTapeId,
         kind: "tape",
@@ -2182,6 +2258,9 @@ export function App() {
               if (block.id === runMetaId) {
                 return { ...block, text: `Agent run: ${run.run_id} · ${live.state}` };
               }
+              if (block.id === runActivityId && block.kind === "activity") {
+                return { ...block, events: [...events], runState: live.state };
+              }
               if (block.id === runTapeId) {
                 return { ...block, text: tapeText };
               }
@@ -2235,6 +2314,9 @@ export function App() {
           }
           if (block.id === runTapeId) {
             return { ...block, text: finalTape };
+          }
+          if (block.id === runActivityId && block.kind === "activity") {
+            return { ...block, events: [...lastEvents], runState: finalRun.state };
           }
           if (block.id === runOutputId) {
             return { ...block, text: finalText };
@@ -2914,6 +2996,42 @@ export function App() {
             ) : (
               <p className="hint">{t(locale, "noPlatformSkills")}</p>
             )}
+            <label>{t(locale, "runSkillsLabel")}</label>
+            {platformSkills.length > 0 ? (
+              <div className="platform-skill-grid">
+                {platformSkills.map((skill) => (
+                  <label key={`run-${skill.skill_id}`} className="checkbox-row compact">
+                    <input
+                      type="checkbox"
+                      checked={runSkillIds.includes(skill.skill_id)}
+                      onChange={() => toggleRunSkill(skill.skill_id)}
+                    />
+                    {skill.name}
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            <label className="checkbox-row compact">
+              <input
+                type="checkbox"
+                checked={settings.autoSelectSkills}
+                onChange={(event) => updateSettings({ autoSelectSkills: event.target.checked })}
+              />
+              {t(locale, "autoSelectSkills")}
+            </label>
+            <div className="row">
+              <button
+                type="button"
+                className="secondary compact"
+                disabled={!connected || skillPreviewBusy}
+                onClick={() => void previewSkillSelection()}
+              >
+                {skillPreviewBusy ? t(locale, "saving") : t(locale, "previewSkillSelection")}
+              </button>
+            </div>
+            {skillSelectPreview ? (
+              <pre className="hint skill-select-preview">{skillSelectPreview}</pre>
+            ) : null}
             <button
               type="button"
               className="secondary compact"
@@ -3171,6 +3289,35 @@ export function App() {
           {t(locale, "tabCompletion")}
         </label>
 
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={settings.activityFeedEnabled}
+            onChange={(event) => updateSettings({ activityFeedEnabled: event.target.checked })}
+          />
+          {locale === "ru" ? "Live-лента активности агента в чате" : "Live agent activity feed in chat"}
+        </label>
+        {settings.activityFeedEnabled ? (
+          <div className="field">
+            <label htmlFor="activityFeedDetail">
+              {locale === "ru" ? "Детализация ленты" : "Activity feed detail"}
+            </label>
+            <select
+              id="activityFeedDetail"
+              value={settings.activityFeedDetail}
+              onChange={(event) =>
+                updateSettings({
+                  activityFeedDetail: event.target.value as import("./settings").ActivityFeedDetail,
+                })
+              }
+            >
+              <option value="compact">{locale === "ru" ? "Компактно (только файлы)" : "Compact (files only)"}</option>
+              <option value="detailed">{locale === "ru" ? "Подробно (+/− строки)" : "Detailed (+/− lines)"}</option>
+              <option value="verbose">{locale === "ru" ? "Максимум (hunks)" : "Verbose (hunks)"}</option>
+            </select>
+          </div>
+        ) : null}
+
         {repoProfiles.length > 0 && (
           <div className="field">
             <label htmlFor="repoProfile">{t(locale, "repoProfile")}</label>
@@ -3323,6 +3470,9 @@ export function App() {
                     {block.kind === "tape" && (
                       <strong>{locale === "ru" ? "Лента выполнения" : "Activity tape"}</strong>
                     )}
+                    {block.kind === "activity" && (
+                      <strong>{locale === "ru" ? "Активность агента" : "Agent activity"}</strong>
+                    )}
                     {block.kind === "suggestions" && (
                       <strong>{locale === "ru" ? "Итог и рекомендации" : "Summary & next steps"}</strong>
                     )}
@@ -3339,6 +3489,68 @@ export function App() {
                           </div>
                         ))}
                       </div>
+                    ) : block.kind === "activity" ? (
+                      (() => {
+                        const activity = reduceAgentActivityWithFallback(block.events, {
+                          run: { state: block.runState },
+                          locale,
+                          gitFallback: liveChanges,
+                        });
+                        const summaryLabel = formatActivitySummaryLabel(locale, activity.summary);
+                        const showStats = shouldShowLineStats(settings.activityFeedDetail);
+                        const showVerbose = shouldShowVerboseMeta(settings.activityFeedDetail);
+                        return (
+                          <div className="agent-activity-panel">
+                            <div className="agent-activity-summary">{summaryLabel}</div>
+                            {activity.recentTools.length > 0 ? (
+                              <div className="agent-activity-tools">
+                                {activity.recentTools.slice(-4).map((tool, index) => (
+                                  <div key={`${block.id}-tool-${index}`} className="agent-activity-tool">
+                                    {formatToolActivityLabel(tool)}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                            {activity.fileEdits.length > 0 ? (
+                              <div className="agent-activity-files">
+                                {activity.fileEdits.map((edit) => (
+                                  <button
+                                    key={`${block.id}-${edit.path}`}
+                                    type="button"
+                                    className={`agent-file-pill${edit.pending ? " pending" : ""}`}
+                                    title={edit.path}
+                                    onClick={() => void openLiveChange(edit.path)}
+                                  >
+                                    <span className="agent-file-name">{fileBasename(edit.path)}</span>
+                                    {settings.activityFeedDetail !== "compact" ? (
+                                      <span className="agent-file-op">{edit.operation}</span>
+                                    ) : null}
+                                    {edit.pending ? (
+                                      <span className="agent-file-pending">…</span>
+                                    ) : showStats ? (
+                                      <>
+                                        {edit.linesAdded > 0 ? (
+                                          <span className="agent-file-add">+{edit.linesAdded}</span>
+                                        ) : null}
+                                        {edit.linesRemoved > 0 ? (
+                                          <span className="agent-file-del">−{edit.linesRemoved}</span>
+                                        ) : null}
+                                      </>
+                                    ) : null}
+                                    {showVerbose && edit.hunksApplied ? (
+                                      <span className="agent-file-op">{edit.hunksApplied}h</span>
+                                    ) : null}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : activity.summary.inProgress ? (
+                              <div className="agent-activity-empty muted">
+                                {locale === "ru" ? "Ожидаю действия…" : "Waiting for activity…"}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })()
                     ) : (
                       <>
                         {"\n"}

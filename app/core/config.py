@@ -294,6 +294,7 @@ class Settings:
     skill_auto_select_enabled: bool = True
     skill_auto_select_max: int = 3
     skill_auto_select_min_score: float = 3.0
+    skill_inject_max_chars: int = 4000
     media_enabled: bool = False
     media_storage: str = "./data/media"
     media_max_cost_usd: float = 25.0
@@ -815,6 +816,10 @@ def get_settings() -> Settings:
             3.0,
             min_value=0.0,
             max_value=100.0,
+        ),
+        skill_inject_max_chars=max(
+            500,
+            int(os.getenv("TERMIT_SKILL_INJECT_MAX_CHARS", "4000")),
         ),
         media_enabled=os.getenv("TERMIT_MEDIA_ENABLED", "false").lower() in {"1", "true", "yes"},
         media_storage=os.getenv("TERMIT_MEDIA_STORAGE", "./data/media"),
