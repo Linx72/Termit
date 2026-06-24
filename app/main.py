@@ -32,6 +32,8 @@ from app.api.routes.routing import router as routing_router
 from app.api.routes.finetune import router as finetune_router
 from app.api.routes.teams import router as teams_router
 from app.api.routes.retrieval import router as retrieval_router
+from app.api.routes.plugin_tools import router as plugin_tools_router
+from app.api.routes.session_search import router as session_search_router
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_trace import RequestTraceMiddleware
 from app.api.routes.usage import router as usage_router
@@ -149,6 +151,8 @@ app.include_router(metrics_router)
 app.include_router(feedback_router)
 app.include_router(eval_router)
 app.include_router(retrieval_router)
+app.include_router(plugin_tools_router)
+app.include_router(session_search_router)
 app.include_router(ops_router)
 app.include_router(automation_router)
 app.include_router(assignments_router)

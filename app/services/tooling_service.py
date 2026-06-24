@@ -321,6 +321,88 @@ class ToolingService:
         with self._audit_lock:
             return list(self._audit_events[-safe_limit:])
 
+    # ── Упрощённые хелперы для chat_stream tool loop ──
+
+    def list_files_by_pattern(self, *, path: str = ".", pattern: str = "*") -> dict:
+        """Список файлов по паттерну — возвращает dict для JSON-сериализации."""
+        from app.domain.schemas import ListFilesRequest
+
+        try:
+            result = self.list_files(ListFilesRequest(path=path, pattern=pattern))
+            return {"root": result.root, "path": result.path, "files": result.files, "count": len(result.files)}
+        except ToolingError as e:
+            return {"error": str(e), "path": path}
+
+    def read_file_content(self, *, path: str = ".", file_name: str = "") -> dict:
+        """Прочитать файл — возвращает dict для JSON-сериализации."""
+        from app.domain.schemas import ReadFileRequest
+
+        try:
+            result = self.read_file(ReadFileRequest(path=path, file=file_name))
+            return {
+                "path": result.path,
+                "content": result.content[:5000],  # Ограничение для контекста
+                "truncated": result.truncated or len(result.content) > 5000,
+                "size": len(result.content),
+            }
+        except ToolingError as e:
+            return {"error": str(e), "path": f"{path}/{file_name}"}
+
+    def execute_command_dry(self, *, command: str, path: str = ".") -> dict:
+        """Выполнить команду с dry_run — возвращает dict для JSON-сериализации."""
+        from app.domain.schemas import ExecuteCommandRequest
+
+        try:
+            result = self.execute_command(ExecuteCommandRequest(
+                command=command, path=path, dry_run=True, confirmed=False,
+            ))
+            return {
+                "command": result.command,
+                "path": result.path,
+                "risk_level": result.risk_level.value if result.risk_level else "unknown",
+                "executed": result.executed,
+                "requires_confirmation": result.requires_confirmation,
+                "exit_code": result.exit_code if result.executed else None,
+                "stdout": (result.stdout or "")[:3000] if result.executed else None,
+                "stderr": (result.stderr or "")[:1000] if result.executed else None,
+            }
+        except ToolingError as e:
+            return {"error": str(e), "command": command}
+
+    def apply_patch_dry(self, *, path: str, content: str = "", hunks: list | None = None) -> dict:
+        """Применить патч с dry_run — возвращает dict для JSON-сериализации."""
+        from app.domain.schemas import ApplyPatchRequest, ApplyPatchHunk
+
+        try:
+            parsed_hunks = []
+            if hunks:
+                for h in hunks:
+                    if isinstance(h, dict):
+                        parsed_hunks.append(ApplyPatchHunk(
+                            old_text=h.get("old_text", ""),
+                            new_text=h.get("new_text", ""),
+                        ))
+            result = self.apply_patch(ApplyPatchRequest(
+                path=path,
+                content=content if content else None,
+                hunks=parsed_hunks if parsed_hunks else None,
+                dry_run=True,
+                confirmed=False,
+                create=True,
+            ))
+            return {
+                "path": result.path,
+                "risk_level": result.risk_level.value if result.risk_level else "unknown",
+                "applied": result.applied,
+                "created": result.created,
+                "bytes_written": result.bytes_written,
+                "lines_added": result.lines_added,
+                "lines_removed": result.lines_removed,
+                "preview": result.preview_excerpt[:500] if result.preview_excerpt else "",
+            }
+        except ToolingError as e:
+            return {"error": str(e), "path": path}
+
     def _classify_command(self, args: list[str]) -> tuple[ToolRiskLevel, str]:
         command = args[0].lower()
         full_command = " ".join(args).lower()

@@ -22,9 +22,16 @@ from app.services.context_enrichment_service import ContextEnrichmentService
 from app.services.memory_store import MemoryBackend
 from app.services.model_router import ModelRouter
 from app.services.provider_circuit_breaker import ProviderCircuitBreaker
-from app.services.providers.base import BaseProvider, ProviderError, ProviderToolCall, ProviderToolResponse
+from app.services.providers.base import (
+    BaseProvider,
+    ProviderError,
+    ProviderStreamChunk,
+    ProviderToolCall,
+    ProviderToolResponse,
+)
 from app.services.response_cache_store import ResponseCacheStore
 from app.services.telemetry_store import TelemetryStore
+from app.services.tooling_service import ToolingService
 
 
 from dataclasses import dataclass, field
@@ -40,6 +47,8 @@ class ToolStepChatResult:
 
 
 class ChatService:
+    """Чат-сервис TermitPro с поддержкой SSE-стриминга и native tool calling."""
+
     def __init__(
         self,
         model_router: ModelRouter,
@@ -57,6 +66,7 @@ class ChatService:
         provider_retry_backoff_ms: int = 150,
         dual_pass_enabled: bool = False,
         dual_pass_task_types: str = "coding,review,debug",
+        tooling_service: Optional[ToolingService] = None,
     ) -> None:
         self.model_router = model_router
         self.providers = providers
@@ -82,6 +92,7 @@ class ChatService:
             for item in dual_pass_task_types.split(",")
             if item.strip()
         }
+        self._tooling = tooling_service
 
     async def chat(self, payload: ChatRequest) -> ChatResponse:
         started_at = time()
@@ -256,6 +267,251 @@ class ChatService:
         )
         return response
 
+    # ── Chat Stream (реальный SSE-стриминг + tool calling) ───────────────────
+
+    async def chat_stream(self, payload: ChatRequest) -> AsyncIterator[str]:
+        """
+        Настоящий SSE-стриминг: токены отдаются по мере генерации LLM.
+        
+        Поддерживает:
+        - Инкрементальные текстовые токены (event: token)
+        - Reasoning-токены для DeepSeek R1 (event: reasoning)
+        - Native tool calling с циклом: model → tool_call → tool_result → model
+        - Прогресс инструментов (event: tool_progress)
+        - Мета-информацию (event: meta)
+        - Предупреждения (event: warning)
+        - Завершение (event: done)
+        - Ошибки (event: error)
+        """
+        started_at = time()
+        session_id = payload.session_id or f"sess_{uuid.uuid4().hex[:12]}"
+
+        # ── Подготовка сообщений ──
+        messages = list(payload.history)
+        if payload.use_memory and session_id:
+            memory_msgs = self.memory_store.get(session_id)
+            messages.extend(memory_msgs)
+        messages.append(ChatMessage(role="user", content=payload.message))
+
+        # Контекстная энричмент
+        if not payload.skip_context_enrichment and self._enrichment is not None:
+            enrichment_messages = self._enrichment.build_system_messages(payload)
+            if enrichment_messages:
+                messages = enrichment_messages + messages
+            if payload.use_retrieval and self._retrieval_enabled and self._retrieval is not None:
+                hits = self._retrieval.search(
+                    payload.message,
+                    limit=payload.retrieval_limit,
+                    path_prefix=payload.retrieval_path_prefix,
+                )
+                if hits:
+                    context_body = ContextCompactor.format_retrieval_context(
+                        [(item.path, item.excerpt, item.score) for item in hits]
+                    )
+                    messages.insert(0, ChatMessage(role="system", content=context_body))
+
+        compaction = self._compactor.compact(messages)
+        messages = list(compaction.messages)
+        if compaction.compacted:
+            yield self._sse_event("warning", {
+                "message": f"Контекст сжат: удалено {compaction.dropped_messages} сообщений"
+            })
+
+        # ── Выбор модели ──
+        candidate_models = self.model_router.candidate_models(
+            payload.task_type,
+            payload.model,
+            message=payload.message,
+            history=messages,
+            repo_profile=payload.repo_profile,
+            path_prefix=payload.retrieval_path_prefix,
+            routing_policy=payload.routing_policy,
+        )
+        if payload.pin_model and payload.model:
+            candidate_models = [payload.model]
+
+        # ── Инструменты (если task_type = coding) ──
+        tools: list[dict[str, object]] | None = None
+        if payload.task_type in {TaskType.coding, TaskType.debug}:
+            try:
+                from app.services.agent_tool_schema import build_openai_tools, select_initial_tool_names
+                tool_names = select_initial_tool_names()
+                tools = build_openai_tools(tool_names)
+            except Exception:
+                tools = None
+
+        # ── Основной цикл: стриминг + tool calling ──
+        MAX_TOOL_ROUNDS = 5
+        full_text = ""
+        selected_model = ""
+        selected_provider = ""
+
+        for model_name in candidate_models:
+            provider_name = self.model_router.provider_for_model(model_name)
+            provider = self.providers.get(provider_name)
+
+            if provider is None:
+                continue
+            if self.circuit_breaker and not self.circuit_breaker.is_available(provider_name):
+                yield self._sse_event("warning", {
+                    "message": f"Провайдер {provider_name} недоступен (circuit open)"
+                })
+                continue
+
+            selected_model = model_name
+            selected_provider = provider_name
+
+            yield self._sse_event("meta", {
+                "provider": provider_name,
+                "model": model_name,
+                "session_id": session_id,
+                "history_size": len(messages),
+            })
+
+            try:
+                # ── Tool calling loop ──
+                current_messages = list(messages)
+                tool_round = 0
+
+                while tool_round < MAX_TOOL_ROUNDS:
+                    tool_round += 1
+                    chunk_text = ""
+                    chunk_tool_calls: list[ProviderToolCall] = []
+
+                    # Стриминг от провайдера
+                    async for chunk in provider.generate_stream(
+                        model_name=model_name,
+                        messages=current_messages,
+                        temperature=payload.temperature,
+                        max_tokens=payload.max_tokens,
+                        tools=tools if tool_round == 1 else tools,  # tools только в первом раунде
+                    ):
+                        if chunk.token:
+                            chunk_text += chunk.token
+                            full_text += chunk.token
+                            yield self._sse_event("token", {"text": chunk.token})
+
+                        if chunk.reasoning:
+                            yield self._sse_event("reasoning", {"text": chunk.reasoning})
+
+                        if chunk.tool_call_delta:
+                            chunk_tool_calls.append(chunk.tool_call_delta)
+
+                        if chunk.is_done:
+                            break
+
+                    # Если нет tool calls — стриминг завершён
+                    if not chunk_tool_calls:
+                        break
+
+                    # ── Выполнение инструментов ──
+                    for tc in chunk_tool_calls:
+                        yield self._sse_event("tool_progress", {
+                            "event": "start",
+                            "name": tc.name,
+                            "preview": json.dumps(tc.arguments, ensure_ascii=True)[:200],
+                        })
+
+                        tool_result = await self._execute_tool_call(tc)
+
+                        yield self._sse_event("tool_progress", {
+                            "event": "done",
+                            "name": tc.name,
+                            "preview": tool_result[:200],
+                        })
+
+                        # Добавляем результат в диалог
+                        current_messages.append(ChatMessage(
+                            role="assistant",
+                            content=f"Tool call: {tc.name}({json.dumps(tc.arguments)})",
+                        ))
+                        current_messages.append(ChatMessage(
+                            role="tool",
+                            content=tool_result,
+                        ))
+
+                # ── Успешно ──
+                full_text = full_text or chunk_text
+                if self.circuit_breaker:
+                    self.circuit_breaker.record_success(provider_name)
+
+                # Сохраняем в память
+                if payload.use_memory and session_id:
+                    self.memory_store.append(session_id, ChatMessage(role="user", content=payload.message))
+                    self.memory_store.append(session_id, ChatMessage(role="assistant", content=full_text))
+
+                yield self._sse_event("done", {
+                    "session_id": session_id,
+                    "response": full_text,
+                })
+                return
+
+            except ProviderError as exc:
+                if self.circuit_breaker:
+                    self.circuit_breaker.record_failure(provider_name)
+                yield self._sse_event("error", {
+                    "error": str(exc),
+                    "recommendation": "Попробуйте другую модель или провайдера",
+                    "category": "provider",
+                    "can_retry": True,
+                })
+                continue
+
+        # ── Все модели исчерпаны ──
+        yield self._sse_event("error", {
+            "error": "Все доступные модели вернули ошибку",
+            "recommendation": "Проверьте конфигурацию провайдеров",
+            "category": "all_providers_failed",
+            "can_retry": False,
+        })
+        yield self._sse_event("done", {})
+
+    async def _execute_tool_call(self, tc: ProviderToolCall) -> str:
+        """Выполнить tool call и вернуть результат."""
+        if self._tooling is None:
+            return json.dumps({"error": "ToolingService не настроен"})
+
+        try:
+            if tc.name == "list_files":
+                result = self._tooling.list_files_by_pattern(
+                    path=tc.arguments.get("path", "."),
+                    pattern=tc.arguments.get("pattern", "*"),
+                )
+                return json.dumps(result, ensure_ascii=True)
+
+            elif tc.name == "read_file":
+                result = self._tooling.read_file_content(
+                    path=tc.arguments.get("path", "."),
+                    file_name=tc.arguments.get("file", ""),
+                )
+                return json.dumps(result, ensure_ascii=True)
+
+            elif tc.name == "execute_command":
+                result = self._tooling.execute_command_dry(
+                    command=tc.arguments.get("command", ""),
+                    path=tc.arguments.get("path", "."),
+                )
+                return json.dumps(result, ensure_ascii=True)
+
+            elif tc.name == "apply_patch":
+                content = tc.arguments.get("content", "")
+                hunks = tc.arguments.get("hunks", [])
+                result = self._tooling.apply_patch_dry(
+                    path=tc.arguments.get("path", "."),
+                    content=str(content) if content else "",
+                    hunks=hunks if isinstance(hunks, list) else [],
+                )
+                return json.dumps(result, ensure_ascii=True)
+
+            else:
+                return json.dumps({"error": f"Неизвестный инструмент: {tc.name}"})
+
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    # ── Legacy: синхронный chat_stream (для совместимости) ──
+    # Удалён — теперь chat_stream использует реальный стриминг
+
     async def chat_with_tools(
         self,
         payload: ChatRequest,
@@ -422,6 +678,61 @@ class ChatService:
     def clear_session(self, session_id: str) -> bool:
         return self.memory_store.clear(session_id)
 
+    # ── FTS5 Search ──
+
+    def search_session_messages(
+        self, session_id: str, query: str, limit: int = 20
+    ) -> list:
+        """FTS5-поиск по сообщениям в сессии."""
+        history = self.memory_store.get(session_id)
+        results = []
+        q = query.lower().strip()
+
+        for msg in history:
+            content_lower = msg.content.lower()
+            idx = content_lower.find(q)
+            if idx == -1:
+                continue
+            start = max(0, idx - 100)
+            end = min(len(msg.content), idx + len(query) + 100)
+            snippet = msg.content[start:end]
+            if start > 0:
+                snippet = "..." + snippet
+            if end < len(msg.content):
+                snippet = snippet + "..."
+
+            results.append({
+                "session_id": session_id,
+                "role": msg.role,
+                "content_snippet": snippet,
+                "match_position": idx,
+            })
+
+            if len(results) >= limit:
+                break
+
+        return results
+
+    def search_all_sessions(self, query: str, limit: int = 30) -> list:
+        """Глобальный FTS5-поиск по всем сессиям."""
+        results = []
+        q = query.lower().strip()
+
+        # Получаем все session_id из memory_store
+        # SQLiteMemoryStore имеет метод list_session_ids()
+        all_sessions = getattr(self.memory_store, "list_session_ids", None)
+        if all_sessions is None:
+            return results
+
+        session_ids = all_sessions()
+        for sid in session_ids:
+            if len(results) >= limit:
+                break
+            matches = self.search_session_messages(sid, query, limit=limit - len(results))
+            results.extend(matches)
+
+        return results[:limit]
+
     def export_session_markdown(self, session_id: str) -> tuple[str, int]:
         history = self.memory_store.get(session_id)
         lines: list[str] = [f"# Session {session_id}", ""]
@@ -455,30 +766,6 @@ class ChatService:
             ok, detail = await provider.check_health()
             statuses.append(ProviderStatus(provider=provider_name, ok=ok, detail=detail))
         return statuses
-
-    async def chat_stream(self, payload: ChatRequest) -> AsyncIterator[str]:
-        response = await self.chat(payload)
-        yield self._sse_event(
-            "meta",
-            {
-                "provider": response.provider,
-                "model": response.model,
-                "session_id": response.session_id or "",
-                "history_size": response.history_size,
-                "attempted_models": response.attempted_models,
-                "context_compacted": response.context_compacted,
-                "dropped_messages": response.dropped_messages,
-                "retrieval_hits": response.retrieval_hits,
-            },
-        )
-
-        text = response.response or ""
-        chunk_size = 80
-        for index in range(0, len(text), chunk_size):
-            chunk = text[index : index + chunk_size]
-            yield self._sse_event("token", {"text": chunk})
-
-        yield self._sse_event("done", {})
 
     def _build_cache_key(
         self,

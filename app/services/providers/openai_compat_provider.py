@@ -1,12 +1,21 @@
 import json
+from collections.abc import AsyncIterator
 
 import httpx
 
 from app.domain.schemas import ChatMessage
-from app.services.providers.base import BaseProvider, ProviderError, ProviderToolCall, ProviderToolResponse
+from app.services.providers.base import (
+    BaseProvider,
+    ProviderError,
+    ProviderStreamChunk,
+    ProviderToolCall,
+    ProviderToolResponse,
+)
 
 
 class OpenAICompatProvider(BaseProvider):
+    """OpenAI-совместимый провайдер с нативным SSE-стримингом и tool calling."""
+
     name = "openai_compat"
 
     def __init__(self, base_url: str, api_key: str) -> None:
@@ -18,6 +27,12 @@ class OpenAICompatProvider(BaseProvider):
             return model_name.split(":", 1)[1]
         return model_name
 
+    def _headers(self) -> dict[str, str]:
+        h = {"Content-Type": "application/json"}
+        if self.api_key:
+            h["Authorization"] = f"Bearer {self.api_key}"
+        return h
+
     async def generate(
         self,
         model_name: str,
@@ -25,9 +40,6 @@ class OpenAICompatProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
     ) -> str:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
         payload = {
             "model": self._strip_prefix(model_name),
             "messages": [{"role": m.role, "content": m.content} for m in messages],
@@ -39,7 +51,7 @@ class OpenAICompatProvider(BaseProvider):
                 resp = await client.post(
                     f"{self.base_url}/v1/chat/completions",
                     json=payload,
-                    headers=headers,
+                    headers=self._headers(),
                 )
         except httpx.HTTPError as exc:
             raise ProviderError(
@@ -55,6 +67,164 @@ class OpenAICompatProvider(BaseProvider):
             return ""
         return choices[0].get("message", {}).get("content", "").strip()
 
+    async def generate_stream(
+        self,
+        model_name: str,
+        messages: list[ChatMessage],
+        temperature: float,
+        max_tokens: int,
+        tools: list[dict[str, object]] | None = None,
+    ) -> AsyncIterator[ProviderStreamChunk]:
+        """
+        Настоящий SSE-стриминг через OpenAI /v1/chat/completions stream=true.
+        
+        Парсит SSE-события, агрегирует tool_call дельты (фрагменты аргументов),
+        отдаёт reasoning-токены (для DeepSeek R1), текстовые токены,
+        и финальный чанк с finish_reason + tool_calls.
+        """
+        payload: dict[str, object] = {
+            "model": self._strip_prefix(model_name),
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": False},
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+
+        # Агрегаторы для tool_call дельт (OpenAI шлёт аргументы фрагментами)
+        tool_deltas: dict[int, dict[str, object]] = {}  # index → {id, name, arguments}
+
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/v1/chat/completions",
+                    json=payload,
+                    headers=self._headers(),
+                ) as response:
+                    if response.status_code >= 400:
+                        body = await response.aread()
+                        raise ProviderError(
+                            f"OpenAI-compatible stream error {response.status_code}: {body.decode()}"
+                        )
+
+                    async for line in response.aiter_lines():
+                        if not line or not line.startswith("data: "):
+                            continue
+                        data_str = line[6:]  # убрать "data: "
+                        if data_str.strip() == "[DONE]":
+                            # Отдаём все накопленные tool_calls
+                            for idx in sorted(tool_deltas.keys()):
+                                td = tool_deltas[idx]
+                                name = str(td.get("name") or "")
+                                raw_args = td.get("arguments", "")
+                                if isinstance(raw_args, str):
+                                    try:
+                                        args = json.loads(raw_args)
+                                    except json.JSONDecodeError:
+                                        args = {}
+                                elif isinstance(raw_args, dict):
+                                    args = raw_args
+                                else:
+                                    args = {}
+                                yield ProviderStreamChunk(
+                                    tool_call_delta=ProviderToolCall(
+                                        id=str(td.get("id") or name),
+                                        name=name,
+                                        arguments=args,
+                                    )
+                                )
+                            yield ProviderStreamChunk(is_done=True, finish_reason="stop")
+                            break
+
+                        try:
+                            event = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+
+                        choices = event.get("choices", [])
+                        if not choices:
+                            continue
+
+                        choice = choices[0]
+                        delta = choice.get("delta", {})
+                        finish = choice.get("finish_reason") or ""
+
+                        # Reasoning-токен (DeepSeek R1 / Qwen3 thinking)
+                        reasoning_content = delta.get("reasoning_content") or ""
+                        if reasoning_content:
+                            yield ProviderStreamChunk(reasoning=str(reasoning_content))
+                            continue
+
+                        # Tool call дельты (агрегируем)
+                        tc_deltas = delta.get("tool_calls") or []
+                        for tc in tc_deltas:
+                            idx = int(tc.get("index", 0))
+                            if idx not in tool_deltas:
+                                tool_deltas[idx] = {
+                                    "id": tc.get("id") or "",
+                                    "name": "",
+                                    "arguments": "",
+                                }
+                            td = tool_deltas[idx]
+                            if tc.get("id"):
+                                td["id"] = tc["id"]
+                            if tc.get("function", {}).get("name"):
+                                td["name"] = tc["function"]["name"]
+                            if tc.get("function", {}).get("arguments"):
+                                td["arguments"] = td.get("arguments", "") + tc["function"]["arguments"]
+
+                            # Отдаём имя инструмента как токен (для UI-индикатора)
+                            if tc.get("function", {}).get("name"):
+                                yield ProviderStreamChunk(
+                                    tool_call_delta=ProviderToolCall(
+                                        id=str(td.get("id") or ""),
+                                        name=str(tc["function"]["name"]),
+                                        arguments={},
+                                    )
+                                )
+
+                        # Текстовый токен
+                        content = delta.get("content") or ""
+                        if content:
+                            yield ProviderStreamChunk(token=str(content))
+
+                        if finish:
+                            # Отдаём накопленные tool_calls
+                            for idx in sorted(tool_deltas.keys()):
+                                td = tool_deltas[idx]
+                                name = str(td.get("name") or "")
+                                raw_args = td.get("arguments", "")
+                                if isinstance(raw_args, str) and raw_args:
+                                    try:
+                                        args = json.loads(raw_args)
+                                    except json.JSONDecodeError:
+                                        args = {}
+                                elif isinstance(raw_args, dict):
+                                    args = raw_args
+                                else:
+                                    args = {}
+                                if name:
+                                    yield ProviderStreamChunk(
+                                        tool_call_delta=ProviderToolCall(
+                                            id=str(td.get("id") or name),
+                                            name=name,
+                                            arguments=args,
+                                        )
+                                    )
+                            yield ProviderStreamChunk(
+                                is_done=True,
+                                finish_reason=str(finish),
+                            )
+
+        except httpx.HTTPError as exc:
+            raise ProviderError(
+                f"OpenAI-compatible stream failed for {self.base_url}: {exc}"
+            ) from exc
+
     async def generate_with_tools(
         self,
         model_name: str,
@@ -63,9 +233,7 @@ class OpenAICompatProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
     ) -> ProviderToolResponse:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        headers = self._headers()
         payload = {
             "model": self._strip_prefix(model_name),
             "messages": [{"role": m.role, "content": m.content} for m in messages],

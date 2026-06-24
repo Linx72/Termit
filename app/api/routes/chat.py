@@ -1,7 +1,7 @@
 import json
 from typing import AsyncIterator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.domain.schemas import (
@@ -49,16 +49,53 @@ async def fim_completion(
 async def chat_stream(
     payload: ChatRequest,
     service: ChatService = Depends(get_chat_service),
+    last_event_id: str | None = Header(None, alias="Last-Event-ID"),
 ) -> StreamingResponse:
+    """
+    SSE-стриминг чата с поддержкой Stream Recovery.
+    
+    При обрыве соединения клиент может переподключиться с заголовком
+    Last-Event-ID для возобновления стрима с последнего полученного токена.
+    """
+    from app.services.chat_service import ChatService as CS
+    
     async def event_generator() -> AsyncIterator[str]:
         try:
+            event_idx = 0
             async for chunk in service.chat_stream(payload):
+                # Если клиент прислал Last-Event-ID, пропускаем уже полученные события
+                if last_event_id:
+                    try:
+                        last_idx = int(last_event_id.split("-")[-1]) if "-" in last_event_id else 0
+                        if event_idx <= last_idx:
+                            event_idx += 1
+                            continue
+                    except ValueError:
+                        pass
+                
+                event_idx += 1
+                # Добавляем id к каждому событию для отслеживания
+                if chunk.startswith("event:"):
+                    lines = chunk.split("\n")
+                    # Вставляем id после строки event
+                    new_lines = [lines[0]]
+                    new_lines.append(f"id: evt-{event_idx}")
+                    new_lines.extend(lines[1:])
+                    chunk = "\n".join(new_lines)
                 yield chunk
         except ProviderError as exc:
             yield f"event: error\ndata: {json.dumps({'detail': str(exc)}, ensure_ascii=True)}\n\n"
-            yield "event: done\ndata: {}\n\n"
+            yield f"event: done\ndata: {{}}\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Отключить буферизацию nginx
+        },
+    )
 
 
 @router.get("/providers", response_model=list[ProviderInfo])

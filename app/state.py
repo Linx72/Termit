@@ -127,6 +127,7 @@ def _build_chat_service() -> ChatService:
         summary_max_chars=settings.context_summary_max_chars,
     )
     enrichment = _build_context_enrichment_service() if settings.context_enrichment_enabled else None
+    tooling = get_tooling_service()
     return ChatService(
         router,
         providers,
@@ -143,6 +144,7 @@ def _build_chat_service() -> ChatService:
         provider_retry_backoff_ms=settings.provider_retry_backoff_ms,
         dual_pass_enabled=settings.dual_pass_enabled,
         dual_pass_task_types=settings.dual_pass_task_types,
+        tooling_service=tooling,
     )
 
 
