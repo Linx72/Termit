@@ -340,6 +340,41 @@ class ChatService:
             except Exception:
                 tools = None
 
+        # ── Проверка кеша ответов (до вызова LLM) ──
+        cache_key = self._build_cache_key(payload, messages, candidate_models)
+        if not payload.use_memory:
+            cached = self._get_cached(cache_key)
+            if cached is not None:
+                # Эмулируем стриминг — токенизируем кешированный ответ
+                full_text = cached.response
+                yield self._sse_event("meta", {
+                    "provider": cached.provider,
+                    "model": cached.model,
+                    "session_id": session_id,
+                    "history_size": len(messages),
+                    "cached": True,
+                })
+                # Отдаём кеш chunk'ами по ~50 символов для UI-фидбека
+                chunk_size = 50
+                for i in range(0, len(full_text), chunk_size):
+                    yield self._sse_event("token", {
+                        "text": full_text[i:i + chunk_size]
+                    })
+                yield self._sse_event("done", {
+                    "session_id": session_id,
+                    "response": full_text,
+                    "cached": True,
+                })
+                self._record_chat_telemetry(
+                    started_at=started_at,
+                    success=True,
+                    cache_hit=True,
+                    selected_model=cached.model,
+                    response_text=full_text,
+                    fallback_used=False,
+                )
+                return
+
         # ── Основной цикл: стриминг + tool calling ──
         MAX_TOOL_ROUNDS = 5
         full_text = ""
@@ -404,7 +439,8 @@ class ChatService:
                     if not chunk_tool_calls:
                         break
 
-                    # ── Выполнение инструментов ──
+                    # ── Параллельное выполнение инструментов ──
+                    # Уведомляем о старте всех инструментов
                     for tc in chunk_tool_calls:
                         yield self._sse_event("tool_progress", {
                             "event": "start",
@@ -412,8 +448,20 @@ class ChatService:
                             "preview": json.dumps(tc.arguments, ensure_ascii=True)[:200],
                         })
 
-                        tool_result = await self._execute_tool_call(tc)
+                    # Запускаем все tool calls параллельно
+                    async def _run_one(tc: ProviderToolCall) -> tuple[ProviderToolCall, str]:
+                        try:
+                            result = await self._execute_tool_call(tc)
+                        except Exception as exc:
+                            result = json.dumps({"error": f"Tool '{tc.name}' failed: {exc}"})
+                        return tc, result
 
+                    parallel_tasks = [_run_one(tc) for tc in chunk_tool_calls]
+                    tool_results: list[tuple[ProviderToolCall, str]] = await asyncio.gather(
+                        *parallel_tasks
+                    )
+
+                    for tc, tool_result in tool_results:
                         yield self._sse_event("tool_progress", {
                             "event": "done",
                             "name": tc.name,
@@ -435,15 +483,60 @@ class ChatService:
                 if self.circuit_breaker:
                     self.circuit_breaker.record_success(provider_name)
 
+                # ── RLM Best-of-N retry (при низком качестве) ──
+                if getattr(payload, 'rlm_retry', False) and not payload.use_memory:
+                    try:
+                        from app.services.rlm_best_of_n import RLMBestOfN
+                        # Use the fastest model from candidate_models as RLM generator
+                        rlm_model = self.model_router.resolve_profile_model("coding-fast") or model_name
+                        rlm_provider_name = self.model_router.provider_for_model(rlm_model)
+                        rlm_provider = self.providers.get(rlm_provider_name) if rlm_provider_name else provider
+                        if rlm_provider:
+                            rlm = RLMBestOfN(self, rlm_provider, rlm_model)
+                            improved = await rlm.best_of_n(messages, n=3)
+                            if improved and len(improved) > len(full_text) * 0.5:
+                                full_text = improved
+                                yield self._sse_event("rlm_improved", {
+                                    "message": "Ответ улучшен через RLM Best-of-N"
+                                })
+                    except Exception as exc:
+                        logger.warning("RLM Best-of-N retry failed: %s", exc)
+
                 # Сохраняем в память
                 if payload.use_memory and session_id:
                     self.memory_store.append(session_id, ChatMessage(role="user", content=payload.message))
                     self.memory_store.append(session_id, ChatMessage(role="assistant", content=full_text))
 
+                # Сохраняем в кеш ответов (для повторных запросов)
+                if not payload.use_memory:
+                    response = ChatResponse(
+                        provider=selected_provider,
+                        model=selected_model,
+                        task_type=payload.task_type,
+                        session_id=session_id,
+                        history_size=len(messages),
+                        attempted_models=candidate_models,
+                        response=full_text,
+                        context_compacted=compaction.compacted,
+                        dropped_messages=compaction.dropped_messages,
+                        routing_policy=payload.routing_policy,
+                        selected_via=payload.routing_policy or "auto",
+                    )
+                    self._set_cached(cache_key, response)
+
                 yield self._sse_event("done", {
                     "session_id": session_id,
                     "response": full_text,
                 })
+
+                self._record_chat_telemetry(
+                    started_at=started_at,
+                    success=True,
+                    cache_hit=False,
+                    selected_model=selected_model,
+                    response_text=full_text,
+                    fallback_used=False,
+                )
                 return
 
             except ProviderError as exc:

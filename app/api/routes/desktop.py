@@ -26,6 +26,7 @@ from app.services.onboarding_experiment_service import OnboardingExperimentServi
 from app.state import (
     get_agent_service,
     get_agent_policy_preset_service,
+    get_chat_service,
     get_desktop_accelerator_service,
     get_desktop_kpi_gate_service,
     get_desktop_workflow_telemetry_service,
@@ -209,3 +210,40 @@ async def get_heavy_job(
     if record is None:
         raise HTTPException(status_code=404, detail=f"Heavy job not found: {job_id}")
     return DesktopHeavyJobResponse(**record)
+
+
+# ── RLM Best-of-N endpoint ─────────────────────────────────────────────────
+
+@router.post("/rlm/best-of-n")
+async def rlm_best_of_n(
+    payload: dict,
+    chat_service=Depends(get_chat_service),
+) -> dict:
+    """Запустить параллельный RLM Best-of-N ретрай.
+
+    body: {"messages": [...], "n": 3}
+    returns: {"best": "...", "candidates": ["...","...","..."], "scores": [...]}
+    """
+    from app.services.rlm_best_of_n import RLMBestOfN
+    from app.domain.schemas import ChatMessage
+
+    messages_raw = payload.get("messages", [])
+    n = payload.get("n", 3)
+
+    messages = [
+        ChatMessage(role=m.get("role", "user"), content=m.get("content", ""))
+        for m in messages_raw
+    ]
+
+    # Use first available provider for RLM
+    first_provider = next(iter(chat_service.providers.values()), None)
+    if not first_provider:
+        raise HTTPException(status_code=503, detail="No providers available")
+
+    rlm = RLMBestOfN(
+        chat_service,
+        first_provider,
+        next(iter(chat_service.providers.keys()), "unknown"),
+    )
+    best = await rlm.best_of_n(messages, n=n)
+    return {"best": best, "n": n}

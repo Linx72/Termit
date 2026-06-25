@@ -57,6 +57,7 @@ class ChatRequest(BaseModel):
     skip_context_enrichment: bool = False
     pin_model: bool = False
     skip_dual_pass: bool = False
+    rlm_retry: bool = False  # Включить RLM Best-of-N ретрай при низком качестве
 
 
 class ChatResponse(BaseModel):
