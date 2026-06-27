@@ -20,6 +20,26 @@ export interface DocOpenResult {
   message: string;
 }
 
+// ── Whisper (голосовой ввод) ──────────────────────────────
+
+export interface WhisperModelStatus {
+  ready: boolean;
+  model: string;
+  path: string;
+  sizeMb: number;
+}
+
+export interface WhisperStreamResult {
+  partial: string;   // частичный результат (промежуточный)
+  final: string;     // финальный текст после остановки
+  done: boolean;
+}
+
+export interface WhisperStartOptions {
+  model?: string;     // tiny / small / medium / large-v3
+  language?: string;  // ru / en / auto
+}
+
 export interface TermitDesktopApi {
   getLauncherConfig(): Promise<LauncherConfig>;
   setLauncherConfig(config: LauncherConfig): Promise<void>;
@@ -28,6 +48,13 @@ export interface TermitDesktopApi {
   getDocFileUrl(docId: DocId): Promise<string>;
   getDocPath(docId: DocId): Promise<string>;
   openDocExternal(docId: DocId): Promise<DocOpenResult>;
+
+  // ── Whisper ──
+  whisperModelStatus(): Promise<WhisperModelStatus>;
+  whisperDownloadModel(): Promise<{ ok: boolean; message: string }>;
+  whisperStart(options?: WhisperStartOptions): Promise<{ ok: boolean; message: string }>;
+  whisperStop(): Promise<{ text: string }>;
+  whisperStream(audioChunk: ArrayBuffer): Promise<WhisperStreamResult>;
 }
 
 declare global {

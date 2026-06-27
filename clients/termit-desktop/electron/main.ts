@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { DocId } from "../shared/ipc";
+import type { DocId, WhisperStartOptions } from "../shared/ipc";
 import {
   ensureServer,
   openLogs,
@@ -10,6 +10,7 @@ import {
   writeLauncherConfig,
   type LauncherConfig,
 } from "./serverLauncher";
+import { whisperManager } from "./whisperManager";
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
@@ -152,6 +153,8 @@ app.on("window-all-closed", () => {
   }
 });
 
+// ── Существующие IPC ───────────────────────────────────────
+
 ipcMain.handle("launcher:getConfig", () => {
   return readLauncherConfig(app.getPath("userData"));
 });
@@ -190,4 +193,35 @@ ipcMain.handle("docs:openExternal", async (_event, docId: DocId) => {
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, message };
   }
+});
+
+// ── Whisper (голосовой ввод) ───────────────────────────────
+
+ipcMain.handle("whisper:modelStatus", async () => {
+  return whisperManager.modelStatus();
+});
+
+ipcMain.handle("whisper:downloadModel", async (_event, model?: string) => {
+  return whisperManager.downloadModel(model);
+});
+
+ipcMain.handle("whisper:start", async (_event, options?: WhisperStartOptions) => {
+  return whisperManager.start(options);
+});
+
+ipcMain.handle("whisper:stop", async () => {
+  const text = await whisperManager.stop();
+  return { text };
+});
+
+ipcMain.handle("whisper:stream", async (_event, audioChunk: ArrayBuffer) => {
+  const buf = Buffer.from(audioChunk);
+  whisperManager.writeAudio(buf);
+  const partial = whisperManager.getPartialText();
+  return { partial, final: "", done: false };
+});
+
+// Очистка при выходе
+app.on("before-quit", () => {
+  whisperManager.destroy();
 });

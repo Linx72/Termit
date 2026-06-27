@@ -444,6 +444,30 @@
   font-size: 0.78rem;
 }
 
+/* ── Microphone button ── */
+.microphone-wrapper {
+  flex-shrink: 0;
+}
+
+.microphone-btn {
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.microphone-btn:hover:not(:disabled) {
+  background: #484f58 !important;
+}
+
+.microphone-btn.recording:hover:not(:disabled) {
+  background: #ff6b6b !important;
+}
+
+.mic-live-text {
+  font-family: monospace;
+  z-index: 10;
+  user-select: none;
+}
+
 .cursor-send-btn {
   border: none;
   border-radius: 8px;

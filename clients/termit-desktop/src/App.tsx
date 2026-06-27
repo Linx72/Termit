@@ -94,6 +94,7 @@ import { PlanPanel } from "./PlanPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { getOrAssignOnboardingVariant } from "./onboardingExperiment";
 import { recordBetaActivityIfDue } from "./betaActivity";
+import { MicrophoneButton } from "./MicrophoneButton";
 
 
 type AgentFolder = {
@@ -3653,6 +3654,10 @@ export function App() {
               }}
             />
             <div className="cursor-composer-toolbar">
+              <MicrophoneButton
+                onText={(text) => setDraft((prev) => (prev ? prev + " " + text : text))}
+                disabled={!connected || settings.chatInteractionMode === "plan"}
+              />
               <button
                 type="button"
                 className="secondary compact"
