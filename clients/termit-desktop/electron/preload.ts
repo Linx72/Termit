@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  BraveSearchResponse,
+  BraveSearchStatus,
   DesktopNotificationPayload,
   DocId,
   DocOpenResult,
@@ -36,6 +38,16 @@ const api: TermitDesktopApi = {
     ipcRenderer.invoke("whisper:stop") as Promise<{ text: string }>,
   whisperStream: (audioChunk: ArrayBuffer) =>
     ipcRenderer.invoke("whisper:stream", audioChunk) as Promise<WhisperStreamResult>,
+
+  // ── Brave Search ──
+  braveSearch: (query: string, count?: number) =>
+    ipcRenderer.invoke("brave:search", query, count) as Promise<BraveSearchResponse>,
+  braveSearchStatus: () =>
+    ipcRenderer.invoke("brave:status") as Promise<BraveSearchStatus>,
+  braveSearchStart: () =>
+    ipcRenderer.invoke("brave:start") as Promise<{ ok: boolean; message: string }>,
+  braveSearchStop: () =>
+    ipcRenderer.invoke("brave:stop") as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld("termitDesktop", api);

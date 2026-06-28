@@ -1,0 +1,23 @@
+{
+  "name": "termit-brave-search-mcp",
+  "version": "1.0.0",
+  "description": "Brave Search MCP Server for TermitPro — локальный поиск через Brave Search API",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "termit-brave-search": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}

@@ -11,6 +11,7 @@ import {
   type LauncherConfig,
 } from "./serverLauncher";
 import { whisperManager } from "./whisperManager";
+import { getBraveSearchClient } from "./mcpClient";
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
@@ -220,6 +221,94 @@ ipcMain.handle("whisper:stream", async (_event, audioChunk: ArrayBuffer) => {
   const partial = whisperManager.getPartialText();
   return { partial, final: "", done: false };
 });
+
+// ── Brave Search MCP ───────────────────────────────────────
+
+const braveClient = getBraveSearchClient();
+
+ipcMain.handle("brave:start", async () => {
+  try {
+    const apiKey = process.env.BRAVE_API_KEY;
+    if (!apiKey) {
+      return { ok: false, message: "BRAVE_API_KEY не задан. Получите ключ: https://api.search.brave.com" };
+    }
+    await braveClient.start({ BRAVE_API_KEY: apiKey });
+    await braveClient.listTools();
+    return { ok: true, message: "Brave Search запущен" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, message };
+  }
+});
+
+ipcMain.handle("brave:stop", async () => {
+  await braveClient.stop();
+});
+
+ipcMain.handle("brave:status", async () => {
+  return braveClient.getStatus();
+});
+
+ipcMain.handle("brave:search", async (_event, query: string, count?: number) => {
+  try {
+    if (!braveClient.getStatus().running) {
+      // Автозапуск
+      const apiKey = process.env.BRAVE_API_KEY;
+      if (apiKey) {
+        await braveClient.start({ BRAVE_API_KEY: apiKey });
+        await braveClient.listTools();
+      } else {
+        return { query, results: [], total: 0, error: "BRAVE_API_KEY не задан. Получите ключ: https://api.search.brave.com" };
+      }
+    }
+    const result = await braveClient.callTool("brave_web_search", { query, count: count ?? 10 });
+    const text = result.content?.[0]?.text || "";
+    // Парсим текст результатов в структурированный вид
+    const results = parseSearchResults(text, query);
+    return { query, results, total: results.length };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { query, results: [], total: 0, error: message };
+  }
+});
+
+/**
+ * Парсит текстовый вывод MCP-сервера в структурированные результаты
+ */
+function parseSearchResults(text: string, query: string): Array<{ title: string; url: string; description: string; age?: string }> {
+  const results: Array<{ title: string; url: string; description: string; age?: string }> = [];
+  const lines = text.split("\n");
+  let current: { title: string; url: string; description: string; age?: string } | null = null;
+
+  for (const line of lines) {
+    // Матчим "**N. Title**"
+    const titleMatch = line.match(/^\*\*\d+\.\s+(.+?)\*\*$/);
+    if (titleMatch) {
+      if (current) results.push(current);
+      current = { title: titleMatch[1], url: "", description: "", age: undefined };
+      continue;
+    }
+    // Матчим URL
+    const urlMatch = line.match(/^\s+(https?:\/\/\S+)$/);
+    if (urlMatch && current) {
+      current.url = urlMatch[1];
+      continue;
+    }
+    // Матчим дату
+    const ageMatch = line.match(/^\s+📅\s+(.+)$/);
+    if (ageMatch && current) {
+      current.age = ageMatch[1];
+      continue;
+    }
+    // Описание — первая строка без спец.форматирования
+    if (current && !current.description && line.trim() && !line.startsWith("**") && !line.startsWith("_") && !line.startsWith("   📅") && !line.startsWith("   http")) {
+      current.description = line.trim();
+    }
+  }
+  if (current) results.push(current);
+
+  return results;
+}
 
 // Очистка при выходе
 app.on("before-quit", () => {

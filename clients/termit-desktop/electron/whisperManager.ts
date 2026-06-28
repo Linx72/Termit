@@ -20,23 +20,7 @@ import type { WhisperModelStatus, WhisperStreamResult } from "../shared/ipc";
 
 // ── Константы ──────────────────────────────────────────────
 
-const WHISPER_BIN = path.join(
-  app.getAppPath(),
-  "whisper.cpp",
-  "build",
-  "bin",
-  "whisper-cli"
-);
-
-const WHISPER_STREAM_BIN = path.join(
-  app.getAppPath(),
-  "whisper.cpp",
-  "build",
-  "bin",
-  "whisper-stream"
-);
-
-const MODELS_DIR = path.join(app.getPath("userData"), "whisper-models");
+const DEFAULT_MODEL = "small";
 
 const MODEL_DOWNLOADS: Record<string, { url: string; sizeMb: number }> = {
   tiny: {
@@ -56,19 +40,29 @@ const MODEL_DOWNLOADS: Record<string, { url: string; sizeMb: number }> = {
     sizeMb: 3100,
   },
 };
-const MODELS_DIR = path.join(app.getPath("userData"), "whisper-models");
 
-// Альтернативная директория моделей (рядом с whisper.cpp, для dev-режима)
-const DEV_MODELS_DIR = path.join(app.getAppPath(), "whisper.cpp", "models");
+// ── Ленивые геттеры (app.getPath/getAppPath — только после app.whenReady()) ──
+
+function getWhisperBin(): string {
+  return path.join(app.getAppPath(), "whisper.cpp", "build", "bin", "whisper-cli");
+}
+
+function getModelsDir(): string {
+  return path.join(app.getPath("userData"), "whisper-models");
+}
+
+function getDevModelsDir(): string {
+  return path.join(app.getAppPath(), "whisper.cpp", "models");
+}
 
 // ── Утилиты ────────────────────────────────────────────────
 
 function modelPath(model: string): string {
-  return path.join(MODELS_DIR, `ggml-${model}.bin`);
+  return path.join(getModelsDir(), `ggml-${model}.bin`);
 }
 
 function devModelPath(model: string): string {
-  return path.join(DEV_MODELS_DIR, `ggml-${model}.bin`);
+  return path.join(getDevModelsDir(), `ggml-${model}.bin`);
 }
 
 /** Найти модель — сначала userData, потом dev-директория */
@@ -130,7 +124,7 @@ export class WhisperManager {
     }
 
     try {
-      await mkdir(MODELS_DIR, { recursive: true });
+      await mkdir(getModelsDir(), { recursive: true });
 
       console.log(`[Whisper] Downloading model ${mdl} (${download.sizeMb} MB)…`);
 
@@ -172,21 +166,21 @@ export class WhisperManager {
 
     const mdl = options?.model ?? this.model;
     const lang = options?.language ?? "auto";
-    const mp = modelPath(mdl);
 
-    // Проверить, есть ли модель
-    if (!(await fileExists(mp))) {
+    // Ищем модель — сначала в userData, потом в dev-директории
+    const mp = await findModel(mdl);
+    if (!mp) {
       return {
         ok: false,
-        message: `Model not found: ${mp}. Download it first.`,
+        message: `Model '${mdl}' not found. Download it first (Settings → Whisper → Download model).`,
       };
     }
 
     // Проверить, есть ли бинарник
-    if (!(await fileExists(WHISPER_BIN))) {
+    if (!(await fileExists(getWhisperBin()))) {
       return {
         ok: false,
-        message: `whisper-cli not found at ${WHISPER_BIN}. Run build-whisper.sh first.`,
+        message: `whisper-cli not found at ${getWhisperBin()}. Run build-whisper.sh first.`,
       };
     }
 
@@ -204,9 +198,10 @@ export class WhisperManager {
       "--stdout",
     ];
 
-    console.log(`[Whisper] Starting: ${WHISPER_BIN} ${args.join(" ")}`);
+    const bin = getWhisperBin();
+    console.log(`[Whisper] Starting: ${bin} ${args.join(" ")}`);
 
-    this.proc = spawn(WHISPER_BIN, args, {
+    this.proc = spawn(bin, args, {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -249,7 +244,7 @@ export class WhisperManager {
   /** Остановить whisper и получить финальный текст */
   async stop(): Promise<string> {
     if (!this.proc) {
-      return "";
+      return this.stdout.trim();
     }
 
     return new Promise<string>((resolve) => {

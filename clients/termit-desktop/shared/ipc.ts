@@ -30,14 +30,36 @@ export interface WhisperModelStatus {
 }
 
 export interface WhisperStreamResult {
-  partial: string;   // частичный результат (промежуточный)
-  final: string;     // финальный текст после остановки
+  partial: string;
+  final: string;
   done: boolean;
 }
 
 export interface WhisperStartOptions {
-  model?: string;     // tiny / small / medium / large-v3
-  language?: string;  // ru / en / auto
+  model?: string;
+  language?: string;
+}
+
+// ── Brave Search ──────────────────────────────────────────
+
+export interface BraveSearchResult {
+  title: string;
+  url: string;
+  description: string;
+  age?: string;
+}
+
+export interface BraveSearchResponse {
+  query: string;
+  results: BraveSearchResult[];
+  total: number;
+  error?: string;
+}
+
+export interface BraveSearchStatus {
+  running: boolean;
+  tools: string[];
+  serverName: string;
 }
 
 export interface TermitDesktopApi {
@@ -55,6 +77,12 @@ export interface TermitDesktopApi {
   whisperStart(options?: WhisperStartOptions): Promise<{ ok: boolean; message: string }>;
   whisperStop(): Promise<{ text: string }>;
   whisperStream(audioChunk: ArrayBuffer): Promise<WhisperStreamResult>;
+
+  // ── Brave Search ──
+  braveSearch(query: string, count?: number): Promise<BraveSearchResponse>;
+  braveSearchStatus(): Promise<BraveSearchStatus>;
+  braveSearchStart(): Promise<{ ok: boolean; message: string }>;
+  braveSearchStop(): Promise<void>;
 }
 
 declare global {

@@ -95,6 +95,7 @@ import { TerminalPanel } from "./TerminalPanel";
 import { getOrAssignOnboardingVariant } from "./onboardingExperiment";
 import { recordBetaActivityIfDue } from "./betaActivity";
 import { MicrophoneButton } from "./MicrophoneButton";
+import { SearchPanel } from "./SearchPanel";
 
 
 type AgentFolder = {
@@ -333,6 +334,7 @@ export function App() {
   const [selectedChangePath, setSelectedChangePath] = useState("");
   const [selectedChangePreview, setSelectedChangePreview] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [reviewStats, setReviewStats] = useState({ added: 0, deleted: 0 });
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -2586,6 +2588,14 @@ export function App() {
         >
           ⚙
         </button>
+        <button
+          type="button"
+          className={`cursor-rail-btn ${searchOpen ? "active" : ""}`}
+          title={locale === "ru" ? "Поиск в интернете" : "Web Search"}
+          onClick={() => setSearchOpen((prev) => !prev)}
+        >
+          🔍
+        </button>
         <div className="cursor-rail-spacer" />
         <span
           className={`cursor-rail-dot ${connected ? "ok" : apiReachable ? "ok" : "bad"}`}
@@ -2632,6 +2642,18 @@ export function App() {
           ))}
         </div>
       </aside>
+
+      {searchOpen ? (
+        <SearchPanel
+          onOpenUrl={(url) => {
+            window.open(url, "_blank", "noopener,noreferrer");
+          }}
+          onInsertUrl={(url, title) => {
+            setDraft(`[${title}](${url})`);
+            setSearchOpen(false);
+          }}
+        />
+      ) : null}
 
       {settingsOpen ? (
         <div className="cursor-settings-backdrop" onClick={() => setSettingsOpen(false)}>
