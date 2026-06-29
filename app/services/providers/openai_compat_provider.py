@@ -292,7 +292,6 @@ class OpenAICompatProvider(BaseProvider):
         # Fallback list of known models.
         return [
             "openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct",
-            "openai_compat:deepseek-v4-pro-max",
             "openai_compat:deepseek-v4-pro",
             "openai_compat:deepseek-reasoner",
             "openai_compat:deepseek-chat",

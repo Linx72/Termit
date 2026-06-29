@@ -328,9 +328,9 @@ def get_settings() -> Settings:
         host=os.getenv("TERMIT_HOST", "0.0.0.0"),
         port=int(os.getenv("TERMIT_PORT", "8765")),
         allowed_origins=_split_csv(os.getenv("TERMIT_ALLOWED_ORIGINS", "*")),
-        default_model=os.getenv("TERMIT_DEFAULT_MODEL", "openai_compat:deepseek-v4-pro-max"),
-        code_model=os.getenv("TERMIT_CODE_MODEL", "openai_compat:deepseek-v4-pro-max"),
-        analysis_model=os.getenv("TERMIT_ANALYSIS_MODEL", "openai_compat:deepseek-v4-pro-max"),
+        default_model=os.getenv("TERMIT_DEFAULT_MODEL", "openai_compat:deepseek-v4-pro"),
+        code_model=os.getenv("TERMIT_CODE_MODEL", "openai_compat:deepseek-v4-pro"),
+        analysis_model=os.getenv("TERMIT_ANALYSIS_MODEL", "openai_compat:deepseek-v4-pro"),
         default_fallback_model=os.getenv(
             "TERMIT_DEFAULT_FALLBACK_MODEL",
             "openai_compat:deepseek-v4-pro",
