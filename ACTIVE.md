@@ -1,22 +1,21 @@
-# Termit — Active Tasks & Done Log
+# Termit Active Tasks — 30.06.2026
 
-## Completed (29.06.2026)
+## Выполнено
+- ✅ **test_ten_tasks_complete_and_expose_events** — read_readme handler исправлен: отсутствие README.md = предупреждение, не VerifError
+- ✅ **ACTIVE.md** — создан заново
+- ✅ **Отключены быстрые ответы** — model_router.py: fast_model удалён из low-complexity tier, все coding-задачи → code_model
+- ✅ **724 теста проходят**, 0 фейлов
+- ✅ **Пуш на GitHub** — 19 файлов, коммит 99703f8
+- ✅ **Деплой** — dev (8765) и prod (8082) перезапущены, health OK
 
-### Bug Fixes
-- **test_ten_tasks_complete_and_expose_events** — исправлен: `read_readme` handler
-  больше не падает при отсутствии README.md (task_service.py:384-389).
-  Fix: системный — ToolingError в read_readme теперь возвращает grace-заметку
-  вместо VerificationError.
-  ---
-  724 passed, 6 skipped, 0 failed.
+## Сервера
+- Dev: 127.0.0.1:8765 — PID 54744
+- Prod: 127.0.0.1:8082 — PID 54776
+- TermitPro backend: 8646 — работает (отдельный процесс из .app)
+- Hermes dashboard: 18765 — OK
 
-- **test_tool_loop_metrics_recent_window** — исправлен: хардкод даты заменён
-  на `datetime.now(timezone.utc) - timedelta(days=1)`.
+## Осталось
+- TermitPro приложение — обновить SwiftUI (если нужно синхронизировать fast_model логику на клиенте)
 
-### Infrastructure
-- **OPENAI_COMPAT_API_KEY** — установлен в GitHub Secrets (repo: Linx72/Termit).
-- **Deploy (prod 8082)** — сервер перезапущен с новым кодом, health OK.
-
-### Servers Running
-- Dev: 8765 (PID 30986) — health OK
-- Prod: 8082 (PID 51035) — health OK, AuthQuotaMiddleware active
+## Файлы
+- 18 изменённых + ACTIVE.md (новый)

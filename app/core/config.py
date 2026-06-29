@@ -328,16 +328,16 @@ def get_settings() -> Settings:
         host=os.getenv("TERMIT_HOST", "0.0.0.0"),
         port=int(os.getenv("TERMIT_PORT", "8765")),
         allowed_origins=_split_csv(os.getenv("TERMIT_ALLOWED_ORIGINS", "*")),
-        default_model=os.getenv("TERMIT_DEFAULT_MODEL", "ollama:termit-core-ft"),
-        code_model=os.getenv("TERMIT_CODE_MODEL", "ollama:termit-core-ft"),
-        analysis_model=os.getenv("TERMIT_ANALYSIS_MODEL", "ollama:termit-core-ft"),
+        default_model=os.getenv("TERMIT_DEFAULT_MODEL", "openai_compat:deepseek-v4-pro-max"),
+        code_model=os.getenv("TERMIT_CODE_MODEL", "openai_compat:deepseek-v4-pro-max"),
+        analysis_model=os.getenv("TERMIT_ANALYSIS_MODEL", "openai_compat:deepseek-v4-pro-max"),
         default_fallback_model=os.getenv(
             "TERMIT_DEFAULT_FALLBACK_MODEL",
-            "ollama:qwen2.5-coder",
+            "openai_compat:deepseek-v4-pro",
         ),
         code_fallback_model=os.getenv(
             "TERMIT_CODE_FALLBACK_MODEL",
-            "ollama:qwen2.5-coder",
+            "openai_compat:deepseek-v4-pro",
         ),
         analysis_fallback_model=os.getenv(
             "TERMIT_ANALYSIS_FALLBACK_MODEL",
