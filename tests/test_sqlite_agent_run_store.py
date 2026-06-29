@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.domain.schemas import AgentRunEvent, AgentRunRecordResponse, AgentRunState
@@ -86,13 +87,16 @@ class SQLiteAgentRunStoreTests(unittest.TestCase):
     def test_tool_loop_metrics_recent_window(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = SQLiteAgentRunStore(str(Path(tmp) / "agent_runs.db"))
+            now = datetime.now(timezone.utc)
+            recent_date = (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            old_date = "2020-01-01T00:00:00+00:00"
             run_old = AgentRunRecordResponse(
                 run_id="arun_old",
                 agent_id="agt_1",
                 agent_name="Agent",
                 state=AgentRunState.completed,
-                created_at="2020-01-01T00:00:00+00:00",
-                updated_at="2020-01-01T00:01:00+00:00",
+                created_at=old_date,
+                updated_at=old_date,
                 input="old",
                 session_id="sess_1",
                 provider="ollama",
@@ -106,8 +110,8 @@ class SQLiteAgentRunStoreTests(unittest.TestCase):
                 agent_id="agt_1",
                 agent_name="Agent",
                 state=AgentRunState.completed,
-                created_at="2026-06-19T00:00:00+00:00",
-                updated_at="2026-06-19T00:01:00+00:00",
+                created_at=recent_date,
+                updated_at=recent_date,
                 input="new",
                 session_id="sess_2",
                 provider="ollama",
@@ -124,7 +128,7 @@ class SQLiteAgentRunStoreTests(unittest.TestCase):
                     event_type="tool_loop_tool_error",
                     state=AgentRunState.running,
                     message="old error",
-                    timestamp="2020-01-01T00:00:30+00:00",
+                    timestamp=old_date,
                     attempt=1,
                 ),
             )
@@ -134,7 +138,7 @@ class SQLiteAgentRunStoreTests(unittest.TestCase):
                     event_type="tool_loop_tool",
                     state=AgentRunState.running,
                     message="ok",
-                    timestamp="2026-06-19T00:00:30+00:00",
+                    timestamp=recent_date,
                     attempt=1,
                 ),
             )
@@ -144,7 +148,7 @@ class SQLiteAgentRunStoreTests(unittest.TestCase):
                     event_type="tool_loop_final",
                     state=AgentRunState.completed,
                     message="done",
-                    timestamp="2026-06-19T00:01:00+00:00",
+                    timestamp=recent_date,
                     attempt=1,
                 ),
             )

@@ -1028,7 +1028,7 @@ class AgentService:
             )
 
         if self._context_enrichment is not None:
-            enrichment_lines = self._context_enrichment.build_agent_context_lines(payload, profile)
+            enrichment_lines = await self._context_enrichment.build_agent_context_lines(payload, profile)
             if enrichment_lines:
                 memory_context = enrichment_lines + memory_context
 

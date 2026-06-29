@@ -138,7 +138,7 @@ class ChatServiceTests(unittest.TestCase):
 
         self.assertEqual(result.provider, "openai_compat")
         self.assertEqual(result.model, "openai_compat:code")
-        self.assertEqual(result.attempted_models, ["ollama:qwen2.5-coder", "ollama:code", "openai_compat:code"])
+        self.assertEqual(result.attempted_models, ["ollama:code", "openai_compat:code"])
 
     def test_memory_is_persisted(self) -> None:
         memory = MemoryStore()
@@ -169,7 +169,7 @@ class ChatServiceTests(unittest.TestCase):
             },
             memory_store=MemoryStore(),
         )
-        payload = ChatRequest(message="stream", task_type=TaskType.general, use_memory=False)
+        payload = ChatRequest(message="stream", task_type=TaskType.general, use_memory=False, pin_model=True, model="ollama:default")
 
         async def collect() -> list[str]:
             chunks: list[str] = []

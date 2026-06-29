@@ -44,7 +44,7 @@ class ModelRouterTests(unittest.TestCase):
         router = ModelRouter(build_settings())
         self.assertEqual(
             router.candidate_models(TaskType.coding),
-            ["ollama:qwen2.5-coder", "ollama:code", "openai_compat:code"],
+            ["ollama:code", "openai_compat:code"],
         )
 
     def test_candidate_models_requested_model_overrides(self) -> None:
@@ -96,10 +96,10 @@ class ModelRouterTests(unittest.TestCase):
             ],
         )
 
-    def test_low_complexity_prefers_fast_model(self) -> None:
+    def test_low_complexity_uses_code_model(self) -> None:
         router = ModelRouter(build_settings())
         models = router.candidate_models(TaskType.coding, message="fix typo")
-        self.assertEqual(models[0], "ollama:qwen2.5-coder")
+        self.assertEqual(models[0], "ollama:code")
 
     def test_high_complexity_includes_frontier_fallback(self) -> None:
         settings = build_settings()

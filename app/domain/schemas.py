@@ -51,13 +51,14 @@ class ChatRequest(BaseModel):
     repo_profile: Optional[str] = None
     routing_policy: str = Field(default="default", pattern="^(default|benchmark)$")
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1200, ge=64, le=8192)
-    history: list[ChatMessage] = Field(default_factory=list)
-    # Ось B harness: не дублировать enrichment в agent loop; pin model для prompt cache.
+    max_tokens: int = Field(default=131072, ge=64, le=131072)
+    stream: bool = True
+    signal_online_url: Optional[str] = Field(default=None, max_length=2048)
     skip_context_enrichment: bool = False
     pin_model: bool = False
     skip_dual_pass: bool = False
     rlm_retry: bool = False  # Включить RLM Best-of-N ретрай при низком качестве
+    history: list[ChatMessage] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -1183,7 +1184,7 @@ class AgentProfileCreateRequest(BaseModel):
     retrieval_limit: int = Field(default=5, ge=1, le=20)
     retrieval_path_prefix: str = ""
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1200, ge=64, le=8192)
+    max_tokens: int = Field(default=131072, ge=64, le=131072)
     allow_online: bool = False
     online_max_steps: int = Field(default=4, ge=1, le=10)
     online_timeout_seconds: int = Field(default=10, ge=1, le=60)
@@ -1209,7 +1210,7 @@ class AgentProfileResponse(BaseModel):
     retrieval_limit: int = 5
     retrieval_path_prefix: str = ""
     temperature: float = 0.2
-    max_tokens: int = 1200
+    max_tokens: int = 131072
     allow_online: bool = False
     online_max_steps: int = 4
     online_timeout_seconds: int = 10
@@ -1244,7 +1245,7 @@ class AgentRunRequest(BaseModel):
     retrieval_limit: Optional[int] = Field(default=None, ge=1, le=20)
     retrieval_path_prefix: Optional[str] = None
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
-    max_tokens: Optional[int] = Field(default=None, ge=64, le=8192)
+    max_tokens: Optional[int] = Field(default=None, ge=64, le=131072)
     use_tool_loop: Optional[bool] = None
     priority: int = Field(default=0, ge=0, le=100)
     resume_checkpoint: Optional[dict[str, object]] = None

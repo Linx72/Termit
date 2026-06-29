@@ -76,7 +76,7 @@ def _build_llm_caller_service() -> LlmCallerService:
     settings = get_settings()
     providers = build_llm_providers(settings)
     router = ModelRouter(settings, routing_policy=_build_routing_policy_service())
-    return LlmCallerService(providers=providers, model_router=router)
+    return LlmCallerService(providers=providers, model_router=router, default_max_tokens=131072)
 
 
 def get_llm_caller_service() -> LlmCallerService:

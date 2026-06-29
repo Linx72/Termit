@@ -23,14 +23,22 @@ from app.state import get_chat_service
 router = APIRouter(prefix="/api", tags=["chat"])
 
 
+import logging
+logger = logging.getLogger("termit.debug")
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     payload: ChatRequest,
     service: ChatService = Depends(get_chat_service),
 ) -> ChatResponse:
+    logger.warning("CHAT_DEBUG: entering chat handler, message='%s'", payload.message[:100])
     try:
-        return await service.chat(payload)
+        logger.warning("CHAT_DEBUG: calling service.chat()")
+        result = await service.chat(payload)
+        logger.warning("CHAT_DEBUG: service.chat() returned, response='%s'", result.response[:100])
+        return result
     except ProviderError as exc:
+        logger.warning("CHAT_DEBUG: ProviderError: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

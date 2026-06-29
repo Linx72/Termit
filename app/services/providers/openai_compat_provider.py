@@ -21,6 +21,8 @@ class OpenAICompatProvider(BaseProvider):
     def __init__(self, base_url: str, api_key: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        # If the base URL already ends with /v1, don't prepend /v1 later
+        self._api_url = self.base_url.removesuffix("/v1")
 
     def _strip_prefix(self, model_name: str) -> str:
         if model_name.startswith("openai_compat:"):
@@ -49,7 +51,7 @@ class OpenAICompatProvider(BaseProvider):
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(
-                    f"{self.base_url}/v1/chat/completions",
+                    f"{self._api_url}/v1/chat/completions",
                     json=payload,
                     headers=self._headers(),
                 )
@@ -101,7 +103,7 @@ class OpenAICompatProvider(BaseProvider):
             async with httpx.AsyncClient(timeout=300.0) as client:
                 async with client.stream(
                     "POST",
-                    f"{self.base_url}/v1/chat/completions",
+                    f"{self._api_url}/v1/chat/completions",
                     json=payload,
                     headers=self._headers(),
                 ) as response:
@@ -245,7 +247,7 @@ class OpenAICompatProvider(BaseProvider):
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(
-                    f"{self.base_url}/v1/chat/completions",
+                    f"{self._api_url}/v1/chat/completions",
                     json=payload,
                     headers=headers,
                 )
@@ -289,6 +291,9 @@ class OpenAICompatProvider(BaseProvider):
     def list_models(self) -> list[str]:
         return [
             "openai_compat:Qwen/Qwen2.5-Coder-32B-Instruct",
+            "openai_compat:deepseek-v4-pro",
+            "openai_compat:deepseek-reasoner",
+            "openai_compat:deepseek-chat",
         ]
 
     async def check_health(self) -> tuple[bool, str]:
@@ -297,7 +302,7 @@ class OpenAICompatProvider(BaseProvider):
             headers["Authorization"] = f"Bearer {self.api_key}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{self.base_url}/v1/models", headers=headers)
+                resp = await client.get(f"{self._api_url}/v1/models", headers=headers)
             if resp.status_code in {401, 403}:
                 return True, f"reachable (auth required, HTTP {resp.status_code})"
             if resp.status_code >= 400:

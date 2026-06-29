@@ -75,11 +75,9 @@ class ModelRouter:
         if task_type == TaskType.coding:
             models = [self.settings.code_model, self.settings.code_fallback_model]
             if complexity == "low":
-                models = [
-                    self.settings.fast_model,
-                    self.settings.code_model,
-                    self.settings.code_fallback_model,
-                ]
+                # Disabled fast_model tier: all coding tasks go to the selected model.
+                # models = [self.settings.fast_model, ...]
+                models = [self.settings.code_model, self.settings.code_fallback_model]
             elif complexity == "high":
                 models = [
                     self.settings.code_model,

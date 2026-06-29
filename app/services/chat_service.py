@@ -109,7 +109,7 @@ class ChatService:
         messages = list(compaction.messages)
         retrieval_hits = 0
         if not payload.skip_context_enrichment and self._enrichment is not None:
-            enrichment_messages = self._enrichment.build_system_messages(payload)
+            enrichment_messages = await self._enrichment.build_system_messages(payload)
             if enrichment_messages:
                 messages = enrichment_messages + messages
             if payload.use_retrieval and self._retrieval_enabled and self._retrieval is not None:
@@ -295,7 +295,7 @@ class ChatService:
 
         # Контекстная энричмент
         if not payload.skip_context_enrichment and self._enrichment is not None:
-            enrichment_messages = self._enrichment.build_system_messages(payload)
+            enrichment_messages = await self._enrichment.build_system_messages(payload)
             if enrichment_messages:
                 messages = enrichment_messages + messages
             if payload.use_retrieval and self._retrieval_enabled and self._retrieval is not None:
@@ -352,6 +352,7 @@ class ChatService:
                     "model": cached.model,
                     "session_id": session_id,
                     "history_size": len(messages),
+                    "attempted_models": [cached.model],
                     "cached": True,
                 })
                 # Отдаём кеш chunk'ами по ~50 символов для UI-фидбека
@@ -401,6 +402,7 @@ class ChatService:
                 "model": model_name,
                 "session_id": session_id,
                 "history_size": len(messages),
+                "attempted_models": candidate_models,
             })
 
             try:

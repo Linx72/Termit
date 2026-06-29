@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 
 from app.domain.schemas import AgentProfileResponse, AgentRunRequest, ChatMessage, ChatRequest
@@ -60,7 +61,7 @@ class ContextEnrichmentService:
             return at_match.group(1)
         return None
 
-    def build_system_messages(
+    async def build_system_messages(
         self,
         payload: ChatRequest,
         *,
@@ -98,8 +99,9 @@ class ContextEnrichmentService:
             return messages
 
         if payload.use_repo_map and self._repo_map_enabled and self._repo_map is not None:
+            map_text = await self._repo_map.build_summary_async(path_prefix=prefix)
             messages.append(
-                ChatMessage(role="system", content=self._repo_map.build_summary(path_prefix=prefix))
+                ChatMessage(role="system", content=map_text)
             )
 
         if payload.symbol_query and self._symbol_index is not None:
@@ -187,7 +189,7 @@ class ContextEnrichmentService:
 
         return messages
 
-    def build_agent_context_lines(
+    async def build_agent_context_lines(
         self,
         payload: AgentRunRequest,
         profile: AgentProfileResponse,
@@ -221,7 +223,8 @@ class ContextEnrichmentService:
             project_id=payload.project_id,
             symbol_query=payload.input if "@" in payload.input else self._infer_symbol_query(payload.input),
         )
-        lines = [message.content for message in self.build_system_messages(chat_payload, include_skills=False)]
+        system_messages = await self.build_system_messages(chat_payload, include_skills=False)
+        lines = [message.content for message in system_messages]
         if use_prompt_cache and self._prompt_cache is not None and cache_key:
             self._prompt_cache.put(cache_key, lines)
         return lines

@@ -5,11 +5,11 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
         "type": "function",
         "function": {
             "name": "list_files",
-            "description": "List files in a workspace directory.",
+            "description": "List files in the local filesystem.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Directory path relative to workspace root."},
+                    "path": {"type": "string", "description": "Directory path (absolute or relative)."},
                     "pattern": {"type": "string", "description": "Glob pattern, default *."},
                 },
                 "required": ["path"],
@@ -20,7 +20,7 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Read a file from the workspace.",
+            "description": "Read a file from the local filesystem.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -35,7 +35,7 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
         "type": "function",
         "function": {
             "name": "execute_command",
-            "description": "Execute a shell command in the workspace.",
+            "description": "Execute a shell command.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -52,7 +52,7 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
         "type": "function",
         "function": {
             "name": "apply_patch",
-            "description": "Apply a file patch in the workspace.",
+            "description": "Apply a file patch.",
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -58,7 +59,7 @@ class Phase2Tests(unittest.TestCase):
                 skills=["fix-ci"],
             )
             enrichment = ContextEnrichmentService(rules_store=rules, repo_map_enabled=False)
-            messages = enrichment.build_system_messages(
+            messages = asyncio.run(enrichment.build_system_messages(
                 ChatRequest(
                     message="fix bug",
                     task_type=TaskType.coding,
@@ -67,7 +68,7 @@ class Phase2Tests(unittest.TestCase):
                     use_repo_map=False,
                     use_context_packing=False,
                 )
-            )
+            ))
             self.assertEqual(len(messages), 1)
             self.assertIn("Always run tests", messages[0].content)
             self.assertIn("Reply in Russian", messages[0].content)
@@ -85,7 +86,7 @@ class Phase2Tests(unittest.TestCase):
                 symbol_index=SymbolIndexService(str(root)),
             )
             enrichment._symbol_index.reindex()
-            messages = enrichment.build_system_messages(
+            messages = asyncio.run(enrichment.build_system_messages(
                 ChatRequest(
                     message="Where is middleware?",
                     task_type=TaskType.coding,
@@ -94,7 +95,7 @@ class Phase2Tests(unittest.TestCase):
                     use_repo_map=False,
                     use_context_packing=False,
                 )
-            )
+            ))
             combined = "\n".join(m.content for m in messages)
             self.assertIn("middleware", combined)
             self.assertIn("Symbol graph", combined)

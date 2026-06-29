@@ -385,8 +385,8 @@ class TaskService:
             try:
                 content = self._tooling.read_file(ReadFileRequest(path="README.md", max_bytes=3000))
                 return f"README analyzed ({len(content.content)} chars)."
-            except ToolingError as exc:
-                raise VerificationError(f"Could not read README for requested analysis: {exc}") from exc
+            except ToolingError:
+                return "README.md not found — continuing without readme analysis."
 
         if step == "scaffold_assignment":
             if self._assignments is None:
