@@ -1943,26 +1943,6 @@ class AgentService:
             raise AgentPermissionError(f"Unsupported loop tool: {tool_name}")
         return json.dumps(result.model_dump(mode="json"), ensure_ascii=True), side_effects
 
-    def _wait_for_run(self, run_id: str, *, timeout_seconds: int = 120) -> dict[str, object]:
-        deadline = time.time() + max(5, timeout_seconds)
-        while time.time() < deadline:
-            record = self._run_store.get_run(run_id)
-            if record is None:
-                return {"run_id": run_id, "state": "missing"}
-            if record.state in {
-                AgentRunState.completed,
-                AgentRunState.failed,
-                AgentRunState.cancelled,
-            }:
-                return {
-                    "run_id": run_id,
-                    "state": record.state.value,
-                    "response": record.response[:2000],
-                    "error": record.error,
-                }
-            time.sleep(0.5)
-        return {"run_id": run_id, "state": "timeout"}
-
     def _emit_run_hook(
         self,
         *,

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import logging
 from pathlib import Path
 import time
+
+_logger = logging.getLogger("termit.state")
+
 from typing import Optional
 
 from app.core.config import get_settings
@@ -1213,6 +1217,7 @@ def _build_desktop_accelerator_service():
         try:
             record = agent_service.get_run(run_id)
         except Exception:
+            _logger.debug("run_lookup failed for %s", run_id, exc_info=True)
             return None
         return record.model_dump()
 

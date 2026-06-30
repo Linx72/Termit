@@ -279,6 +279,7 @@ class BraveSearchMcpClient:
             except asyncio.CancelledError:
                 break
             except Exception:
+                _logger.warning("Unexpected error in MCP reader loop, stopping", exc_info=True)
                 break
 
     def _handle_message(self, msg: dict) -> None:

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import time
+
+_logger = logging.getLogger("termit.agent_schedule")
+
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -134,6 +138,7 @@ class AgentScheduleService:
             try:
                 self._tick()
             except Exception:
+                _logger.error("Schedule loop tick failed", exc_info=True)
                 pass
             self._stop.wait(self._poll_interval_seconds)
 

@@ -3,6 +3,9 @@ from fastapi.responses import StreamingResponse
 from typing import AsyncIterator, Optional
 import asyncio
 import json
+import logging
+
+_logger = logging.getLogger("termit.finetune")
 
 from app.domain.schemas import (
     FinetuneAdapterListResponse,
@@ -453,6 +456,7 @@ async def distill_teacher_dataset(
                     system="You are a senior coding agent teacher.",
                 )
             except Exception:
+                _logger.warning("LLM teacher call failed, skipping task line", exc_info=True)
                 pass
         task_line = ""
         for line in prompt.splitlines():

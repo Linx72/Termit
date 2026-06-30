@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 import asyncio
+
+_logger = logging.getLogger("termit.chat_service")
+
 from time import time
 from typing import AsyncIterator, Optional
 
@@ -349,6 +353,7 @@ class ChatService:
                 tool_names = select_initial_tool_names()
                 tools = build_openai_tools(tool_names)
             except Exception:
+                _logger.warning("Failed to build tools, proceeding without tools", exc_info=True)
                 tools = None
 
         # ── Проверка кеша ответов (до вызова LLM) ──

@@ -1,7 +1,10 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse
+
+_logger = logging.getLogger("termit.metrics")
 
 from app.core.config import Settings, get_settings
 from app.domain.schemas import (
@@ -424,5 +427,5 @@ async def metrics_prometheus(
             lines.append("# TYPE termit_quota_usage_percent gauge")
             lines.append(_prom_line("termit_quota_usage_percent", usage_pct))
     except Exception:
-        pass
+        _logger.warning("quota metrics collection failed", exc_info=True)
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
