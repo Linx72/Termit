@@ -6,6 +6,7 @@ import asyncio
 from time import time
 from typing import AsyncIterator, Optional
 
+from app.domain.exceptions import GuardrailBlockedError
 from app.domain.schemas import (
     ChatMessage,
     ChatRequest,
@@ -19,6 +20,7 @@ from app.domain.schemas import (
 from app.services.code_retrieval_service import CodeRetrievalService
 from app.services.context_compaction import ContextCompactor
 from app.services.context_enrichment_service import ContextEnrichmentService
+from app.services.guardrail_service import GuardrailService
 from app.services.memory_store import MemoryBackend
 from app.services.model_router import ModelRouter
 from app.services.provider_circuit_breaker import ProviderCircuitBreaker
@@ -67,6 +69,7 @@ class ChatService:
         dual_pass_enabled: bool = False,
         dual_pass_task_types: str = "coding,review,debug",
         tooling_service: Optional[ToolingService] = None,
+        guardrail: Optional["GuardrailService"] = None,
     ) -> None:
         self.model_router = model_router
         self.providers = providers
@@ -93,6 +96,7 @@ class ChatService:
             if item.strip()
         }
         self._tooling = tooling_service
+        self._guardrail = guardrail
 
     async def chat(self, payload: ChatRequest) -> ChatResponse:
         started_at = time()
@@ -104,6 +108,13 @@ class ChatService:
         if payload.use_memory and session_id:
             messages.extend(self.memory_store.get(session_id))
         messages.append(ChatMessage(role="user", content=payload.message))
+
+        # Safety guardrail — block prompts with secrets/credentials before
+        # they reach an LLM, even in compacted form.
+        if self._guardrail:
+            result = self._guardrail.check_prompt(payload.message)
+            if not result.allowed:
+                raise GuardrailBlockedError()
 
         compaction = self._compactor.compact(messages)
         messages = list(compaction.messages)

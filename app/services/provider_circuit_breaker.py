@@ -32,3 +32,18 @@ class ProviderCircuitBreaker:
             self._failures[provider_name] = count
             if count >= self.failure_threshold:
                 self._opened_at[provider_name] = time.time()
+
+    def get_state(self) -> dict[str, str]:
+        now = time.time()
+        result: dict[str, str] = {}
+        with self._lock:
+            for provider in self._failures:
+                opened_at = self._opened_at.get(provider)
+                if opened_at and (now - opened_at) < self.cooldown_seconds:
+                    remaining = self.cooldown_seconds - (now - opened_at)
+                    result[provider] = f"OPEN (cooldown {remaining:.0f}s)"
+                else:
+                    result.setdefault(provider, "CLOSED")
+            for provider in self._opened_at:
+                result.setdefault(provider, "CLOSED")
+        return result

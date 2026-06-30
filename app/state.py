@@ -98,6 +98,19 @@ def get_reasoning_orchestrator_service() -> ReasoningOrchestratorService:
 
 
 @lru_cache
+def _build_circuit_breaker() -> ProviderCircuitBreaker:
+    settings = get_settings()
+    return ProviderCircuitBreaker(
+        failure_threshold=settings.circuit_failure_threshold,
+        cooldown_seconds=settings.circuit_cooldown_seconds,
+    )
+
+
+def get_circuit_breaker() -> ProviderCircuitBreaker:
+    return _build_circuit_breaker()
+
+
+@lru_cache
 def _build_chat_service() -> ChatService:
     settings = get_settings()
     providers = build_llm_providers(settings)
@@ -110,10 +123,7 @@ def _build_chat_service() -> ChatService:
         )
     else:
         memory_store = MemoryStore(max_messages_per_session=settings.memory_max_messages)
-    circuit_breaker = ProviderCircuitBreaker(
-        failure_threshold=settings.circuit_failure_threshold,
-        cooldown_seconds=settings.circuit_cooldown_seconds,
-    )
+    circuit_breaker = _build_circuit_breaker()
     response_cache = None
     if settings.response_cache_ttl_seconds > 0:
         response_cache = ResponseCacheStore(
@@ -128,6 +138,7 @@ def _build_chat_service() -> ChatService:
     )
     enrichment = _build_context_enrichment_service() if settings.context_enrichment_enabled else None
     tooling = get_tooling_service()
+    guardrail_service = GuardrailService()
     return ChatService(
         router,
         providers,
@@ -145,6 +156,7 @@ def _build_chat_service() -> ChatService:
         dual_pass_enabled=settings.dual_pass_enabled,
         dual_pass_task_types=settings.dual_pass_task_types,
         tooling_service=tooling,
+        guardrail=guardrail_service,
     )
 
 

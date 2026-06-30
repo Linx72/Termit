@@ -34,6 +34,8 @@ from app.api.routes.teams import router as teams_router
 from app.api.routes.retrieval import router as retrieval_router
 from app.api.routes.plugin_tools import router as plugin_tools_router
 from app.api.routes.session_search import router as session_search_router
+from app.api.routes.health import router as health_router
+from app.middleware.error_handler import ErrorHandlerMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_trace import RequestTraceMiddleware
 from app.api.routes.usage import router as usage_router
@@ -129,6 +131,7 @@ app = FastAPI(
     lifespan=_app_lifespan,
 )
 
+app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -171,6 +174,7 @@ app.include_router(platform_router)
 app.include_router(routing_router)
 app.include_router(finetune_router)
 app.include_router(web_router)
+app.include_router(health_router)
 
 _static_dir = Path(__file__).resolve().parent / "web" / "static"
 if _static_dir.is_dir():
