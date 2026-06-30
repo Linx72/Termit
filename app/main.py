@@ -38,6 +38,7 @@ from app.api.routes.health import router as health_router
 from app.middleware.error_handler import ErrorHandlerMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_trace import RequestTraceMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.api.routes.usage import router as usage_router
 from app.core.config import get_settings
 from app.middleware.auth_quota import AuthQuotaMiddleware
@@ -133,6 +134,9 @@ app = FastAPI(
 
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+# Per-endpoint rate limiting (before CORS/quota to protect unauthenticated endpoints)
+if settings.rate_limit_endpoints:
+    app.add_middleware(RateLimitMiddleware, endpoint_limits=settings.rate_limit_endpoints)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

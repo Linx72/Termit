@@ -23,13 +23,16 @@ from app.services.agent_service import AgentService
 from app.services.eval_service import EvalService
 from app.services.multi_agent_orchestrator import MultiAgentOrchestrator
 from app.services.plan_build_service import PlanBuildService
+from app.services.quota_store import QuotaStore
 from app.state import (
     get_agent_service,
+    get_circuit_breaker,
     get_desktop_kpi_gate_service,
     get_eval_service,
     get_metrics_snapshot_store,
     get_multi_agent_orchestrator,
     get_plan_build_service,
+    get_quota_store,
     get_telemetry_store,
     get_beta_cohort_service,
 )
@@ -396,4 +399,30 @@ async def metrics_prometheus(
             _prom_line("termit_plan_finetune_kpi_passed", finetune_passed),
         ]
     )
+    # --- P1: circuit breaker, error category, quota metrics ---
+    cb_state = get_circuit_breaker().get_state()
+    for provider, state_str in sorted(cb_state.items()):
+        safe_provider = provider.replace('"', "")
+        is_open = 1.0 if state_str.startswith("OPEN") else 0.0
+        lines.append("# HELP termit_circuit_breaker_state 1 if circuit is open, 0 if closed (per provider).")
+        lines.append("# TYPE termit_circuit_breaker_state gauge")
+        lines.append(_prom_line("termit_circuit_breaker_state", is_open, labels={"provider": safe_provider}))
+    failure_classes = summary.failure_classes if summary and hasattr(summary, "failure_classes") else {}
+    for category, count in sorted(failure_classes.items()):
+        safe_cat = str(category).replace('"', "")
+        lines.append("# HELP termit_errors_total Total errors by failure class category.")
+        lines.append("# TYPE termit_errors_total counter")
+        lines.append(_prom_line("termit_errors_total", int(count), labels={"category": safe_cat}))
+    try:
+        quota_store = get_quota_store()
+        usage_today = quota_store.list_usage_for_day()
+        if usage_today:
+            total_used = sum(usage_today.values())
+            total_limit = max(sum(int(c.daily_quota) for c in settings.api_keys.values()) if settings.api_keys else 1, 1)
+            usage_pct = min(round(total_used / max(total_limit, 1) * 100.0, 2), 100.0)
+            lines.append("# HELP termit_quota_usage_percent Current quota usage in percent of daily total.")
+            lines.append("# TYPE termit_quota_usage_percent gauge")
+            lines.append(_prom_line("termit_quota_usage_percent", usage_pct))
+    except Exception:
+        pass
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")

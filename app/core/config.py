@@ -103,6 +103,7 @@ class Settings:
     eval_scenarios_path: str
     task_backend: str
     task_sqlite_path: str
+    rate_limit_endpoints: dict[str, dict[str, int]] = field(default_factory=dict)
     teacher_model: str = "ollama:deepseek-coder"
     teacher_fallback_model: str = "openai_compat:deepseek-ai/deepseek-coder-33b-instruct"
     agent_run_backend: str = "sqlite"
@@ -370,6 +371,13 @@ def get_settings() -> Settings:
         feedback_file_path=os.getenv("TERMIT_FEEDBACK_FILE", "./data/feedback.jsonl"),
         circuit_failure_threshold=int(os.getenv("TERMIT_CIRCUIT_FAILURE_THRESHOLD", "3")),
         circuit_cooldown_seconds=int(os.getenv("TERMIT_CIRCUIT_COOLDOWN_SECONDS", "60")),
+        rate_limit_endpoints={
+            "/api/v1/chat/completions": {"window_sec": 60, "max_requests": 30},
+            "/api/v1/chat/completions/stream": {"window_sec": 60, "max_requests": 20},
+            "/api/login": {"window_sec": 60, "max_requests": 10},
+            "/api/register": {"window_sec": 60, "max_requests": 5},
+            "/api/auth/token": {"window_sec": 60, "max_requests": 20},
+        },
         eval_scenarios_path=os.getenv("TERMIT_EVAL_SCENARIOS_PATH", "./data/eval_scenarios.json"),
         task_backend=os.getenv("TERMIT_TASK_BACKEND", "sqlite"),
         task_sqlite_path=os.getenv("TERMIT_TASK_SQLITE_PATH", "./termit_tasks.db"),
