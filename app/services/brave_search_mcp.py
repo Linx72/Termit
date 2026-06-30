@@ -117,6 +117,7 @@ class BraveSearchMcpClient:
                 self._proc.stdin.close()
                 self._proc.stdout.close()
             except Exception:
+                _logger.debug("Cleanup: closing MCP stdin/stdout failed", exc_info=True)
                 pass
             try:
                 self._proc.wait(timeout=5)
