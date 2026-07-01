@@ -212,7 +212,7 @@ class SymbolIndexService:
     def _index_python(self, file_path: Path, rel: str) -> tuple[list[SymbolRecord], list[str], list[CallEdge]]:
         try:
             text = file_path.read_text(encoding="utf-8", errors="replace")
-            tree = ast.parse(text)
+            tree = ast.parse(text, filename=str(file_path))
         except (OSError, SyntaxError):
             return [], [], []
 
