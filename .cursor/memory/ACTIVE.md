@@ -1,27 +1,15 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-07-01 — браузер v2: CyberFlow интеграция завершена (37 тулов, 46 endpoint'ов)
+**Последнее обновление:** 2026-07-01 — тесты: 765 passed, 0 failed (фикс Python 3.14 event loop leak)
 
 ## Сводка
-- **CyberFlow browser v2:** 37 тулов Termit → CyberFlow через aiohttp browser_controller (46 endpoint'ов)
-- **Исправлены endpoint'ы:** 21 handler в __init_full.py выровнен с controller роутами (/double-click→/double_click, /cookies→/cookies/get, /storage/local/*→/localstorage/*, …)
-- **Файлы CyberFlow:** backend/browser_controller.py, tools/__init_full.py, tools/_schemas.py, tools/registry.py, tools/browser_tools.py
-- **Тулы:** 37 browser_* зарегистрированы и enabled (API /api/tools)
-- **Коммит:** c1c794f5 — "браузер v2: 37 тулов, 46 endpoint'ов, полная интеграция в TermitPro"
+- **Тесты:** 27 pre-existing failures исправлены одним фиксом в `tests/conftest.py`
+- **Корень:** Python 3.14 `asyncio.Runner.run()` падает с `RuntimeError: Runner.run() cannot be called from a running event loop` при кумулятивном загрязнении thread-local `_running_loop`
+- **Решение:** `asyncio.events._set_running_loop(None)` — C-функция сброса thread-local — вызывается перед/после каждого теста
+- **Результат:** 765 passed, 6 skipped, 0 failed, 5 warnings (deprecation `Starlette` + `\\\(` escape)
 
-## Файлы CyberFlow
-- `backend/browser_controller.py` — переписан: 46 роутов aiohttp (+966 строк)
-- `backend/tools/__init_full.py` — 37 handler'ов + диспатчер (+553/-?)
-- `backend/tools/_schemas.py` — 37 схем в TOOL_SCHEMAS (+413 строк)
-- `backend/tools/registry.py` — 37 регистраций (+46 строк)
-- `backend/tools/browser_tools.py` — __getattr__ для ленивого доступа (+47 строк)
-- `backend/chat_stream.py`, `backend/handlers.py`, `backend/tools_api.py` — замена имён
-
-## Smoke-тесты (2026-07-01)
-- navigate → example.com: ✅ title, text, refs
-- cookies/get → ✅ пустой список
-- tabs/list → ✅ 1 вкладка
-- /api/tools → ✅ 37 browser_* enabled
+## Файлы
+- `tests/conftest.py` — создан: 43 строки, `_reset_running_loop()` + `autouse` fixture
 
 ## Открытые задачи
 - [ ] `OPENAI_COMPAT_API_KEY` в `.env` + GitHub Secrets
