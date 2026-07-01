@@ -26,15 +26,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from playwright.sync_api import (
-    Browser,
-    BrowserContext,
-    Page,
-    Playwright,
-    sync_playwright,
-    TimeoutError as PlaywrightTimeout,
-    Error as PlaywrightError,
-)
+try:
+    from playwright.sync_api import (  # noqa: F401
+        Browser,
+        BrowserContext,
+        Page,
+        Playwright,
+        sync_playwright,
+        TimeoutError as PlaywrightTimeout,
+        Error as PlaywrightError,
+    )
+    _PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    _PLAYWRIGHT_AVAILABLE = False
 
 # ── Исключения ─────────────────────────────────────────────────────────────
 
