@@ -1,18 +1,22 @@
-# Termit Active Tasks — 30.06.2026 (ночь)
+# Termit Active Tasks — 01.07.2026
 
-## Выполнено
-- ✅ **test_ten_tasks_complete_and_expose_events** — read_readme handler исправлен
-- ✅ **Отключены быстрые ответы** — model_router.py (коммит 99703f8)
-- ✅ **DeepSeek V4 Pro Max** — модель по умолчанию во всех точках (коммит 235ca50):
-  - config.py, openai_compat_provider.py, .env, termit_backend.py, ~/.termit/config.yaml
-- ✅ **724 теста проходят**, 0 фейлов, 6 skipped
-- ✅ **Все серверы работают**: dev:8765, prod:8082, TermitPro:8646
+## Выполнено (сессия)
+- ✅ **Browser v2 → CyberFlow** — 37 тулов, 46 endpoint'ов (c1c794f5)
+- ✅ **Endpoint'ы исправлены** — 21 handler выровнен с контроллером
+- ✅ **Smoke-тесты** — navigate/cookies/tabs/element_som ✅
+- ✅ **API tools** — 37/37 browser_* enabled
+- ✅ **MCP + сессии + DB API** — полный срез (e0a9b047)
+- ✅ **Termit тесты** — 738 passed (7/7 browser), 27 предсуществующих фейлов
+- ✅ **ACTIVE.md + .cursor/memory** обновлены
+
+## Коммиты CyberFlow
+- `c1c794f5` — браузер v2: 37 тулов, 46 endpoint'ов (13 файлов, +1834/−473)
+- `e0a9b047` — MCP-регистрация, сессии, DB API (24 файла, +1598/−1259)
 
 ## Серверы
-- Dev: 0.0.0.0:8765 — PID 59161
-- Prod: 0.0.0.0:8082 — OK
-- TermitPro backend: 8646 — OK (engine=True, defaultModel=deepseek-v4-pro)
+- Dev: 0.0.0.0:8765 — OK
+- TermitPro backend: 8646 — OK (37 browser тулов)
 - Hermes dashboard: 18765 — OK
 
 ## Осталось
-- TermitPro приложение — проверить SwiftUI клиент (если нужна синхронизация)
+- 27 предсуществующих фейлов (vllm, sprint_top5, orchestrator)
