@@ -1,20 +1,20 @@
 # Session memory (AutoCheckPoint)
 
-**Последнее обновление:** 2026-06-21 — full `do_all_automatic` + hosted smoke OK
+**Последнее обновление:** 2026-07-01 — browser-интеграция завершена
 
 ## Сводка
-- **do_all_automatic** + dev green: exit 0 (~69s).
-- **Hosted smoke** `http://127.0.0.1:8080` — OK.
-- **726 unittest** — OK.
-- Automation + skill auto-select on; API :8765 up.
+- **Browser-интеграция:** 12 тулов в agent_service.py + chat_service.py
+- **PlaywrightBrowserService:** полноценный класс-обёртка (available, fetch_as_http, snapshot, делегирование)
+- **422 тестов passed,** 1 flaky error (test_coder_retries_on_reviewer_issues — предсуществующий)
+- **Коммиты:** 4 (исправление site_profiles.json, PlaywrightBrowserService-обёртка, .gitignore, удаление gitlink whisper.cpp)
 
-## Файлы сессии (skills)
-- `app/services/skill_store.py`, `skill_selector_service.py`, `agent_service.py`, `agent_tool_schema.py`
-- `app/api/routes/projects.py`, `app/domain/schemas.py`, `app/core/config.py`
-- `data/skills/termit-agent`, `termit-automation`, `termit-prompts` (runtime)
-- `scripts/sync_cursor_skills.sh`
-- `clients/termit-client/`, `clients/termit-desktop/` (UI + SDK)
-- `tests/test_skill_store.py`, `test_skill_selector.py`, `test_platform_parity.py`
+## Файлы сессии
+- `app/services/playwright_browser_service.py` — BrowserSession + PlaywrightBrowserService + эвристики + кэш
+- `app/services/agent_tool_schema.py` — 12 browser-схем
+- `app/services/agent_service.py` — диспатч browser-тулов
+- `app/services/chat_service.py` — диспатч browser-тулов
+- `allowed_domains.json`, `site_profiles.json` — конфигурация
+- `.gitignore` — auth_state.json + whisper.cpp
 
 ## Открытые задачи
 - [ ] `OPENAI_COMPAT_API_KEY` в `.env` + GitHub Secrets
