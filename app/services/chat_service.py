@@ -449,6 +449,8 @@ class ChatService:
                             yield self._sse_event("token", {"text": chunk.token})
 
                         if chunk.reasoning:
+                            chunk_text += chunk.reasoning
+                            full_text += chunk.reasoning
                             yield self._sse_event("reasoning", {"text": chunk.reasoning})
 
                         if chunk.tool_call_delta:
