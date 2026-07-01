@@ -38,8 +38,12 @@ from app.services.providers.base import (
 from app.services.response_cache_store import ResponseCacheStore
 from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingService
-from app.services.playwright_browser_service import PlaywrightBrowserService
-from app.services.playwright_browser_service import PlaywrightUnavailableError
+try:
+    from app.services.playwright_browser_service import PlaywrightBrowserService  # noqa: F401
+    from app.services.playwright_browser_service import PlaywrightUnavailableError  # noqa: F401
+except ImportError:
+    PlaywrightBrowserService = None  # type: ignore[assignment]
+    PlaywrightUnavailableError = RuntimeError  # type: ignore[assignment,misc]
 
 
 from dataclasses import dataclass, field

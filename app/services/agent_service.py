@@ -58,7 +58,11 @@ from app.services.agent_run_notifier import AgentRunNotifier
 from app.services.build_workflow_service import BuildWorkflowService
 from app.services.ssh_workspace_service import SshWorkspaceConfig, SshWorkspaceService
 from app.services.browser_workflow_service import BrowserWorkflowService
-from app.services.playwright_browser_service import PlaywrightBrowserService, PlaywrightUnavailableError
+try:
+    from app.services.playwright_browser_service import PlaywrightBrowserService, PlaywrightUnavailableError  # noqa: F401
+except ImportError:
+    PlaywrightBrowserService = None  # type: ignore[assignment]
+    PlaywrightUnavailableError = RuntimeError  # type: ignore[assignment,misc]
 from app.services.chat_service import ChatService
 from app.services.context_enrichment_service import ContextEnrichmentService
 from app.services.guardrail_service import GuardrailService
