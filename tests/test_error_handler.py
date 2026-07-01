@@ -1,9 +1,5 @@
 """Tests for error_handler middleware — taxonomy fields in JSON responses."""
 
-import pytest
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-
 from app.domain.exceptions import (
     TermitError,
     AuthError,
@@ -11,24 +7,6 @@ from app.domain.exceptions import (
     ProviderError,
     GuardrailBlockedError,
 )
-from app.middleware.error_handler import ErrorHandlerMiddleware
-
-
-@pytest.fixture
-def build_request():
-    """Scope helper to build a mock Starlette request."""
-    from unittest.mock import Mock, AsyncMock
-
-    def _build(scope_type: str = "http", headers: dict = None):
-        scope = {
-            "type": scope_type,
-            "method": "GET",
-            "path": "/",
-            "headers": [(k.encode(), v.encode()) for k, v in (headers or {}).items()],
-        }
-        req = Request(scope, receive=AsyncMock())
-        return req
-    return _build
 
 
 class TestErrorCategoryExtraction:

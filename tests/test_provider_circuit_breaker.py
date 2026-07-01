@@ -1,7 +1,6 @@
 """Tests for ProviderCircuitBreaker — fail-fast, cooldown, recovery."""
 
 import time
-import pytest
 from app.services.provider_circuit_breaker import ProviderCircuitBreaker
 
 

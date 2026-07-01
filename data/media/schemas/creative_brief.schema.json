@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "termit://media/creative_brief.schema.json",
+  "title": "CreativeBrief",
+  "type": "object",
+  "required": ["brief_id", "title", "goal", "audience", "duration_sec", "aspect_ratio", "language"],
+  "properties": {
+    "brief_id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "goal": { "type": "string", "minLength": 1 },
+    "audience": { "type": "string" },
+    "duration_sec": { "type": "number", "minimum": 5, "maximum": 600 },
+    "aspect_ratio": { "type": "string", "enum": ["16:9", "9:16", "1:1", "4:5"] },
+    "language": { "type": "string", "enum": ["ru", "en", "multi"] },
+    "tone": { "type": "string" },
+    "cta": { "type": "string" },
+    "brand_kit_id": { "type": "string" },
+    "references": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Paths or URLs to reference images"
+    },
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "no_text_in_frames": { "type": "boolean" },
+        "max_cost_usd": { "type": "number", "minimum": 0 },
+        "require_human_approve": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "deliverables": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["master_16x9", "reels_9x16", "thumb_png", "srt", "vo_wav"]
+      }
+    }
+  },
+  "additionalProperties": false
+}

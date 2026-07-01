@@ -1,6 +1,5 @@
 """Tests for agent loop errors — AgentLoopError, AgentDrainingError taxonomy."""
 
-import pytest
 from app.domain.exceptions import (
     TermitError,
     AgentLoopError,

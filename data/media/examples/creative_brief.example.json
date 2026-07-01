@@ -1,0 +1,19 @@
+{
+  "brief_id": "brief-termit-promo-001",
+  "title": "Termit Desktop — promo для разработчиков",
+  "goal": "Показать agent loop и Media Studio за 45 секунд",
+  "audience": "Разработчики Python/TypeScript, local-first AI",
+  "duration_sec": 45,
+  "aspect_ratio": "16:9",
+  "language": "ru",
+  "tone": "уверенный, без hype, технически точный",
+  "cta": "Скачать Termit Desktop и запустить первый agent run",
+  "brand_kit_id": "termit-default",
+  "references": ["data/media/examples/ref_desktop_screenshot.png"],
+  "constraints": {
+    "no_text_in_frames": true,
+    "max_cost_usd": 25,
+    "require_human_approve": true
+  },
+  "deliverables": ["master_16x9", "reels_9x16", "thumb_png", "srt"]
+}

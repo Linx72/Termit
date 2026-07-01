@@ -1,0 +1,12 @@
+{
+  "preset": "youtube_16x9",
+  "crossfade_sec": 0.3,
+  "output_name": "slideshow_demo.mp4",
+  "clips": [
+    {"asset_id": "REPLACE_ASSET_1", "duration_sec": 3},
+    {"asset_id": "REPLACE_ASSET_2", "duration_sec": 3},
+    {"asset_id": "REPLACE_ASSET_3", "duration_sec": 3}
+  ],
+  "audio_asset_id": null,
+  "subtitle_asset_id": null
+}

@@ -1,6 +1,5 @@
 """Tests for GuardrailService — secret/credential detection in prompts."""
 
-import pytest
 from app.services.guardrail_service import GuardrailService
 from app.domain.exceptions import GuardrailBlockedError
 

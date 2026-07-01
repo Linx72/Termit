@@ -1,0 +1,60 @@
+{
+  "storyboard_id": "sb-termit-promo-001",
+  "brief_id": "brief-termit-promo-001",
+  "aspect_ratio": "16:9",
+  "total_duration_sec": 45,
+  "fps": 30,
+  "scenes": [
+    {
+      "scene_id": "s01",
+      "duration_sec": 5,
+      "visual_prompt": "Abstract developer workspace, dark theme, subtle blue accent #1E40AF, no readable text",
+      "negative_prompt": "watermark, garbled text, logo",
+      "camera": "slow dolly in",
+      "voiceover": "Termit — локальный AI-оркестратор для кода и медиа.",
+      "render_mode": "text_to_video",
+      "transition_out": "crossfade 0.4s"
+    },
+    {
+      "scene_id": "s02",
+      "duration_sec": 8,
+      "visual_prompt": "Desktop IDE split view: chat panel and agent timeline, photoreal UI mock",
+      "camera": "static",
+      "voiceover": "Очередь run'ов, SSE timeline и tool loop в одном окне.",
+      "render_mode": "image_to_video",
+      "transition_out": "crossfade 0.3s"
+    },
+    {
+      "scene_id": "s03",
+      "duration_sec": 8,
+      "visual_prompt": "Storyboard JSON on screen, scene cards with duration labels",
+      "voiceover": "Studio-уровень: бриф, раскадровка, сцены и бюджет до рендера.",
+      "render_mode": "ken_burns",
+      "transition_out": "crossfade 0.3s"
+    },
+    {
+      "scene_id": "s04",
+      "duration_sec": 8,
+      "visual_prompt": "Cloud icons connecting to ffmpeg waveform, hybrid pipeline diagram",
+      "voiceover": "Cloud генерирует кадры, ffmpeg собирает финал на вашей машине.",
+      "render_mode": "image_to_video",
+      "transition_out": "crossfade 0.3s"
+    },
+    {
+      "scene_id": "s05",
+      "duration_sec": 8,
+      "visual_prompt": "Gallery of PNG and MP4 thumbnails in deliverables folder",
+      "voiceover": "Ассеты, версии и approve gate перед публикацией.",
+      "render_mode": "image_only",
+      "transition_out": "crossfade 0.3s"
+    },
+    {
+      "scene_id": "s06",
+      "duration_sec": 8,
+      "visual_prompt": "Clean end card, brand blue background, space for CTA text overlay in post",
+      "voiceover": "Скачайте Termit Desktop и запустите первый promo-run.",
+      "render_mode": "remotion_template",
+      "transition_out": "fade out 0.5s"
+    }
+  ]
+}

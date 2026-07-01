@@ -1,0 +1,10 @@
+{
+  "brand_kit_id": "termit-default",
+  "name": "Termit Default",
+  "colors": ["#1E40AF", "#0F172A", "#F8FAFC"],
+  "fonts": ["Inter", "JetBrains Mono"],
+  "logo_paths": ["data/media/examples/logo_termit_placeholder.svg"],
+  "voice_id": "alloy",
+  "music_mood": "tech ambient, light pulse, no vocals",
+  "style_prompt_suffix": "minimal, professional, dark UI, soft studio lighting"
+}

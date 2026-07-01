@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "termit://media/storyboard.schema.json",
+  "title": "Storyboard",
+  "type": "object",
+  "required": ["storyboard_id", "brief_id", "aspect_ratio", "total_duration_sec", "scenes"],
+  "properties": {
+    "storyboard_id": { "type": "string", "minLength": 1 },
+    "brief_id": { "type": "string", "minLength": 1 },
+    "aspect_ratio": { "type": "string", "enum": ["16:9", "9:16", "1:1", "4:5"] },
+    "total_duration_sec": { "type": "number", "minimum": 5 },
+    "fps": { "type": "integer", "minimum": 24, "maximum": 60, "default": 30 },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["scene_id", "duration_sec", "visual_prompt"],
+        "properties": {
+          "scene_id": { "type": "string", "minLength": 1 },
+          "duration_sec": { "type": "number", "minimum": 0.5, "maximum": 30 },
+          "visual_prompt": { "type": "string", "minLength": 1 },
+          "negative_prompt": { "type": "string" },
+          "camera": { "type": "string" },
+          "voiceover": { "type": "string" },
+          "sfx": { "type": "array", "items": { "type": "string" } },
+          "transition_out": { "type": "string" },
+          "render_mode": {
+            "type": "string",
+            "enum": ["image_only", "image_to_video", "text_to_video", "ken_burns", "remotion_template"],
+            "default": "image_to_video"
+          },
+          "reference_asset_id": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

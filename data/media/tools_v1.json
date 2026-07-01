@@ -1,0 +1,133 @@
+{
+  "version": "1.0.0",
+  "phase": 0,
+  "task_type_planned": "creative_media",
+  "tools": [
+    {
+      "name": "estimate_media_cost",
+      "phase": 1,
+      "sync": true,
+      "risk": "safe",
+      "description": "Pre-flight USD estimate from storyboard + provider tariffs.",
+      "parameters": {
+        "storyboard_path": "string",
+        "providers": "object optional"
+      }
+    },
+    {
+      "name": "generate_image",
+      "phase": 1,
+      "sync": true,
+      "risk": "confirm_if_over_usd",
+      "confirm_threshold_usd": 1.0,
+      "description": "Generate PNG/WebP from prompt; save to MediaAssetStore.",
+      "parameters": {
+        "prompt": "string",
+        "negative_prompt": "string optional",
+        "width": "integer",
+        "height": "integer",
+        "provider": "openai|fal|replicate|comfyui",
+        "scene_id": "string optional",
+        "reference_asset_id": "string optional",
+        "output_path": "string optional"
+      },
+      "returns": { "asset_id": "string", "path": "string", "cost_usd": "number" }
+    },
+    {
+      "name": "edit_image",
+      "phase": 1,
+      "sync": true,
+      "risk": "confirm",
+      "description": "Inpaint/upscale/edit existing asset.",
+      "parameters": {
+        "asset_id": "string",
+        "operation": "inpaint|upscale|remove_bg",
+        "mask_asset_id": "string optional",
+        "prompt": "string optional"
+      }
+    },
+    {
+      "name": "render_video",
+      "phase": 4,
+      "sync": false,
+      "risk": "confirm",
+      "description": "Start async I2V/T2V job; returns job_id.",
+      "parameters": {
+        "scene_id": "string",
+        "mode": "image_to_video|text_to_video",
+        "source_asset_id": "string optional",
+        "prompt": "string",
+        "duration_sec": "number",
+        "provider": "fal|replicate|runway"
+      },
+      "returns": { "job_id": "string" }
+    },
+    {
+      "name": "wait_media_job",
+      "phase": 4,
+      "sync": true,
+      "risk": "safe",
+      "description": "Poll until job terminal; attach assets to run.",
+      "parameters": { "job_id": "string", "timeout_sec": "integer default 600" }
+    },
+    {
+      "name": "tts_generate",
+      "phase": 2,
+      "sync": true,
+      "risk": "confirm_if_over_usd",
+      "confirm_threshold_usd": 0.5,
+      "description": "Voiceover WAV from script chunk.",
+      "parameters": {
+        "text": "string",
+        "voice_id": "string",
+        "language": "ru|en"
+      }
+    },
+    {
+      "name": "transcribe_media",
+      "phase": 2,
+      "sync": true,
+      "risk": "safe",
+      "description": "Whisper → SRT/VTT.",
+      "parameters": { "asset_id": "string", "language": "string optional" }
+    },
+    {
+      "name": "compose_media",
+      "phase": 2,
+      "sync": true,
+      "risk": "safe",
+      "description": "ffmpeg timeline: concat, xfade, overlay logo, burn subs, loudnorm.",
+      "parameters": {
+        "timeline_path": "string",
+        "output_name": "string",
+        "preset": "youtube_16x9|reels_9x16|telegram_1x1"
+      }
+    },
+    {
+      "name": "vision_qa_media",
+      "phase": 1,
+      "sync": true,
+      "risk": "safe",
+      "description": "Score asset vs brief/scene; suggest retry.",
+      "parameters": {
+        "asset_id": "string",
+        "criteria": "string",
+        "min_score": "number default 0.75"
+      },
+      "returns": { "score": "number", "passed": "boolean", "notes": "string" }
+    },
+    {
+      "name": "list_media_assets",
+      "phase": 1,
+      "sync": true,
+      "risk": "safe",
+      "description": "List assets for run_id or project_id.",
+      "parameters": { "run_id": "string optional", "scene_id": "string optional" }
+    }
+  ],
+  "multi_agent_preset": {
+    "id": "studio-pack",
+    "agents": ["creative-director", "visual-artist", "sound-designer", "editor", "qa-critic"],
+    "phase": 4
+  }
+}

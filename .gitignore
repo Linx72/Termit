@@ -65,6 +65,14 @@ data/eval_fixtures/*
 !data/beta_cohort_meta.json
 !data/media/
 data/media/*
+# Essential media fixtures — tracked for CI (schemas, tools, brand kits)
+!data/media/schemas/
+!data/media/schemas/*.json
+!data/media/examples/
+!data/media/examples/*.json
+!data/media/tools_v1.json
+!data/media/brand_kits/
+!data/media/brand_kits/*.json
 !data/media/workflows/
 !data/media/workflows/*.json
 
