@@ -177,7 +177,7 @@ class Settings:
     retrieval_enabled: bool = True
     retrieval_mode: str = "semantic"
     retrieval_auto_reindex: bool = True
-    retrieval_root_path: str = "/"
+    retrieval_root_path: str = "."
     retrieval_embed_model: str = "nomic-embed-text"
     retrieval_embed_cache_path: str = "./data/retrieval_embeddings.db"
     retrieval_max_chunks: int = 6
