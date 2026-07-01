@@ -97,37 +97,360 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
         "type": "function",
         "function": {
             "name": "browser_navigate",
-            "description": "Open a URL in the headless browser (Playwright when enabled).",
+            "description": (
+                "Перейти по URL в headless-браузере. "
+                "Перед первым переходом на новый домен система спросит разрешение "
+                "(один раз — запоминает навсегда). "
+                "Возвращает состояние страницы: title, url, интерактивные элементы."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string"},
-                    "timeout_seconds": {"type": "integer"},
+                    "url": {
+                        "type": "string",
+                        "description": "Полный URL для перехода (https://...).",
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Таймаут загрузки страницы в секундах (по умолчанию 30).",
+                    },
+                    "wait_until": {
+                        "type": "string",
+                        "enum": ["load", "domcontentloaded", "networkidle"],
+                        "description": "Когда считать страницу загруженной (по умолчанию domcontentloaded).",
+                    },
                 },
                 "required": ["url"],
             },
         },
     },
-    "browser_snapshot": {
+    "browser_get_page_state": {
         "type": "function",
         "function": {
-            "name": "browser_snapshot",
-            "description": "Return title and text excerpt from the active browser session.",
-            "parameters": {"type": "object", "properties": {}},
+            "name": "browser_get_page_state",
+            "description": (
+                "Получить текущее состояние страницы: title, url, текст, "
+                "список интерактивных элементов (кнопки, ссылки, поля ввода) "
+                "с их селекторами и типами. Используй перед click/fill чтобы "
+                "понять структуру страницы."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "include_html": {
+                        "type": "boolean",
+                        "description": "Включить полный HTML страницы (может быть большим).",
+                    },
+                    "max_elements": {
+                        "type": "integer",
+                        "description": "Макс. число интерактивных элементов (по умолчанию 50).",
+                    },
+                },
+            },
         },
     },
     "browser_click": {
         "type": "function",
         "function": {
             "name": "browser_click",
-            "description": "Click an element by CSS selector (requires confirmed=true).",
+            "description": (
+                "Кликнуть по элементу на странице по CSS-селектору или тексту. "
+                "Для чувствительных действий (купить, оплатить, удалить) "
+                "требуется confirmed=true. "
+                "Совет: сначала вызови browser_get_page_state чтобы найти "
+                "нужный селектор."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "selector": {"type": "string"},
-                    "confirmed": {"type": "boolean"},
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента (например, '#login-btn', 'button.submit').",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Альтернатива: текст элемента для поиска (например, 'Войти', 'Submit').",
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "Индекс элемента из browser_get_page_state (начинается с 0).",
+                    },
+                    "confirmed": {
+                        "type": "boolean",
+                        "description": "Подтверждение для чувствительных действий (покупка, оплата, удаление).",
+                    },
                 },
-                "required": ["selector"],
+            },
+        },
+    },
+    "browser_fill": {
+        "type": "function",
+        "function": {
+            "name": "browser_fill",
+            "description": (
+                "Заполнить поле ввода (input, textarea, select) на странице. "
+                "Совет: сначала вызови browser_get_page_state чтобы найти "
+                "нужное поле."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор поля ввода.",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Текст для ввода.",
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "Индекс элемента из browser_get_page_state.",
+                    },
+                    "clear_first": {
+                        "type": "boolean",
+                        "description": "Очистить поле перед вводом (по умолчанию true).",
+                    },
+                },
+                "required": ["value"],
+            },
+        },
+    },
+    "browser_get_text": {
+        "type": "function",
+        "function": {
+            "name": "browser_get_text",
+            "description": (
+                "Извлечь текст элемента или всей страницы. "
+                "Полезно после smart_search для извлечения карточек товаров."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента. Если не указан — весь текст страницы.",
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Максимальное число символов (по умолчанию 10000).",
+                    },
+                },
+            },
+        },
+    },
+    "browser_screenshot": {
+        "type": "function",
+        "function": {
+            "name": "browser_screenshot",
+            "description": (
+                "Сделать скриншот текущей страницы (или элемента). "
+                "Сохраняется в Media Studio как ассет."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента для скриншота (опционально, иначе вся страница).",
+                    },
+                    "full_page": {
+                        "type": "boolean",
+                        "description": "Скриншот всей страницы со скроллом (по умолчанию false).",
+                    },
+                    "project_id": {
+                        "type": "string",
+                        "description": "ID проекта для сохранения в Media Studio.",
+                    },
+                },
+            },
+        },
+    },
+    "browser_evaluate_js": {
+        "type": "function",
+        "function": {
+            "name": "browser_evaluate_js",
+            "description": (
+                "Выполнить JavaScript на странице и получить результат. "
+                "Используй для: извлечения данных из JSON в window.*, "
+                "прокрутки, изменения DOM."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "JavaScript-выражение для выполнения.",
+                    },
+                },
+                "required": ["expression"],
+            },
+        },
+    },
+    "browser_wait_for": {
+        "type": "function",
+        "function": {
+            "name": "browser_wait_for",
+            "description": (
+                "Подождать появления/исчезновения элемента или заданное время. "
+                "Полезно после кликов по кнопкам, которые загружают контент асинхронно."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента, которого ждём.",
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": ["visible", "hidden", "attached", "detached"],
+                        "description": "Какое состояние ждать (по умолчанию visible).",
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Максимальное время ожидания (по умолчанию 10).",
+                    },
+                },
+            },
+        },
+    },
+    "browser_smart_login": {
+        "type": "function",
+        "function": {
+            "name": "browser_smart_login",
+            "description": (
+                "Умный логин: автоматически находит форму входа на странице "
+                "(поле пароля + соседние поля + кнопка submit), заполняет "
+                "учётные данные и отправляет форму. "
+                "Работает на ЛЮБОМ сайте без предварительного знания его структуры. "
+                "Кэширует найденные селекторы для повторных заходов."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL страницы входа (если ещё не перешли).",
+                    },
+                    "username": {
+                        "type": "string",
+                        "description": "Логин или email.",
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "Пароль.",
+                    },
+                    "extra_fields": {
+                        "type": "object",
+                        "description": (
+                            "Дополнительные поля формы, если эвристика не справилась. "
+                            "Ключ — название поля (placeholder/label), значение — текст."
+                        ),
+                    },
+                    "submit_text": {
+                        "type": "string",
+                        "description": (
+                            "Текст на кнопке входа, если эвристика не нашла "
+                            "(например 'Sign in', 'Log in')."
+                        ),
+                    },
+                },
+                "required": ["username", "password"],
+            },
+        },
+    },
+    "browser_smart_search": {
+        "type": "function",
+        "function": {
+            "name": "browser_smart_search",
+            "description": (
+                "Умный поиск: автоматически находит поле поиска на странице "
+                "(по placeholder, aria-label, иконке лупы), вводит запрос, "
+                "отправляет и извлекает результаты (карточки товаров/статей). "
+                "Работает на ЛЮБОМ сайте без знания его структуры."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Поисковый запрос.",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "URL страницы с поиском (если ещё не перешли).",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Макс. число результатов (по умолчанию 10).",
+                    },
+                    "extract_cards": {
+                        "type": "boolean",
+                        "description": (
+                            "Извлечь текст карточек товаров (по умолчанию true). "
+                            "False — вернуть только заголовки."
+                        ),
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    "browser_smart_add_to_cart": {
+        "type": "function",
+        "function": {
+            "name": "browser_smart_add_to_cart",
+            "description": (
+                "Умное добавление в корзину: находит кнопку «добавить в корзину» "
+                "по тексту на 6+ языках, проверяет что действие не чувствительное "
+                "(не «купить сразу»), и кликает. "
+                "Требует confirmed=true."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_name": {
+                        "type": "string",
+                        "description": "Название товара для поиска в результатах.",
+                    },
+                    "confirmed": {
+                        "type": "boolean",
+                        "description": "Обязательное подтверждение (true).",
+                    },
+                    "quantity": {
+                        "type": "integer",
+                        "description": "Количество (если есть выбор).",
+                    },
+                },
+                "required": ["confirmed"],
+            },
+        },
+    },
+    "browser_allowed_domains": {
+        "type": "function",
+        "function": {
+            "name": "browser_allowed_domains",
+            "description": (
+                "Управление списком разрешённых доменов: добавить, удалить, показать. "
+                "Домены из списка не требуют подтверждения при первом заходе."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "add": {
+                        "type": "string",
+                        "description": "Домен для добавления в разрешённые (например, 'amazon.com').",
+                    },
+                    "remove": {
+                        "type": "string",
+                        "description": "Домен для удаления из разрешённых.",
+                    },
+                    "list": {
+                        "type": "boolean",
+                        "description": "Показать все разрешённые домены.",
+                    },
+                },
             },
         },
     },
@@ -472,7 +795,21 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
 # Группы для lazy tool schemas (ось B harness): старт с core, расширение по heuristics/usage.
 TOOL_TIER_CORE = frozenset({"list_files", "read_file", "describe_tools", "invoke_skill"})
 TOOL_TIER_MUTATE = frozenset({"apply_patch", "execute_command", "browser_click"})
-TOOL_TIER_BROWSER = frozenset({"browser_navigate", "browser_snapshot", "browser_click", "web_automation"})
+TOOL_TIER_BROWSER = frozenset({
+    "browser_navigate",
+    "browser_get_page_state",
+    "browser_click",
+    "browser_fill",
+    "browser_get_text",
+    "browser_screenshot",
+    "browser_evaluate_js",
+    "browser_wait_for",
+    "browser_smart_login",
+    "browser_smart_search",
+    "browser_smart_add_to_cart",
+    "browser_allowed_domains",
+    "web_automation",
+})
 TOOL_TIER_ONLINE = frozenset({"web_search"})
 TOOL_TIER_MCP = frozenset({"mcp_invoke", "mcp_read_resource", "mcp_get_prompt"})
 TOOL_TIER_AGENT = frozenset({"spawn_agent"})

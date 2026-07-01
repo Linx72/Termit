@@ -1510,13 +1510,22 @@ class AgentService:
         if tool_name == "describe_tools":
             names = resolve_described_tools(arguments, list(profile.enabled_tools or []))
             return build_tool_schema_response(names), side_effects
-        if tool_name in {
-            "web_automation",
-            "web_search",
+        # Множество всех browser-тулов (используется и в allow_online, и в диспатче)
+        _browser_tools = {
             "browser_navigate",
-            "browser_snapshot",
+            "browser_get_page_state",
             "browser_click",
-        } and not profile.allow_online:
+            "browser_fill",
+            "browser_get_text",
+            "browser_screenshot",
+            "browser_evaluate_js",
+            "browser_wait_for",
+            "browser_smart_login",
+            "browser_smart_search",
+            "browser_smart_add_to_cart",
+            "browser_allowed_domains",
+        }
+        if tool_name in ({"web_automation", "web_search"} | _browser_tools) and not profile.allow_online:
             raise AgentOnlineError(f"Agent '{profile.name}' is not configured for online execution.")
         if tool_name == "apply_patch" and self._guardrails is not None:
             content = arguments.get("content")
@@ -1524,7 +1533,7 @@ class AgentService:
                 patch_check = self._guardrails.check_patch_content(str(content))
                 if not patch_check.allowed:
                     raise GuardrailBlockedError(patch_check.reason)
-        if tool_name in {"browser_navigate", "browser_snapshot", "browser_click"}:
+        if tool_name in _browser_tools:
             browser = self._playwright_browser
             if browser is None or not browser.available():
                 raise AgentOnlineError(
@@ -1536,14 +1545,77 @@ class AgentService:
                     payload = browser.navigate(
                         str(arguments.get("url", "")),
                         timeout_seconds=int(arguments.get("timeout_seconds", 30)),
+                        wait_until=str(arguments.get("wait_until", "domcontentloaded")),
                     )
-                elif tool_name == "browser_snapshot":
-                    payload = browser.snapshot()
-                else:
+                elif tool_name == "browser_get_page_state":
+                    payload = browser.get_page_state(
+                        include_html=bool(arguments.get("include_html", False)),
+                        max_elements=int(arguments.get("max_elements", 50)),
+                    )
+                elif tool_name == "browser_click":
                     payload = browser.click(
-                        str(arguments.get("selector", "")),
+                        selector=str(arguments.get("selector", "")),
+                        text=str(arguments.get("text", "")),
+                        index=arguments.get("index"),
                         confirmed=bool(arguments.get("confirmed", False)),
                     )
+                elif tool_name == "browser_fill":
+                    payload = browser.fill(
+                        selector=str(arguments.get("selector", "")),
+                        value=str(arguments.get("value", "")),
+                        index=arguments.get("index"),
+                        clear_first=bool(arguments.get("clear_first", True)),
+                    )
+                elif tool_name == "browser_get_text":
+                    payload = browser.get_text(
+                        selector=str(arguments.get("selector", "")),
+                        max_chars=int(arguments.get("max_chars", 10000)),
+                    )
+                elif tool_name == "browser_screenshot":
+                    payload = browser.screenshot(
+                        selector=str(arguments.get("selector", "")),
+                        full_page=bool(arguments.get("full_page", False)),
+                        project_id=str(arguments.get("project_id", "")),
+                    )
+                elif tool_name == "browser_evaluate_js":
+                    payload = browser.evaluate_js(
+                        str(arguments.get("expression", "")),
+                    )
+                elif tool_name == "browser_wait_for":
+                    payload = browser.wait_for(
+                        selector=str(arguments.get("selector", "")),
+                        state=str(arguments.get("state", "visible")),
+                        timeout_seconds=int(arguments.get("timeout_seconds", 10)),
+                    )
+                elif tool_name == "browser_smart_login":
+                    payload = browser.smart_login(
+                        url=str(arguments.get("url", "")),
+                        username=str(arguments.get("username", "")),
+                        password=str(arguments.get("password", "")),
+                        extra_fields=arguments.get("extra_fields"),
+                        submit_text=str(arguments.get("submit_text", "")),
+                    )
+                elif tool_name == "browser_smart_search":
+                    payload = browser.smart_search(
+                        query=str(arguments.get("query", "")),
+                        url=str(arguments.get("url", "")),
+                        max_results=int(arguments.get("max_results", 10)),
+                        extract_cards=bool(arguments.get("extract_cards", True)),
+                    )
+                elif tool_name == "browser_smart_add_to_cart":
+                    payload = browser.smart_add_to_cart(
+                        product_name=str(arguments.get("product_name", "")),
+                        confirmed=bool(arguments.get("confirmed", False)),
+                        quantity=arguments.get("quantity"),
+                    )
+                elif tool_name == "browser_allowed_domains":
+                    payload = browser.manage_allowed_domains(
+                        add=str(arguments.get("add", "")),
+                        remove=str(arguments.get("remove", "")),
+                        list_domains=bool(arguments.get("list", False)),
+                    )
+                else:
+                    payload = {"error": f"Unknown browser tool: {tool_name}"}
             except PlaywrightUnavailableError as exc:
                 raise AgentOnlineError(str(exc)) from exc
             side_effects.append((tool_name, str(payload.get("url", payload.get("executed", "")))))

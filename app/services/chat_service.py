@@ -38,6 +38,8 @@ from app.services.providers.base import (
 from app.services.response_cache_store import ResponseCacheStore
 from app.services.telemetry_store import TelemetryStore
 from app.services.tooling_service import ToolingService
+from app.services.playwright_browser_service import PlaywrightBrowserService
+from app.services.playwright_browser_service import PlaywrightUnavailableError
 
 
 from dataclasses import dataclass, field
@@ -74,6 +76,7 @@ class ChatService:
         dual_pass_task_types: str = "coding,review,debug",
         tooling_service: Optional[ToolingService] = None,
         guardrail: Optional["GuardrailService"] = None,
+        browser: Optional[PlaywrightBrowserService] = None,
     ) -> None:
         self.model_router = model_router
         self.providers = providers
@@ -101,6 +104,7 @@ class ChatService:
         }
         self._tooling = tooling_service
         self._guardrail = guardrail
+        self._browser = browser
 
     async def chat(self, payload: ChatRequest) -> ChatResponse:
         started_at = time()
@@ -612,6 +616,90 @@ class ChatService:
                     content=str(content) if content else "",
                     hunks=hunks if isinstance(hunks, list) else [],
                 )
+                return json.dumps(result, ensure_ascii=True)
+
+            # ── Browser-тулы ──
+            elif tc.name.startswith("browser_"):
+                if self._browser is None or not self._browser.available():
+                    return json.dumps({"error": "Playwright browser не доступен"})
+                try:
+                    if tc.name == "browser_navigate":
+                        result = self._browser.navigate(
+                            str(tc.arguments.get("url", "")),
+                            timeout_seconds=int(tc.arguments.get("timeout_seconds", 30)),
+                            wait_until=str(tc.arguments.get("wait_until", "domcontentloaded")),
+                        )
+                    elif tc.name == "browser_get_page_state":
+                        result = self._browser.get_page_state(
+                            include_html=bool(tc.arguments.get("include_html", False)),
+                            max_elements=int(tc.arguments.get("max_elements", 50)),
+                        )
+                    elif tc.name == "browser_click":
+                        result = self._browser.click(
+                            selector=str(tc.arguments.get("selector", "")),
+                            text=str(tc.arguments.get("text", "")),
+                            index=tc.arguments.get("index"),
+                            confirmed=bool(tc.arguments.get("confirmed", False)),
+                        )
+                    elif tc.name == "browser_fill":
+                        result = self._browser.fill(
+                            selector=str(tc.arguments.get("selector", "")),
+                            value=str(tc.arguments.get("value", "")),
+                            index=tc.arguments.get("index"),
+                            clear_first=bool(tc.arguments.get("clear_first", True)),
+                        )
+                    elif tc.name == "browser_get_text":
+                        result = self._browser.get_text(
+                            selector=str(tc.arguments.get("selector", "")),
+                            max_chars=int(tc.arguments.get("max_chars", 10000)),
+                        )
+                    elif tc.name == "browser_screenshot":
+                        result = self._browser.screenshot(
+                            selector=str(tc.arguments.get("selector", "")),
+                            full_page=bool(tc.arguments.get("full_page", False)),
+                            project_id=str(tc.arguments.get("project_id", "")),
+                        )
+                    elif tc.name == "browser_evaluate_js":
+                        result = self._browser.evaluate_js(
+                            str(tc.arguments.get("expression", "")),
+                        )
+                    elif tc.name == "browser_wait_for":
+                        result = self._browser.wait_for(
+                            selector=str(tc.arguments.get("selector", "")),
+                            state=str(tc.arguments.get("state", "visible")),
+                            timeout_seconds=int(tc.arguments.get("timeout_seconds", 10)),
+                        )
+                    elif tc.name == "browser_smart_login":
+                        result = self._browser.smart_login(
+                            url=str(tc.arguments.get("url", "")),
+                            username=str(tc.arguments.get("username", "")),
+                            password=str(tc.arguments.get("password", "")),
+                            extra_fields=tc.arguments.get("extra_fields"),
+                            submit_text=str(tc.arguments.get("submit_text", "")),
+                        )
+                    elif tc.name == "browser_smart_search":
+                        result = self._browser.smart_search(
+                            query=str(tc.arguments.get("query", "")),
+                            url=str(tc.arguments.get("url", "")),
+                            max_results=int(tc.arguments.get("max_results", 10)),
+                            extract_cards=bool(tc.arguments.get("extract_cards", True)),
+                        )
+                    elif tc.name == "browser_smart_add_to_cart":
+                        result = self._browser.smart_add_to_cart(
+                            product_name=str(tc.arguments.get("product_name", "")),
+                            confirmed=bool(tc.arguments.get("confirmed", False)),
+                            quantity=tc.arguments.get("quantity"),
+                        )
+                    elif tc.name == "browser_allowed_domains":
+                        result = self._browser.manage_allowed_domains(
+                            add=str(tc.arguments.get("add", "")),
+                            remove=str(tc.arguments.get("remove", "")),
+                            list_domains=bool(tc.arguments.get("list", False)),
+                        )
+                    else:
+                        result = {"error": f"Неизвестный browser-тул: {tc.name}"}
+                except PlaywrightUnavailableError as exc:
+                    result = {"error": f"Браузер недоступен: {exc}"}
                 return json.dumps(result, ensure_ascii=True)
 
             else:
