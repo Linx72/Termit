@@ -94,3 +94,10 @@ venv/
 
 # OS
 .DS_Store
+
+# Playwright runtime artifacts
+auth_state.json
+auth_state.json.bak
+
+# whisper.cpp build dependency
+clients/termit-desktop/whisper.cpp/
