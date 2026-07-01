@@ -696,6 +696,127 @@ class ChatService:
                             remove=str(tc.arguments.get("remove", "")),
                             list_domains=bool(tc.arguments.get("list", False)),
                         )
+                    # --- Фаза 1: базовые примитивы (7) ---
+                    elif tc.name == "browser_scroll":
+                        result = self._browser.scroll(
+                            amount=int(tc.arguments.get("amount", 300)),
+                            direction=str(tc.arguments.get("direction", "down")),
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_hover":
+                        result = self._browser.hover(
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_double_click":
+                        result = self._browser.double_click(
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_right_click":
+                        result = self._browser.right_click(
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_type_text":
+                        result = self._browser.type_text(
+                            selector=str(tc.arguments.get("selector", "")),
+                            text=str(tc.arguments.get("text", "")),
+                            delay=int(tc.arguments.get("delay", 50)),
+                        )
+                    elif tc.name == "browser_press_key":
+                        result = self._browser.press_key(
+                            key=str(tc.arguments.get("key", "")),
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_drag":
+                        result = self._browser.drag(
+                            source_selector=str(tc.arguments.get("source_selector", "")),
+                            target_selector=str(tc.arguments.get("target_selector", "")),
+                        )
+                    # --- Фаза 2: мульти-табы (4) ---
+                    elif tc.name == "browser_new_tab":
+                        result = self._browser.new_tab(
+                            url=str(tc.arguments.get("url", "")),
+                        )
+                    elif tc.name == "browser_switch_tab":
+                        result = self._browser.switch_tab(
+                            index=int(tc.arguments.get("index", 0)),
+                        )
+                    elif tc.name == "browser_close_tab":
+                        result = self._browser.close_tab(
+                            index=int(tc.arguments.get("index", -1)),
+                        )
+                    elif tc.name == "browser_list_tabs":
+                        result = self._browser.list_tabs()
+                    # --- Фаза 3: диалоги, загрузки, хранилище (4) ---
+                    elif tc.name == "browser_handle_dialog":
+                        result = self._browser.handle_dialog(
+                            action=str(tc.arguments.get("action", "accept")),
+                            prompt_text=str(tc.arguments.get("prompt_text", "")),
+                        )
+                    elif tc.name == "browser_upload_file":
+                        result = self._browser.upload_file(
+                            selector=str(tc.arguments.get("selector", "")),
+                            file_path=str(tc.arguments.get("file_path", "")),
+                        )
+                    elif tc.name == "browser_cookies":
+                        result = self._browser.cookies(
+                            action=str(tc.arguments.get("action", "get")),
+                            cookie_data=tc.arguments.get("cookie_data"),
+                        )
+                    elif tc.name == "browser_local_storage":
+                        result = self._browser.local_storage(
+                            action=str(tc.arguments.get("action", "get")),
+                            key=str(tc.arguments.get("key", "")),
+                            value=str(tc.arguments.get("value", "")),
+                        )
+                    # --- Фаза 4: визуальный режим (3) ---
+                    elif tc.name == "browser_screenshot_element":
+                        result = self._browser.screenshot_element(
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_element_som":
+                        result = self._browser.element_som(
+                            max_elements=int(tc.arguments.get("max_elements", 30)),
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_visual_qa":
+                        result = self._browser.visual_qa(
+                            question=str(tc.arguments.get("question", "")),
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    # --- Фаза 5: сеть и iframe (3) ---
+                    elif tc.name == "browser_network_requests":
+                        result = self._browser.network_requests(
+                            action=str(tc.arguments.get("action", "list")),
+                            url_filter=str(tc.arguments.get("url_filter", "")),
+                        )
+                    elif tc.name == "browser_iframe_switch":
+                        result = self._browser.iframe_switch(
+                            action=str(tc.arguments.get("action", "list")),
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_device_emulate":
+                        result = self._browser.device_emulate(
+                            device=str(tc.arguments.get("device", "Desktop")),
+                        )
+                    # --- Фаза 6: смарт-тулы v2 (4) ---
+                    elif tc.name == "browser_smart_form":
+                        result = self._browser.smart_form(
+                            url=str(tc.arguments.get("url", "")),
+                            fields=tc.arguments.get("fields", {}),
+                        )
+                    elif tc.name == "browser_smart_extract":
+                        result = self._browser.smart_extract(
+                            extract_type=str(tc.arguments.get("extract_type", "tables")),
+                            selector=str(tc.arguments.get("selector", "")),
+                        )
+                    elif tc.name == "browser_smart_checkout":
+                        result = self._browser.smart_checkout(
+                            url=str(tc.arguments.get("url", "")),
+                            steps=tc.arguments.get("steps"),
+                            auto_continue=bool(tc.arguments.get("auto_continue", False)),
+                        )
+                    elif tc.name == "browser_smart_captcha_detect":
+                        result = self._browser.smart_captcha_detect()
                     else:
                         result = {"error": f"Неизвестный browser-тул: {tc.name}"}
                 except PlaywrightUnavailableError as exc:

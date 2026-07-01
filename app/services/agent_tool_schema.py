@@ -454,6 +454,608 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
             },
         },
     },
+    # --- Фаза 1: базовые примитивы (7 тулов) ---
+    "browser_scroll": {
+        "type": "function",
+        "function": {
+            "name": "browser_scroll",
+            "description": (
+                "Прокрутка страницы вниз/вверх/влево/вправо на N пикселей "
+                "или до указанного элемента (selector)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "amount": {
+                        "type": "integer",
+                        "description": "Количество пикселей для скролла (по умолчанию 300).",
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["up", "down", "left", "right"],
+                        "description": "Направление скролла.",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента, до которого нужно проскроллить.",
+                    },
+                },
+            },
+        },
+    },
+    "browser_hover": {
+        "type": "function",
+        "function": {
+            "name": "browser_hover",
+            "description": (
+                "Навести курсор на элемент (hover). Полезно для раскрытия меню, "
+                "подсказок, выпадающих списков."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента для наведения.",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    "browser_double_click": {
+        "type": "function",
+        "function": {
+            "name": "browser_double_click",
+            "description": (
+                "Двойной клик по элементу. Чувствительное действие — "
+                "требует подтверждения для кнопок покупки/удаления."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента для двойного клика.",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    "browser_right_click": {
+        "type": "function",
+        "function": {
+            "name": "browser_right_click",
+            "description": (
+                "Правый клик по элементу (вызов контекстного меню). "
+                "Полезно для сохранения изображений, копирования ссылок."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента для правого клика.",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    "browser_type_text": {
+        "type": "function",
+        "function": {
+            "name": "browser_type_text",
+            "description": (
+                "Постепенный ввод текста в поле с эмуляцией нажатий клавиш "
+                "(в отличие от browser_fill, который вставляет мгновенно). "
+                "Нужен для полей с авто-дополнением и реактивных UI."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор поля ввода.",
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "Текст для ввода.",
+                    },
+                    "delay": {
+                        "type": "integer",
+                        "description": "Задержка между нажатиями в мс (по умолчанию 50).",
+                    },
+                },
+                "required": ["selector", "text"],
+            },
+        },
+    },
+    "browser_press_key": {
+        "type": "function",
+        "function": {
+            "name": "browser_press_key",
+            "description": (
+                "Нажать клавишу на клавиатуре (Enter, Escape, Tab, ArrowDown, "
+                "Ctrl+C и т.д.). Можно указать селектор для фокуса перед нажатием."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Клавиша: Enter, Escape, Tab, ArrowDown/Up/Left/Right, Backspace, Delete, PageDown, F5, Ctrl+A и др.",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента для фокуса перед нажатием.",
+                    },
+                },
+                "required": ["key"],
+            },
+        },
+    },
+    "browser_drag": {
+        "type": "function",
+        "function": {
+            "name": "browser_drag",
+            "description": (
+                "Перетащить элемент (drag-and-drop) из source в target. "
+                "Полезно для сортировки, загрузки файлов перетаскиванием."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source_selector": {
+                        "type": "string",
+                        "description": "CSS-селектор исходного элемента.",
+                    },
+                    "target_selector": {
+                        "type": "string",
+                        "description": "CSS-селектор целевого элемента.",
+                    },
+                },
+                "required": ["source_selector", "target_selector"],
+            },
+        },
+    },
+    # --- Фаза 2: мульти-табы (4 тула) ---
+    "browser_new_tab": {
+        "type": "function",
+        "function": {
+            "name": "browser_new_tab",
+            "description": (
+                "Открыть новую вкладку браузера. Если указан url — "
+                "перейти по нему в новой вкладке."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL для открытия в новой вкладке.",
+                    },
+                },
+            },
+        },
+    },
+    "browser_switch_tab": {
+        "type": "function",
+        "function": {
+            "name": "browser_switch_tab",
+            "description": (
+                "Переключиться на вкладку по индексу (0-based). "
+                "Используйте browser_list_tabs чтобы узнать индексы."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "index": {
+                        "type": "integer",
+                        "description": "Индекс вкладки (0 — первая).",
+                    },
+                },
+                "required": ["index"],
+            },
+        },
+    },
+    "browser_close_tab": {
+        "type": "function",
+        "function": {
+            "name": "browser_close_tab",
+            "description": (
+                "Закрыть вкладку. По умолчанию закрывает текущую. "
+                "Нельзя закрыть последнюю вкладку."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "index": {
+                        "type": "integer",
+                        "description": "Индекс вкладки для закрытия (-1 = текущая).",
+                    },
+                },
+            },
+        },
+    },
+    "browser_list_tabs": {
+        "type": "function",
+        "function": {
+            "name": "browser_list_tabs",
+            "description": (
+                "Показать список всех открытых вкладок с URL и заголовками. "
+                "Текущая вкладка отмечена флагом is_current."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    # --- Фаза 3: диалоги, загрузки, хранилище (4 тула) ---
+    "browser_handle_dialog": {
+        "type": "function",
+        "function": {
+            "name": "browser_handle_dialog",
+            "description": (
+                "Обработать диалоговое окно (alert/confirm/prompt). "
+                "Принять, отклонить или ввести текст в prompt."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["accept", "dismiss"],
+                        "description": "Действие: accept — принять, dismiss — отклонить.",
+                    },
+                    "prompt_text": {
+                        "type": "string",
+                        "description": "Текст для ввода (только для prompt-диалогов).",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    "browser_upload_file": {
+        "type": "function",
+        "function": {
+            "name": "browser_upload_file",
+            "description": (
+                "Загрузить файл в input[type=file]. "
+                "Укажите селектор поля и путь к файлу."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор поля загрузки (input[type=file]).",
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Абсолютный путь к загружаемому файлу.",
+                    },
+                },
+                "required": ["selector", "file_path"],
+            },
+        },
+    },
+    "browser_cookies": {
+        "type": "function",
+        "function": {
+            "name": "browser_cookies",
+            "description": (
+                "Управление cookies: получить все, установить или очистить. "
+                "Полезно для работы с сессиями и аутентификацией."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["get", "set", "clear"],
+                        "description": "get — получить cookies, set — установить, clear — очистить.",
+                    },
+                    "cookie_data": {
+                        "type": "object",
+                        "description": (
+                            "Данные cookie для установки: "
+                            "{name, value, domain, path, secure, httpOnly, sameSite, expires}."
+                        ),
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    "browser_local_storage": {
+        "type": "function",
+        "function": {
+            "name": "browser_local_storage",
+            "description": (
+                "Управление localStorage: читать, писать, удалять ключи, "
+                "очищать всё. Полезно для работы с состоянием приложения."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["get", "set", "remove", "clear", "keys"],
+                        "description": "Действие с localStorage.",
+                    },
+                    "key": {
+                        "type": "string",
+                        "description": "Ключ (для get/set/remove).",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Значение (для set).",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    # --- Фаза 4: визуальный режим (3 тула) ---
+    "browser_screenshot_element": {
+        "type": "function",
+        "function": {
+            "name": "browser_screenshot_element",
+            "description": (
+                "Скриншот конкретного элемента страницы (не всей). "
+                "Возвращает base64 PNG."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента для скриншота.",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    "browser_element_som": {
+        "type": "function",
+        "function": {
+            "name": "browser_element_som",
+            "description": (
+                "Set-of-Marks: скриншот с пронумерованными интерактивными элементами. "
+                "Возвращает скриншот в base64 + список маркеров с координатами. "
+                "Используйте для визуальной навигации: получите скриншот, "
+                "найдите нужный элемент по номеру и кликайте по нему."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "max_elements": {
+                        "type": "integer",
+                        "description": "Максимальное количество маркеров (по умолчанию 30).",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "Ограничить поиск элементов внутри этого селектора.",
+                    },
+                },
+            },
+        },
+    },
+    "browser_visual_qa": {
+        "type": "function",
+        "function": {
+            "name": "browser_visual_qa",
+            "description": (
+                "Визуальный вопрос по странице: делает скриншот и возвращает его "
+                "вместе с вопросом. Ответ должен дать multimodal LLM, "
+                "анализирующий изображение."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "Вопрос о содержимом страницы.",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор элемента (если нужен скриншот конкретного элемента).",
+                    },
+                },
+                "required": ["question"],
+            },
+        },
+    },
+    # --- Фаза 5: сеть и iframe (3 тула) ---
+    "browser_network_requests": {
+        "type": "function",
+        "function": {
+            "name": "browser_network_requests",
+            "description": (
+                "Мониторинг сетевых запросов страницы: "
+                "start — начать перехват, list — показать перехваченные, "
+                "stop — остановить, clear — очистить лог."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["start", "list", "stop", "clear"],
+                        "description": "Действие с сетевым мониторингом.",
+                    },
+                    "url_filter": {
+                        "type": "string",
+                        "description": "Фильтр по URL (для list).",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    "browser_iframe_switch": {
+        "type": "function",
+        "function": {
+            "name": "browser_iframe_switch",
+            "description": (
+                "Навигация по iframe: list — показать все iframe, "
+                "switch — переключиться в iframe по селектору/name, "
+                "main — вернуться в основной фрейм."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "switch", "main"],
+                        "description": "Действие с iframe.",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "Селектор/имя/URL iframe (для switch).",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    "browser_device_emulate": {
+        "type": "function",
+        "function": {
+            "name": "browser_device_emulate",
+            "description": (
+                "Эмуляция мобильного устройства. Меняет viewport, "
+                "user-agent и тач-режим. Полезно для тестирования "
+                "мобильных версий сайтов."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device": {
+                        "type": "string",
+                        "enum": [
+                            "iPhone 15", "iPhone 15 Pro", "Pixel 7",
+                            "iPad Pro", "Galaxy S23", "Desktop",
+                        ],
+                        "description": "Устройство для эмуляции.",
+                    },
+                },
+            },
+        },
+    },
+    # --- Фаза 6: смарт-тулы v2 (4 тула) ---
+    "browser_smart_form": {
+        "type": "function",
+        "function": {
+            "name": "browser_smart_form",
+            "description": (
+                "Универсальное заполнение форм. Анализирует label/placeholder/name "
+                "полей на странице и заполняет по словарю fields. "
+                "Эвристически находит поля даже без точных селекторов."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL страницы с формой.",
+                    },
+                    "fields": {
+                        "type": "object",
+                        "description": (
+                            "Словарь: имя поля → значение. "
+                            'Пример: {"email": "user@test.com", "password": "secret"}.'
+                        ),
+                    },
+                },
+                "required": ["url", "fields"],
+            },
+        },
+    },
+    "browser_smart_extract": {
+        "type": "function",
+        "function": {
+            "name": "browser_smart_extract",
+            "description": (
+                "Извлечение структурированных данных со страницы: "
+                "tables — все таблицы, lists — списки, prices — цены, "
+                "links — ссылки, headings — заголовки."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "extract_type": {
+                        "type": "string",
+                        "enum": ["tables", "lists", "prices", "links", "headings"],
+                        "description": "Тип данных для извлечения.",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS-селектор для ограничения области извлечения.",
+                    },
+                },
+                "required": ["extract_type"],
+            },
+        },
+    },
+    "browser_smart_checkout": {
+        "type": "function",
+        "function": {
+            "name": "browser_smart_checkout",
+            "description": (
+                "Пошаговый чекаут: автоматически проходит шаги оформления заказа "
+                "с паузами для подтверждения пользователем на каждом шаге. "
+                "Безопасный режим — не выполняет финальное подтверждение без явной команды."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL корзины или чекаута.",
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "action": {"type": "string"},
+                                "selector": {"type": "string"},
+                                "value": {"type": "string"},
+                                "hint": {"type": "string"},
+                            },
+                        },
+                        "description": "Шаги чекаута. Если не указаны — автоопределение.",
+                    },
+                    "auto_continue": {
+                        "type": "boolean",
+                        "description": "Продолжать при ошибках (по умолчанию false — пауза).",
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    "browser_smart_captcha_detect": {
+        "type": "function",
+        "function": {
+            "name": "browser_smart_captcha_detect",
+            "description": (
+                "Обнаружение капчи на странице. Определяет reCAPTCHA v2/v3, "
+                "hCaptcha, Cloudflare Turnstile и текстовые капчи. "
+                "Возвращает типы найденных капч и рекомендации."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
     "web_search": {
         "type": "function",
         "function": {
@@ -796,6 +1398,7 @@ TOOL_DEFINITIONS: dict[str, dict[str, object]] = {
 TOOL_TIER_CORE = frozenset({"list_files", "read_file", "describe_tools", "invoke_skill"})
 TOOL_TIER_MUTATE = frozenset({"apply_patch", "execute_command", "browser_click"})
 TOOL_TIER_BROWSER = frozenset({
+    # Существующие 12 тулов
     "browser_navigate",
     "browser_get_page_state",
     "browser_click",
@@ -808,6 +1411,37 @@ TOOL_TIER_BROWSER = frozenset({
     "browser_smart_search",
     "browser_smart_add_to_cart",
     "browser_allowed_domains",
+    # Фаза 1: базовые примитивы (7)
+    "browser_scroll",
+    "browser_hover",
+    "browser_double_click",
+    "browser_right_click",
+    "browser_type_text",
+    "browser_press_key",
+    "browser_drag",
+    # Фаза 2: мульти-табы (4)
+    "browser_new_tab",
+    "browser_switch_tab",
+    "browser_close_tab",
+    "browser_list_tabs",
+    # Фаза 3: диалоги, загрузки, хранилище (4)
+    "browser_handle_dialog",
+    "browser_upload_file",
+    "browser_cookies",
+    "browser_local_storage",
+    # Фаза 4: визуальный режим (3)
+    "browser_screenshot_element",
+    "browser_element_som",
+    "browser_visual_qa",
+    # Фаза 5: сеть и iframe (3)
+    "browser_network_requests",
+    "browser_iframe_switch",
+    "browser_device_emulate",
+    # Фаза 6: смарт-тулы v2 (4)
+    "browser_smart_form",
+    "browser_smart_extract",
+    "browser_smart_checkout",
+    "browser_smart_captcha_detect",
     "web_automation",
 })
 TOOL_TIER_ONLINE = frozenset({"web_search"})

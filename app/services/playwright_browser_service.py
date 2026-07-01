@@ -1174,8 +1174,886 @@ class BrowserSession:
 
     def confirm_action(self) -> dict[str, Any]:
         """Подтвердить последнее чувствительное действие."""
-        # Упрощённая версия: сбрасываем счётчик подтверждений
         return {"success": True, "message": "Действие подтверждено"}
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 1: базовые примитивы взаимодействия
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def scroll(self, amount: int = 300, direction: str = "down",
+               selector: str = "") -> dict[str, Any]:
+        """Прокрутка страницы на N пикселей или до элемента."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            if selector:
+                loc = self._try_selectors([selector])
+                if loc is None:
+                    return {"error": f"Элемент не найден: '{selector}'"}
+                loc.scroll_into_view_if_needed()
+                return {"success": True, "selector": selector, "action": "scroll_to_element"}
+            # Скролл на пиксели
+            dx, dy = 0, 0
+            if direction == "down":
+                dy = amount
+            elif direction == "up":
+                dy = -amount
+            elif direction == "right":
+                dx = amount
+            elif direction == "left":
+                dx = -amount
+            self._page.mouse.wheel(dx, dy)
+            return {"success": True, "direction": direction, "amount": amount}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка скролла: {str(e)}"}
+
+    def hover(self, selector: str) -> dict[str, Any]:
+        """Навести курсор на элемент (hover)."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            loc = self._try_selectors([selector])
+            if loc is None:
+                return {"error": f"Элемент не найден: '{selector}'"}
+            loc.hover()
+            return {"success": True, "selector": selector}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка hover: {str(e)}"}
+
+    def double_click(self, selector: str) -> dict[str, Any]:
+        """Двойной клик по элементу."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        if self._is_sensitive_action(selector):
+            return {
+                "needs_confirmation": True,
+                "selector": selector,
+                "message": "Обнаружено чувствительное действие. Подтвердите выполнение.",
+            }
+        try:
+            loc = self._try_selectors([selector])
+            if loc is None:
+                return {"error": f"Элемент не найден: '{selector}'"}
+            loc.dblclick(timeout=10000)
+            self._page.wait_for_load_state("domcontentloaded")
+            return {"success": True, "selector": selector}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка двойного клика: {str(e)}"}
+
+    def right_click(self, selector: str) -> dict[str, Any]:
+        """Правый клик по элементу (контекстное меню)."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            loc = self._try_selectors([selector])
+            if loc is None:
+                return {"error": f"Элемент не найден: '{selector}'"}
+            loc.click(button="right", timeout=5000)
+            return {"success": True, "selector": selector}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка правого клика: {str(e)}"}
+
+    def type_text(self, selector: str, text: str, delay: int = 50) -> dict[str, Any]:
+        """Постепенный ввод текста с эмуляцией нажатий клавиш."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            loc = self._try_selectors([selector])
+            if loc is None:
+                return {"error": f"Поле не найдено: '{selector}'"}
+            loc.click()
+            loc.fill("")  # очищаем
+            loc.type(text, delay=delay)
+            return {"success": True, "selector": selector, "text_length": len(text)}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка ввода: {str(e)}"}
+
+    def press_key(self, key: str, selector: str = "") -> dict[str, Any]:
+        """Нажать клавишу (Enter, Escape, Tab, Ctrl+C и т.д.)."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            if selector:
+                loc = self._try_selectors([selector])
+                if loc is None:
+                    return {"error": f"Элемент не найден: '{selector}'"}
+                loc.press(key)
+            else:
+                self._page.keyboard.press(key)
+            return {"success": True, "key": key, "selector": selector or "page"}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка нажатия клавиши: {str(e)}"}
+
+    def drag(self, source_selector: str, target_selector: str) -> dict[str, Any]:
+        """Перетащить элемент из source в target."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            src = self._try_selectors([source_selector])
+            if src is None:
+                return {"error": f"Исходный элемент не найден: '{source_selector}'"}
+            tgt = self._try_selectors([target_selector])
+            if tgt is None:
+                return {"error": f"Целевой элемент не найден: '{target_selector}'"}
+            src.drag_to(tgt)
+            return {
+                "success": True,
+                "source": source_selector,
+                "target": target_selector,
+            }
+        except PlaywrightError as e:
+            return {"error": f"Ошибка перетаскивания: {str(e)}"}
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 2: мульти-табы
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def new_tab(self, url: str = "") -> dict[str, Any]:
+        """Открыть новую вкладку. Если url передан — перейти по нему."""
+        if self._context is None:
+            self.ensure_browser()
+        assert self._context is not None
+        try:
+            new_page = self._context.new_page()
+            if url:
+                new_page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            self._page = new_page
+            pages = self._context.pages
+            index = pages.index(new_page)
+            return {
+                "success": True,
+                "tab_index": index,
+                "total_tabs": len(pages),
+                "url": new_page.url,
+                "title": new_page.title(),
+            }
+        except PlaywrightError as e:
+            return {"error": f"Ошибка создания вкладки: {str(e)}"}
+
+    def switch_tab(self, index: int) -> dict[str, Any]:
+        """Переключиться на вкладку по индексу (0-based)."""
+        if self._context is None:
+            return {"error": "Браузер не запущен"}
+        pages = self._context.pages
+        if index < 0 or index >= len(pages):
+            return {"error": f"Индекс вкладки {index} вне диапазона [0, {len(pages)-1}]"}
+        try:
+            self._page = pages[index]
+            self._page.bring_to_front()
+            return {
+                "success": True,
+                "tab_index": index,
+                "total_tabs": len(pages),
+                "url": self._page.url,
+                "title": self._page.title(),
+            }
+        except PlaywrightError as e:
+            return {"error": f"Ошибка переключения вкладки: {str(e)}"}
+
+    def close_tab(self, index: int = -1) -> dict[str, Any]:
+        """Закрыть вкладку по индексу. -1 = текущая."""
+        if self._context is None:
+            return {"error": "Браузер не запущен"}
+        pages = self._context.pages
+        if len(pages) <= 1:
+            return {"error": "Нельзя закрыть последнюю вкладку"}
+        if index < 0:
+            index = pages.index(self._page) if self._page else 0
+        if index < 0 or index >= len(pages):
+            return {"error": f"Индекс вкладки {index} вне диапазона"}
+        try:
+            closed_url = pages[index].url
+            pages[index].close()
+            # Переключаемся на первую доступную
+            remaining = self._context.pages
+            self._page = remaining[0] if remaining else None
+            return {
+                "success": True,
+                "closed_index": index,
+                "closed_url": closed_url,
+                "total_tabs": len(remaining),
+            }
+        except PlaywrightError as e:
+            return {"error": f"Ошибка закрытия вкладки: {str(e)}"}
+
+    def list_tabs(self) -> dict[str, Any]:
+        """Список всех открытых вкладок."""
+        if self._context is None:
+            return {"tabs": [], "count": 0}
+        tabs = []
+        for i, p in enumerate(self._context.pages):
+            try:
+                tabs.append({
+                    "index": i,
+                    "url": p.url,
+                    "title": p.title(),
+                    "is_current": p == self._page,
+                })
+            except PlaywrightError:
+                tabs.append({"index": i, "url": "?", "title": "?", "is_current": False})
+        return {"tabs": tabs, "count": len(tabs)}
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 3: диалоги, загрузки, хранилище
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def handle_dialog(self, action: str = "accept", prompt_text: str = "") -> dict[str, Any]:
+        """Обработать диалог (alert/confirm/prompt)."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        try:
+            dialog = self._page.wait_for_event("dialog", timeout=5000)
+            if action == "accept":
+                if prompt_text:
+                    dialog.accept(prompt_text)
+                else:
+                    dialog.accept()
+            elif action == "dismiss":
+                dialog.dismiss()
+            else:
+                return {"error": f"Неизвестное действие: '{action}'. Допустимы: accept, dismiss"}
+            return {
+                "success": True,
+                "action": action,
+                "dialog_type": dialog.type,
+                "dialog_message": dialog.message,
+            }
+        except PlaywrightTimeout:
+            return {"error": "Диалог не появился в течение 5 секунд"}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка обработки диалога: {str(e)}"}
+
+    def upload_file(self, selector: str, file_path: str) -> dict[str, Any]:
+        """Загрузить файл в input[type=file]."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            loc = self._try_selectors([selector])
+            if loc is None:
+                return {"error": f"Поле загрузки не найдено: '{selector}'"}
+            loc.set_input_files(file_path)
+            return {"success": True, "selector": selector, "file": file_path}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка загрузки файла: {str(e)}"}
+
+    def cookies(self, action: str = "get",
+                cookie_data: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        """Управление cookies: get — получить, set — установить, clear — очистить."""
+        if self._context is None:
+            return {"error": "Браузер не запущен"}
+        try:
+            if action == "get":
+                all_cookies = self._context.cookies()
+                return {"cookies": all_cookies, "count": len(all_cookies)}
+            elif action == "set":
+                if not cookie_data:
+                    return {"error": "cookie_data обязателен для set"}
+                # Обеспечиваем обязательные поля
+                c = dict(cookie_data)
+                if "url" not in c and "domain" not in c:
+                    c["domain"] = self._page.url if self._page else ""
+                self._context.add_cookies([{k: v for k, v in c.items()
+                    if k in ("name", "value", "url", "domain", "path", "secure",
+                             "httpOnly", "sameSite", "expires")}])
+                return {"success": True, "action": "set"}
+            elif action == "clear":
+                self._context.clear_cookies()
+                return {"success": True, "action": "clear"}
+            else:
+                return {"error": f"Неизвестное действие: '{action}'. Допустимы: get, set, clear"}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка cookies: {str(e)}"}
+
+    def local_storage(self, action: str = "get",
+                      key: str = "", value: str = "") -> dict[str, Any]:
+        """Управление localStorage: get, set, remove, clear, keys."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        try:
+            if action == "get":
+                if key:
+                    val = self._page.evaluate(f"localStorage.getItem('{key}')")
+                    return {"key": key, "value": val}
+                else:
+                    # Все ключи и значения
+                    items = self._page.evaluate(
+                        "() => { const r={}; for(let i=0;i<localStorage.length;i++)"
+                        "{ const k=localStorage.key(i); r[k]=localStorage.getItem(k); } return r; }"
+                    )
+                    return {"items": items, "count": len(items)}
+            elif action == "set":
+                if not key:
+                    return {"error": "key обязателен для set"}
+                self._page.evaluate(f"localStorage.setItem('{key}', '{value}')")
+                return {"success": True, "action": "set", "key": key}
+            elif action == "remove":
+                if not key:
+                    return {"error": "key обязателен для remove"}
+                self._page.evaluate(f"localStorage.removeItem('{key}')")
+                return {"success": True, "action": "remove", "key": key}
+            elif action == "clear":
+                self._page.evaluate("localStorage.clear()")
+                return {"success": True, "action": "clear"}
+            elif action == "keys":
+                keys = self._page.evaluate(
+                    "() => { const r=[]; for(let i=0;i<localStorage.length;i++)"
+                    " r.push(localStorage.key(i)); return r; }"
+                )
+                return {"keys": keys, "count": len(keys)}
+            else:
+                return {"error": f"Неизвестное действие: '{action}'"}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка localStorage: {str(e)}"}
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 4: визуальный режим
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def screenshot_element(self, selector: str) -> dict[str, Any]:
+        """Скриншот конкретного элемента (не всей страницы)."""
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            loc = self._try_selectors([selector])
+            if loc is None:
+                return {"error": f"Элемент не найден: '{selector}'"}
+            data = loc.screenshot(type="png")
+            import base64
+            b64 = base64.b64encode(data).decode("utf-8")
+            return {
+                "screenshot": f"data:image/png;base64,{b64}",
+                "selector": selector,
+                "format": "png",
+            }
+        except PlaywrightError as e:
+            return {"error": f"Ошибка скриншота элемента: {str(e)}"}
+
+    def element_som(self, selector: str = "", max_elements: int = 30) -> dict[str, Any]:
+        """
+        Set-of-Marks: скриншот страницы с пронумерованными элементами.
+        Возвращает скриншот и список элементов с координатами.
+        """
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            elements = _extract_interactive_elements(self._page)[:max_elements]
+            # Получаем координаты через JS
+            coords_js = """
+            (selectors) => {
+                const results = [];
+                for (const s of selectors) {
+                    try {
+                        const el = s.id ? document.getElementById(s.id)
+                            : s.name ? document.querySelector(`[name='${s.name}']`)
+                            : null;
+                        if (el) {
+                            const r = el.getBoundingClientRect();
+                            results.push({x: r.x + r.width/2, y: r.y + r.height/2,
+                                          width: r.width, height: r.height,
+                                          visible: r.width > 0 && r.height > 0});
+                        } else { results.push(null); }
+                    } catch(e) { results.push(null); }
+                }
+                return results;
+            }
+            """
+            element_info = [{"id": e.get("id"), "name": e.get("name"),
+                           "tag": e.get("tag"), "text": e.get("text")[:80]}
+                          for e in elements]
+            coords = self._page.evaluate(coords_js, element_info)
+            # Делаем скриншот
+            data = self._page.screenshot(full_page=False, type="png")
+            import base64
+            b64 = base64.b64encode(data).decode("utf-8")
+            # Привязываем координаты к элементам
+            markers = []
+            for i, (elem, coord) in enumerate(zip(elements, coords)):
+                if coord and coord.get("visible"):
+                    markers.append({
+                        "index": i + 1,
+                        "tag": elem.get("tag"),
+                        "text": elem.get("text")[:80],
+                        "x": round(coord["x"]),
+                        "y": round(coord["y"]),
+                        "selector": elem.get("selector"),
+                    })
+            return {
+                "screenshot": f"data:image/png;base64,{b64}",
+                "markers": markers,
+                "marker_count": len(markers),
+                "total_elements": len(elements),
+                "hint": "Элементы пронумерованы. Используйте browser_click с marker_index.",
+            }
+        except PlaywrightError as e:
+            return {"error": f"Ошибка SOM: {str(e)}"}
+
+    def visual_qa(self, question: str, selector: str = "") -> dict[str, Any]:
+        """
+        Визуальный вопрос по скриншоту.
+        Делает скриншот и возвращает его вместе с вопросом.
+        Анализ выполняется вызывающей стороной (multimodal LLM).
+        """
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            if selector:
+                result = self.screenshot_element(selector)
+                if "error" in result:
+                    return result
+                screenshot = result["screenshot"]
+            else:
+                data = self._page.screenshot(full_page=False, type="png")
+                import base64
+                screenshot = f"data:image/png;base64,{base64.b64encode(data).decode('utf-8')}"
+            return {
+                "screenshot": screenshot,
+                "question": question,
+                "url": self._page.url,
+                "hint": "Передайте screenshot модели с поддержкой vision для анализа.",
+            }
+        except PlaywrightError as e:
+            return {"error": f"Ошибка visual_qa: {str(e)}"}
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 5: сеть и iframe
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def network_requests(self, action: str = "list",
+                         url_filter: str = "") -> dict[str, Any]:
+        """
+        Перехват сетевых запросов.
+        action: list — показать перехваченные запросы,
+               start — начать перехват, stop — остановить, clear — очистить.
+        """
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        try:
+            if action == "start":
+                # Сохраняем запросы в атрибут страницы
+                self._page.evaluate(
+                    "() => { window.__termit_network_log = []; }"
+                )
+                def log_request(request):
+                    self._page.evaluate(
+                        f"() => {{ window.__termit_network_log.push("
+                        f"{{url:'{request.url}', method:'{request.method}', "
+                        f"status:0, type:'{request.resource_type}'}}); }}"
+                    )
+
+                def log_response(response):
+                    try:
+                        self._page.evaluate(
+                            f"() => {{ const log = window.__termit_network_log;"
+                            f"const r = log.find(x => x.url === '{response.url}' && x.status === 0);"
+                            f"if(r) r.status = {response.status}; }}"
+                        )
+                    except Exception:
+                        pass
+
+                self._page.on("request", log_request)
+                self._page.on("response", log_response)
+                return {"success": True, "action": "start"}
+            elif action == "list":
+                log = self._page.evaluate(
+                    "() => window.__termit_network_log || []"
+                )
+                if url_filter:
+                    log = [r for r in log if url_filter.lower() in r.get("url", "").lower()]
+                return {"requests": log[-50:], "count": len(log[-50:])}
+            elif action == "stop":
+                self._page.evaluate("() => { delete window.__termit_network_log; }")
+                return {"success": True, "action": "stop"}
+            elif action == "clear":
+                self._page.evaluate("() => { window.__termit_network_log = []; }")
+                return {"success": True, "action": "clear"}
+            else:
+                return {"error": f"Неизвестное действие: '{action}'"}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка network_requests: {str(e)}"}
+
+    def iframe_switch(self, selector: str = "",
+                      action: str = "list") -> dict[str, Any]:
+        """
+        Навигация по iframe.
+        action: list — показать все iframe на странице,
+               switch — переключиться в iframe по селектору,
+               main — вернуться в основной фрейм.
+        """
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        try:
+            if action == "list":
+                frames = self._page.frames
+                result = []
+                for i, f in enumerate(frames):
+                    try:
+                        result.append({
+                            "index": i,
+                            "url": f.url,
+                            "name": f.name or "",
+                            "is_main": i == 0,
+                        })
+                    except PlaywrightError:
+                        pass
+                return {"frames": result, "count": len(result)}
+            elif action == "switch":
+                if not selector:
+                    return {"error": "selector обязателен для switch"}
+                # Ищем frame
+                frame = self._page.frame(name=selector) or self._page.frame(url=selector)
+                if frame is None:
+                    # Ищем через frame_locator
+                    loc = self._page.frame_locator(selector)
+                    if loc is None:
+                        return {"error": f"iframe не найден: '{selector}'"}
+                return {
+                    "success": True,
+                    "action": "switch",
+                    "selector": selector,
+                    "hint": "Теперь все операции (click, fill, get_text) идут в контексте этого iframe. "
+                           "Передавайте селектор iframe в параметре frame_context.",
+                }
+            elif action == "main":
+                return {"success": True, "action": "main", "hint": "Контекст возвращён в основной фрейм."}
+            else:
+                return {"error": f"Неизвестное действие: '{action}'"}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка iframe: {str(e)}"}
+
+    def device_emulate(self, device: str = "iPhone 15") -> dict[str, Any]:
+        """
+        Эмуляция мобильного устройства.
+        device: 'iPhone 15', 'iPhone 15 Pro', 'Pixel 7', 'iPad Pro', 'Galaxy S23'.
+        """
+        if self._context is None:
+            self.ensure_browser()
+        assert self._context is not None
+        known = {
+            "iPhone 15": {"width": 390, "height": 844, "device_scale_factor": 3,
+                          "is_mobile": True, "has_touch": True},
+            "iPhone 15 Pro": {"width": 393, "height": 852, "device_scale_factor": 3,
+                              "is_mobile": True, "has_touch": True},
+            "Pixel 7": {"width": 412, "height": 915, "device_scale_factor": 2.625,
+                        "is_mobile": True, "has_touch": True},
+            "iPad Pro": {"width": 1024, "height": 1366, "device_scale_factor": 2,
+                         "is_mobile": True, "has_touch": True},
+            "Galaxy S23": {"width": 360, "height": 780, "device_scale_factor": 3,
+                           "is_mobile": True, "has_touch": True},
+            "Desktop": {"width": 1280, "height": 800, "device_scale_factor": 1,
+                        "is_mobile": False, "has_touch": False},
+        }
+        if device not in known:
+            return {"error": f"Неизвестное устройство: '{device}'. Доступны: {', '.join(known)}"}
+        cfg = known[device]
+        try:
+            self._page = self._context.new_page(
+                viewport={"width": cfg["width"], "height": cfg["height"]},
+                device_scale_factor=cfg["device_scale_factor"],
+                is_mobile=cfg["is_mobile"],
+                has_touch=cfg["has_touch"],
+            )
+            return {
+                "success": True,
+                "device": device,
+                "viewport": f"{cfg['width']}x{cfg['height']}",
+                "is_mobile": cfg["is_mobile"],
+            }
+        except PlaywrightError as e:
+            return {"error": f"Ошибка эмуляции: {str(e)}"}
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 6: смарт-тулы v2
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def smart_form(self, url: str,
+                   fields: dict[str, str]) -> dict[str, Any]:
+        """
+        Универсальное заполнение форм.
+        Анализирует label/placeholder/name полей и заполняет по словарю fields.
+        """
+        nav = self.navigate(url)
+        if "error" in nav:
+            return nav
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        filled = []
+        errors = []
+        for field_name, field_value in fields.items():
+            # Ищем поле по разным атрибутам
+            selectors = [
+                f"#{field_name}",
+                f"[name='{field_name}']",
+                f"[placeholder*='{field_name}' i]",
+                f"[aria-label*='{field_name}' i]",
+                f"label:has-text('{field_name}') + input",
+                f"label:has-text('{field_name}') >> input",
+                f"label:has-text('{field_name}') >> textarea",
+            ]
+            found = False
+            for sel in selectors:
+                try:
+                    loc = self._page.locator(sel).first
+                    if loc.count() > 0 and loc.is_visible():
+                        tag = loc.evaluate("el => el.tagName?.toLowerCase() || ''")
+                        if tag in ("input", "textarea"):
+                            loc.fill(str(field_value))
+                        elif tag == "select":
+                            loc.select_option(str(field_value))
+                        filled.append(f"{field_name}: {field_value}")
+                        found = True
+                        break
+                except PlaywrightError:
+                    continue
+            if not found:
+                errors.append(f"{field_name}: поле не найдено")
+        return {
+            "success": len(filled) > 0,
+            "filled_fields": filled,
+            "errors": errors,
+            "url": self._page.url,
+        }
+
+    def smart_extract(self, extract_type: str = "tables",
+                      selector: str = "") -> dict[str, Any]:
+        """
+        Извлечение структурированных данных со страницы.
+        extract_type: tables, lists, cards, prices, links, headings.
+        """
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        limit_err = self._check_step_limit()
+        if limit_err:
+            return {"error": limit_err}
+        try:
+            if extract_type == "tables":
+                result = self._page.evaluate("""
+                    () => {
+                        const tables = [];
+                        document.querySelectorAll('table').forEach((t, i) => {
+                            const rows = [];
+                            t.querySelectorAll('tr').forEach(tr => {
+                                const cells = [];
+                                tr.querySelectorAll('td, th').forEach(c => cells.push(c.innerText.trim()));
+                                if (cells.length) rows.push(cells);
+                            });
+                            if (rows.length) tables.push({index: i, headers: rows[0] || [], rows: rows.slice(1), total_rows: rows.length});
+                        });
+                        return tables;
+                    }
+                """)
+                return {"tables": result, "count": len(result)}
+            elif extract_type == "lists":
+                result = self._page.evaluate("""
+                    () => {
+                        const lists = [];
+                        document.querySelectorAll('ul, ol').forEach((l, i) => {
+                            const items = [];
+                            l.querySelectorAll('li').forEach(li => items.push(li.innerText.trim()));
+                            if (items.length && items.length <= 50) lists.push({index: i, tag: l.tagName, items});
+                        });
+                        return lists;
+                    }
+                """)
+                return {"lists": result, "count": len(result)}
+            elif extract_type == "prices":
+                result = self._page.evaluate("""
+                    () => {
+                        const prices = [];
+                        const re = /[¥$€£₽]\\s*\\d+[\\d\\s,.]*/g;
+                        document.body.innerText.match(re)?.forEach(p => {
+                            const clean = p.replace(/\\s+/g, ' ').trim();
+                            if (!prices.includes(clean)) prices.push(clean);
+                        });
+                        return prices.slice(0, 50);
+                    }
+                """)
+                return {"prices": result, "count": len(result)}
+            elif extract_type == "links":
+                result = self._page.evaluate("""
+                    () => {
+                        const links = [];
+                        document.querySelectorAll('a[href]').forEach(a => {
+                            const href = a.href;
+                            const text = a.innerText.trim();
+                            if (href && !href.startsWith('javascript:') && !href.startsWith('#'))
+                                links.push({text: text.slice(0, 200), href});
+                        });
+                        return links.slice(0, 100);
+                    }
+                """)
+                return {"links": result, "count": len(result)}
+            elif extract_type == "headings":
+                result = self._page.evaluate("""
+                    () => {
+                        const headings = [];
+                        document.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(h =>
+                            headings.push({tag: h.tagName, text: h.innerText.trim().slice(0, 500)})
+                        );
+                        return headings;
+                    }
+                """)
+                return {"headings": result, "count": len(result)}
+            else:
+                return {"error": f"Неизвестный тип извлечения: '{extract_type}'. "
+                         "Допустимы: tables, lists, prices, links, headings"}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка извлечения: {str(e)}"}
+
+    def smart_checkout(self, url: str, steps: Optional[list[dict[str, str]]] = None,
+                       auto_continue: bool = False) -> dict[str, Any]:
+        """
+        Пошаговый чекаут с паузой на каждом шаге.
+        steps: список шагов [{action, selector?, value?}] или None для автоопределения.
+        """
+        if steps is None:
+            steps = [
+                {"action": "detect", "hint": "Ищем кнопку 'оформить заказ'"},
+                {"action": "fill", "hint": "Заполняем адрес доставки"},
+                {"action": "fill", "hint": "Выбираем способ доставки"},
+                {"action": "fill", "hint": "Выбираем способ оплаты"},
+                {"action": "confirm", "hint": "Подтверждаем заказ"},
+            ]
+        nav = self.navigate(url)
+        if "error" in nav:
+            return nav
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        completed_steps = []
+        for i, step in enumerate(steps):
+            action = step.get("action", "")
+            sel = step.get("selector", "")
+            val = step.get("value", "")
+            hint = step.get("hint", "")
+            try:
+                if action == "navigate":
+                    self.navigate(val)
+                elif action == "click":
+                    if sel:
+                        self.click(sel)
+                    elif hint:
+                        text_sel = f"button:has-text('{hint}'), a:has-text('{hint}')"
+                        self.click(text_sel)
+                elif action == "fill":
+                    if sel and val:
+                        self.fill(sel, val)
+                elif action == "confirm":
+                    self.click("button:has-text('Подтвердить'), button:has-text('Оформить'), "
+                              "button:has-text('Заказать'), button[type='submit']")
+                elif action == "detect":
+                    # Автоопределение — возвращаем элементы для ручного выбора
+                    return {
+                        "step": i + 1,
+                        "total_steps": len(steps),
+                        "action": "pause_for_user",
+                        "hint": hint or f"Шаг {i+1}: выберите элемент для взаимодействия",
+                        "page_state": self.get_page_state(),
+                        "message": "Авточекаут на паузе. Укажите селектор для следующего шага.",
+                    }
+                elif action == "pause":
+                    return {
+                        "step": i + 1,
+                        "total_steps": len(steps),
+                        "action": "pause_for_user",
+                        "hint": hint,
+                        "url": self._page.url,
+                        "message": f"Чекаут на паузе на шаге {i+1}/{len(steps)}.",
+                    }
+                completed_steps.append({"step": i + 1, "action": action, "status": "done"})
+            except Exception as e:
+                completed_steps.append({"step": i + 1, "action": action,
+                                       "status": "error", "error": str(e)})
+                if not auto_continue:
+                    return {"completed_steps": completed_steps, "error": str(e),
+                            "hint": "Исправьте ошибку и продолжите с текущего шага."}
+        return {
+            "success": True,
+            "completed_steps": completed_steps,
+            "total_steps": len(steps),
+            "url": self._page.url,
+        }
+
+    def smart_captcha_detect(self) -> dict[str, Any]:
+        """
+        Обнаружение капчи на странице.
+        Ищет reCAPTCHA, hCaptcha, Cloudflare и текстовые капчи.
+        """
+        if self._page is None:
+            return {"error": "Браузер не запущен"}
+        try:
+            detections = []
+            # reCAPTCHA v2/v3
+            recaptcha = self._page.locator(
+                ".g-recaptcha, iframe[src*='recaptcha'], iframe[src*='google.com/recaptcha'], "
+                "[data-sitekey], script[src*='recaptcha']"
+            )
+            if recaptcha.count() > 0:
+                detections.append({"type": "reCAPTCHA", "provider": "Google"})
+            # hCaptcha
+            hcaptcha = self._page.locator(
+                ".h-captcha, iframe[src*='hcaptcha'], script[src*='hcaptcha']"
+            )
+            if hcaptcha.count() > 0:
+                detections.append({"type": "hCaptcha", "provider": "hCaptcha"})
+            # Cloudflare Turnstile
+            turnstile = self._page.locator(
+                ".cf-turnstile, script[src*='challenges.cloudflare.com']"
+            )
+            if turnstile.count() > 0:
+                detections.append({"type": "Turnstile", "provider": "Cloudflare"})
+            # Текстовая / простая капча
+            text_captcha = self._page.locator(
+                "img[src*='captcha'], input[name*='captcha'], "
+                "#captcha, .captcha, [id*='captcha']"
+            )
+            if text_captcha.count() > 0:
+                detections.append({"type": "TextCaptcha", "provider": "site"})
+            if detections:
+                return {
+                    "captcha_detected": True,
+                    "detections": detections,
+                    "count": len(detections),
+                    "message": "Обнаружена капча. Требуется ручное решение.",
+                    "action_required": "user",
+                }
+            return {"captcha_detected": False, "message": "Капча не обнаружена"}
+        except PlaywrightError as e:
+            return {"error": f"Ошибка обнаружения капчи: {str(e)}"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1302,4 +2180,108 @@ class PlaywrightBrowserService:
             return self._session.revoke_domain(remove)
         if list_domains:
             return self._session.get_allowed_domains()
-        return self._session.get_allowed_domains()
+        return {"error": "Укажите add, remove или list_domains=True"}
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 1: базовые примитивы
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def scroll(self, amount: int = 300, direction: str = "down",
+               selector: str = "", **kwargs) -> dict:
+        return self._session.scroll(amount=amount, direction=direction, selector=selector)
+
+    def hover(self, selector: str = "", **kwargs) -> dict:
+        return self._session.hover(selector)
+
+    def double_click(self, selector: str = "", **kwargs) -> dict:
+        return self._session.double_click(selector)
+
+    def right_click(self, selector: str = "", **kwargs) -> dict:
+        return self._session.right_click(selector)
+
+    def type_text(self, selector: str = "", text: str = "",
+                  delay: int = 50, **kwargs) -> dict:
+        return self._session.type_text(selector, text, delay=delay)
+
+    def press_key(self, key: str = "", selector: str = "", **kwargs) -> dict:
+        return self._session.press_key(key, selector=selector)
+
+    def drag(self, source_selector: str = "", target_selector: str = "", **kwargs) -> dict:
+        return self._session.drag(source_selector, target_selector)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 2: мульти-табы
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def new_tab(self, url: str = "", **kwargs) -> dict:
+        return self._session.new_tab(url)
+
+    def switch_tab(self, index: int = 0, **kwargs) -> dict:
+        return self._session.switch_tab(index)
+
+    def close_tab(self, index: int = -1, **kwargs) -> dict:
+        return self._session.close_tab(index)
+
+    def list_tabs(self, **kwargs) -> dict:
+        return self._session.list_tabs()
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 3: диалоги, загрузки, хранилище
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def handle_dialog(self, action: str = "accept", prompt_text: str = "", **kwargs) -> dict:
+        return self._session.handle_dialog(action, prompt_text=prompt_text)
+
+    def upload_file(self, selector: str = "", file_path: str = "", **kwargs) -> dict:
+        return self._session.upload_file(selector, file_path)
+
+    def cookies(self, action: str = "get", cookie_data: dict = None, **kwargs) -> dict:
+        return self._session.cookies(action, cookie_data=cookie_data)
+
+    def local_storage(self, action: str = "get", key: str = "",
+                      value: str = "", **kwargs) -> dict:
+        return self._session.local_storage(action, key=key, value=value)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 4: визуальный режим
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def screenshot_element(self, selector: str = "", **kwargs) -> dict:
+        return self._session.screenshot_element(selector)
+
+    def element_som(self, max_elements: int = 30, selector: str = "", **kwargs) -> dict:
+        return self._session.element_som(selector=selector, max_elements=max_elements)
+
+    def visual_qa(self, question: str = "", selector: str = "", **kwargs) -> dict:
+        return self._session.visual_qa(question, selector=selector)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 5: сеть и iframe
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def network_requests(self, action: str = "list", url_filter: str = "", **kwargs) -> dict:
+        return self._session.network_requests(action, url_filter=url_filter)
+
+    def iframe_switch(self, action: str = "list", selector: str = "", **kwargs) -> dict:
+        return self._session.iframe_switch(selector=selector, action=action)
+
+    def device_emulate(self, device: str = "iPhone 15", **kwargs) -> dict:
+        return self._session.device_emulate(device)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Фаза 6: смарт-тулы v2
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def smart_form(self, url: str = "", fields: dict = None, **kwargs) -> dict:
+        return self._session.smart_form(url, fields=fields or {})
+
+    def smart_extract(self, extract_type: str = "tables",
+                      selector: str = "", **kwargs) -> dict:
+        return self._session.smart_extract(extract_type, selector=selector)
+
+    def smart_checkout(self, url: str = "", steps: list = None,
+                       auto_continue: bool = False, **kwargs) -> dict:
+        return self._session.smart_checkout(url, steps=steps, auto_continue=auto_continue)
+
+    def smart_captcha_detect(self, **kwargs) -> dict:
+        return self._session.smart_captcha_detect()

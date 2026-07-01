@@ -1614,6 +1614,127 @@ class AgentService:
                         remove=str(arguments.get("remove", "")),
                         list_domains=bool(arguments.get("list", False)),
                     )
+                # --- Фаза 1: базовые примитивы (7) ---
+                elif tool_name == "browser_scroll":
+                    payload = browser.scroll(
+                        amount=int(arguments.get("amount", 300)),
+                        direction=str(arguments.get("direction", "down")),
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_hover":
+                    payload = browser.hover(
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_double_click":
+                    payload = browser.double_click(
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_right_click":
+                    payload = browser.right_click(
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_type_text":
+                    payload = browser.type_text(
+                        selector=str(arguments.get("selector", "")),
+                        text=str(arguments.get("text", "")),
+                        delay=int(arguments.get("delay", 50)),
+                    )
+                elif tool_name == "browser_press_key":
+                    payload = browser.press_key(
+                        key=str(arguments.get("key", "")),
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_drag":
+                    payload = browser.drag(
+                        source_selector=str(arguments.get("source_selector", "")),
+                        target_selector=str(arguments.get("target_selector", "")),
+                    )
+                # --- Фаза 2: мульти-табы (4) ---
+                elif tool_name == "browser_new_tab":
+                    payload = browser.new_tab(
+                        url=str(arguments.get("url", "")),
+                    )
+                elif tool_name == "browser_switch_tab":
+                    payload = browser.switch_tab(
+                        index=int(arguments.get("index", 0)),
+                    )
+                elif tool_name == "browser_close_tab":
+                    payload = browser.close_tab(
+                        index=int(arguments.get("index", -1)),
+                    )
+                elif tool_name == "browser_list_tabs":
+                    payload = browser.list_tabs()
+                # --- Фаза 3: диалоги, загрузки, хранилище (4) ---
+                elif tool_name == "browser_handle_dialog":
+                    payload = browser.handle_dialog(
+                        action=str(arguments.get("action", "accept")),
+                        prompt_text=str(arguments.get("prompt_text", "")),
+                    )
+                elif tool_name == "browser_upload_file":
+                    payload = browser.upload_file(
+                        selector=str(arguments.get("selector", "")),
+                        file_path=str(arguments.get("file_path", "")),
+                    )
+                elif tool_name == "browser_cookies":
+                    payload = browser.cookies(
+                        action=str(arguments.get("action", "get")),
+                        cookie_data=arguments.get("cookie_data"),
+                    )
+                elif tool_name == "browser_local_storage":
+                    payload = browser.local_storage(
+                        action=str(arguments.get("action", "get")),
+                        key=str(arguments.get("key", "")),
+                        value=str(arguments.get("value", "")),
+                    )
+                # --- Фаза 4: визуальный режим (3) ---
+                elif tool_name == "browser_screenshot_element":
+                    payload = browser.screenshot_element(
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_element_som":
+                    payload = browser.element_som(
+                        max_elements=int(arguments.get("max_elements", 30)),
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_visual_qa":
+                    payload = browser.visual_qa(
+                        question=str(arguments.get("question", "")),
+                        selector=str(arguments.get("selector", "")),
+                    )
+                # --- Фаза 5: сеть и iframe (3) ---
+                elif tool_name == "browser_network_requests":
+                    payload = browser.network_requests(
+                        action=str(arguments.get("action", "list")),
+                        url_filter=str(arguments.get("url_filter", "")),
+                    )
+                elif tool_name == "browser_iframe_switch":
+                    payload = browser.iframe_switch(
+                        action=str(arguments.get("action", "list")),
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_device_emulate":
+                    payload = browser.device_emulate(
+                        device=str(arguments.get("device", "Desktop")),
+                    )
+                # --- Фаза 6: смарт-тулы v2 (4) ---
+                elif tool_name == "browser_smart_form":
+                    payload = browser.smart_form(
+                        url=str(arguments.get("url", "")),
+                        fields=arguments.get("fields", {}),
+                    )
+                elif tool_name == "browser_smart_extract":
+                    payload = browser.smart_extract(
+                        extract_type=str(arguments.get("extract_type", "tables")),
+                        selector=str(arguments.get("selector", "")),
+                    )
+                elif tool_name == "browser_smart_checkout":
+                    payload = browser.smart_checkout(
+                        url=str(arguments.get("url", "")),
+                        steps=arguments.get("steps"),
+                        auto_continue=bool(arguments.get("auto_continue", False)),
+                    )
+                elif tool_name == "browser_smart_captcha_detect":
+                    payload = browser.smart_captcha_detect()
                 else:
                     payload = {"error": f"Unknown browser tool: {tool_name}"}
             except PlaywrightUnavailableError as exc:
