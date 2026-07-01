@@ -523,7 +523,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 ### Следующий этап (0.4.23): Learning loop — real train + cloud benchmark
 
 - [ ] GPU runner или облако → real DPO (`TERMIT_DPO_GPU_REQUIRED=true`)
-- [ ] `OPENAI_COMPAT_API_KEY` в CI secrets → cloud benchmark green
+- [x] `OPENAI_COMPAT_API_KEY` в CI secrets → cloud benchmark green ✅ (установлен 2026-06-29)
 - [x] Post-DPO eval на HE1/HE2/MBPP (`learning_loop_0423.sh`, `post_train_model_eval.py`)
 - [ ] Post-DPO delta ≥5% после **real** GPU DPO (не dry-run)
 - [x] CI artifact: `learning_loop_0423_ci.sh` + weekly workflow
@@ -558,7 +558,7 @@ Agent runs (success/fail) → training_signals.jsonl → curator → dataset →
 - [x] Terminal-Bench-style eval TB1–TB3 + SWE1–SWE5 в model_bound slice
 - [x] Push + tagged release **v0.4.27** (desktop assets, Release CI green)
 - [x] Agent Eval + CI green (fast gate); docs `MIGRATION_NOTES_0.4.27.md`
-- [ ] `OPENAI_COMPAT_API_KEY` → real capability report vs V4
+- [x] `OPENAI_COMPAT_API_KEY` → real capability report vs V4 ✅ (ключ в GitHub Secrets)
 - [ ] GPU → real DPO + post-train delta ≥5%
 - [ ] `termit_win_rate` vs V4 ≥ 0.4 на hybrid ladder
 
