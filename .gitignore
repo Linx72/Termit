@@ -100,4 +100,5 @@ auth_state.json
 auth_state.json.bak
 
 # whisper.cpp build dependency
-clients/termit-desktop/whisper.cpp/
+clients/termit-desktop/whisper.cpp
+whisper.cpp
