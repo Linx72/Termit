@@ -1208,5 +1208,98 @@ def dispose_browser_session() -> None:
         _global_session = None
 
 
-# Для обратной совместимости: PlaywrightBrowserService — псевдоним
-PlaywrightBrowserService = BrowserSession
+# PlaywrightBrowserService — обёртка над BrowserSession с API, совместимым с agent_service.py
+class PlaywrightBrowserService:
+    """Обёртка, предоставляющая интерфейс ожидаемый agent_service.py и chat_service.py."""
+
+    _SESSION_KWARGS = {"headless", "storage_state_path", "browser_type"}
+
+    def __init__(self, **kwargs) -> None:
+        session_kwargs = {k: v for k, v in kwargs.items() if k in self._SESSION_KWARGS}
+        self._session = BrowserSession(**session_kwargs)
+
+    def available(self) -> bool:
+        """Проверить, доступен ли Playwright (установлен ли пакет и браузер)."""
+        try:
+            from playwright.sync_api import sync_playwright  # noqa: F401
+        except ImportError:
+            return False
+        return True
+
+    def close(self) -> None:
+        self._session.close()
+
+    def snapshot(self) -> dict:
+        """Обратная совместимость: browser_snapshot → get_page_state()."""
+        return self._session.get_page_state()
+
+    def fetch_as_http(self, url: str, timeout_seconds: int = 30) -> tuple[int, str, str]:
+        """Playwright-совместимый fetcher для BrowserWorkflowService."""
+        try:
+            nav = self._session.navigate(url)
+        except PlaywrightUnavailableError:
+            raise
+        error = nav.get("error", "")
+        if error:
+            return 0, error, url
+        html_result = self._session.get_html()
+        html = html_result.get("html", "")
+        final_url = str(nav.get("url", url))
+        return 200, html, final_url
+
+    # --- Прокси-методы с трансляцией параметров ---
+
+    def navigate(self, url: str, timeout_seconds: int = 30, wait_until: str = "domcontentloaded", **kwargs) -> dict:
+        # BrowserSession.navigate игнорирует timeout_seconds/wait_until (свои defaults)
+        return self._session.navigate(url)
+
+    def get_page_state(self, include_html: bool = False, max_elements: int = 50, **kwargs) -> dict:
+        return self._session.get_page_state()
+
+    def click(self, selector: str = "", text: str = "", index=None, confirmed: bool = False, **kwargs) -> dict:
+        return self._session.click(selector or text)
+
+    def fill(self, selector: str = "", value: str = "", index=None, clear_first: bool = True, **kwargs) -> dict:
+        return self._session.fill(selector, value)
+
+    def get_text(self, selector: str = "", max_chars: int = 10000, **kwargs) -> dict:
+        result = self._session.get_text(selector or None)
+        if max_chars and isinstance(result.get("text"), str):
+            result["text"] = result["text"][:max_chars]
+        return result
+
+    def screenshot(self, selector: str = "", full_page: bool = False, project_id: str = "", **kwargs) -> dict:
+        return self._session.screenshot(full_page=full_page)
+
+    def evaluate_js(self, expression: str = "", **kwargs) -> dict:
+        return self._session.evaluate_js(expression)
+
+    def wait_for(self, selector: str = "", state: str = "visible", timeout_seconds: int = 10, **kwargs) -> dict:
+        return self._session.wait_for(selector, timeout=timeout_seconds * 1000)
+
+    def smart_login(self, url: str = "", username: str = "", password: str = "",
+                    extra_fields=None, submit_text: str = "", **kwargs) -> dict:
+        creds = {"username": username, "password": password}
+        if isinstance(extra_fields, dict):
+            creds.update(extra_fields)
+        if submit_text:
+            creds["submit_text"] = submit_text
+        return self._session.smart_login(url, credentials=creds if any(creds.values()) else None)
+
+    def smart_search(self, query: str = "", url: str = "", max_results: int = 10,
+                     extract_cards: bool = True, **kwargs) -> dict:
+        return self._session.smart_search(query, url=url or None)
+
+    def smart_add_to_cart(self, product_name: str = "", confirmed: bool = False,
+                          quantity=None, **kwargs) -> dict:
+        return self._session.smart_add_to_cart(product_name)
+
+    def manage_allowed_domains(self, add: str = "", remove: str = "",
+                               list_domains: bool = False, **kwargs) -> dict:
+        if add:
+            return self._session.allow_domain(add)
+        if remove:
+            return self._session.revoke_domain(remove)
+        if list_domains:
+            return self._session.get_allowed_domains()
+        return self._session.get_allowed_domains()
