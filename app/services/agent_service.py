@@ -2318,6 +2318,42 @@ class AgentService:
             finally:
                 self._run_queue.task_done()
 
+    def _run_async_with_guard(self, coro, timeout_seconds: int):
+        """Выполнить async-корутину в daemon-потоке с защитой от зависания.
+
+        Проблема: asyncio.wait_for не может прервать корутину, если она
+        заблокирована на GIL (SSL handshake, синхронный I/O). Вынос asyncio.run()
+        в отдельный daemon-поток позволяет worker'у продолжить работу даже при
+        зависшем HTTP-запросе. Orphan-поток остаётся до перезапуска процесса,
+        но cleanup_stale_active_runs подчистит orphan-ран.
+        """
+        result_holder: list = []
+        error_holder: list[Exception] = []
+
+        def _target() -> None:
+            try:
+                result_holder.append(asyncio.run(coro))
+            except Exception as exc:
+                error_holder.append(exc)
+
+        thread = Thread(target=_target, daemon=True, name=f"run-async-{uuid4().hex[:8]}")
+        thread.start()
+        # join с запасом +10s на штатное завершение после wait_for-timeout
+        thread.join(timeout=timeout_seconds + 10)
+
+        if thread.is_alive():
+            # Поток завис — worker не блокируется, orphan-поток остаётся
+            raise TimeoutError(
+                f"Worker guard: run exceeded {timeout_seconds}s "
+                f"(SSL/GIL hang suspected). Thread leaked — cleanup will "
+                f"detect orphan run."
+            )
+
+        if error_holder:
+            raise error_holder[0]
+
+        return result_holder[0]
+
     def _process_run(self, run_id: str, agent_id: str, payload: AgentRunRequest) -> None:
         # Detailed lifecycle note:
         # 1) Worker dequeues a run and performs a fresh lookup from persistent store.
@@ -2357,12 +2393,11 @@ class AgentService:
 
             try:
                 profile = self.get_agent(agent_id)
-                result = asyncio.run(
-                    asyncio.wait_for(
-                        self._run_with_profile(profile, active_payload, run_id=run_id, attempt=attempt),
-                        timeout=self._run_timeout_seconds,
-                    )
+                coro = asyncio.wait_for(
+                    self._run_with_profile(profile, active_payload, run_id=run_id, attempt=attempt),
+                    timeout=self._run_timeout_seconds,
                 )
+                result = self._run_async_with_guard(coro, self._run_timeout_seconds)
                 with self._lock:
                     current = self._run_store.get_run(run_id)
                     if current is None or current.state == AgentRunState.cancelled:
