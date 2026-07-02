@@ -304,6 +304,20 @@ async def agent_runs_maintenance_cleanup_now(
     return AgentRunsCleanupResponse.model_validate(result)
 
 
+@router.post("/agent-runs/maintenance/stuck-check-now")
+async def agent_runs_maintenance_stuck_check_now(
+    payload: AgentRunsCleanupRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    scheduler: AgentMaintenanceSchedulerService = Depends(get_agent_maintenance_scheduler_service),
+) -> dict[str, object]:
+    if settings.auth_enabled:
+        caller_role = getattr(request.state, "api_role", "viewer")
+        if caller_role != "admin":
+            raise HTTPException(status_code=403, detail="Admin role required.")
+    return scheduler.run_stuck_check_once(dry_run=payload.dry_run)
+
+
 @router.post("/alerts/dispatch")
 async def dispatch_ops_alerts(
     request: Request,

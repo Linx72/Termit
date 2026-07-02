@@ -567,6 +567,62 @@ class AgentService:
             "remaining_runs": remaining,
         }
 
+    def cleanup_stuck_runs(
+        self,
+        *,
+        dry_run: bool = False,
+    ) -> dict[str, object]:
+        """Завершает run'ы, зависшие в состоянии running дольше run_timeout_seconds * 2.
+
+        В отличие от cleanup_stale_active_runs (порог 2 ч), этот метод
+        нацелен на run'ы, worker-потоки которых заблокировались на
+        синхронном вызове и не могут завершиться самостоятельно.
+        """
+        stuck_timeout = self._run_timeout_seconds * 2
+        stuck_before = (
+            datetime.now(tz=timezone.utc).timestamp() - stuck_timeout
+        )
+        stuck_before_iso = datetime.fromtimestamp(
+            stuck_before, tz=timezone.utc
+        ).isoformat()
+        stuck_runs: list[AgentRunRecordResponse] = []
+        with self._lock:
+            for run in self._run_store.list_runs(limit=5000):
+                if run.state != AgentRunState.running:
+                    continue
+                if run.lifecycle_status != "active":
+                    continue
+                if run.updated_at < stuck_before_iso:
+                    stuck_runs.append(run)
+            if not dry_run:
+                for run in stuck_runs:
+                    run.state = AgentRunState.failed
+                    run.failure_class = "worker_timeout"
+                    run.outcome_class = "failure"
+                    run.updated_at = _utc_now_iso()
+                    if not run.error:
+                        run.error = (
+                            f"Run stuck in running state for > {stuck_timeout}s "
+                            "(worker blocked). Force-failed by maintenance."
+                        )
+                    self._run_store.put_run(run)
+                    self._append_event(
+                        run_id=run.run_id,
+                        event_type="run_stuck_force_failed",
+                        state=AgentRunState.failed,
+                        message=run.error,
+                        attempt=run.attempts,
+                    )
+                    self._publish_run(run)
+            remaining = self._run_store.count_runs()
+        return {
+            "dry_run": dry_run,
+            "stuck_before": stuck_before_iso,
+            "stuck_timeout_seconds": stuck_timeout,
+            "force_failed_runs": len(stuck_runs),
+            "remaining_runs": remaining,
+        }
+
     def cancel_run(self, run_id: str) -> AgentRunCancelResponse:
         with self._lock:
             record = self._run_store.get_run(run_id)

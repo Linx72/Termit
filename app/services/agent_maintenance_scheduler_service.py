@@ -18,6 +18,7 @@ class AgentMaintenanceSchedulerService:
         metrics_snapshot_store: MetricsSnapshotStore,
         enabled: bool = True,
         cleanup_interval_seconds: int = 3600,
+        stuck_check_interval_seconds: int = 60,
         metrics_snapshot_interval_seconds: int = 900,
         stale_run_timeout_seconds: int = 7200,
     ) -> None:
@@ -26,16 +27,20 @@ class AgentMaintenanceSchedulerService:
         self._metrics_snapshot_store = metrics_snapshot_store
         self._enabled = enabled
         self._cleanup_interval_seconds = max(30, cleanup_interval_seconds)
+        self._stuck_check_interval_seconds = max(30, stuck_check_interval_seconds)
         self._metrics_snapshot_interval_seconds = max(30, metrics_snapshot_interval_seconds)
         self._stale_run_timeout_seconds = max(60, stale_run_timeout_seconds)
         self._stop = Event()
         self._lock = Lock()
         self._thread: Optional[Thread] = None
         self._last_cleanup_at: Optional[str] = None
+        self._last_stuck_check_at: Optional[str] = None
         self._last_metrics_snapshot_at: Optional[str] = None
         self._cleanup_runs_deleted_total = 0
         self._cleanup_events_deleted_total = 0
         self._cleanup_errors_total = 0
+        self._stuck_check_errors_total = 0
+        self._stuck_runs_failed_total = 0
         self._snapshot_errors_total = 0
         self._stale_cancelled_total = 0
         self._loop_crash_count = 0
@@ -68,14 +73,18 @@ class AgentMaintenanceSchedulerService:
                 "enabled": self._enabled,
                 "thread_alive": self._thread is not None and self._thread.is_alive(),
                 "cleanup_interval_seconds": self._cleanup_interval_seconds,
+                "stuck_check_interval_seconds": self._stuck_check_interval_seconds,
                 "metrics_snapshot_interval_seconds": self._metrics_snapshot_interval_seconds,
                 "stale_run_timeout_seconds": self._stale_run_timeout_seconds,
                 "last_cleanup_at": self._last_cleanup_at,
+                "last_stuck_check_at": self._last_stuck_check_at,
                 "last_metrics_snapshot_at": self._last_metrics_snapshot_at,
                 "cleanup_runs_deleted_total": self._cleanup_runs_deleted_total,
                 "cleanup_events_deleted_total": self._cleanup_events_deleted_total,
                 "stale_cancelled_total": self._stale_cancelled_total,
+                "stuck_runs_failed_total": self._stuck_runs_failed_total,
                 "cleanup_errors_total": self._cleanup_errors_total,
+                "stuck_check_errors_total": self._stuck_check_errors_total,
                 "snapshot_errors_total": self._snapshot_errors_total,
                 "loop_crash_count": self._loop_crash_count,
             }
@@ -98,6 +107,14 @@ class AgentMaintenanceSchedulerService:
                 self._stale_cancelled_total += int(result.get("cancelled_stale_runs", 0))
         return result
 
+    def run_stuck_check_once(self, *, dry_run: bool = False) -> dict[str, object]:
+        result = self._agent_service.cleanup_stuck_runs(dry_run=dry_run)
+        if not dry_run:
+            with self._lock:
+                self._last_stuck_check_at = datetime.now(timezone.utc).isoformat()
+                self._stuck_runs_failed_total += int(result.get("force_failed_runs", 0))
+        return result
+
     def run_metrics_snapshot_once(self) -> dict[str, object]:
         snapshot = self._metrics_snapshot_store.append_snapshot(self._telemetry_store.snapshot())
         with self._lock:
@@ -116,9 +133,17 @@ class AgentMaintenanceSchedulerService:
 
     def _run_loop(self) -> None:
         next_cleanup = 0.0
+        next_stuck_check = 0.0
         next_snapshot = 0.0
         while not self._stop.is_set():
             now = self._monotonic()
+            if now >= next_stuck_check:
+                try:
+                    self.run_stuck_check_once(dry_run=False)
+                except Exception:  # noqa: BLE001
+                    with self._lock:
+                        self._stuck_check_errors_total += 1
+                next_stuck_check = now + self._stuck_check_interval_seconds
             if now >= next_cleanup:
                 try:
                     self.run_cleanup_once(dry_run=False)
