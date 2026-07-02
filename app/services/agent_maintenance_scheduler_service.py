@@ -38,6 +38,7 @@ class AgentMaintenanceSchedulerService:
         self._cleanup_errors_total = 0
         self._snapshot_errors_total = 0
         self._stale_cancelled_total = 0
+        self._loop_crash_count = 0
 
     def set_enabled(self, enabled: bool) -> None:
         self._enabled = enabled
@@ -76,6 +77,7 @@ class AgentMaintenanceSchedulerService:
                 "stale_cancelled_total": self._stale_cancelled_total,
                 "cleanup_errors_total": self._cleanup_errors_total,
                 "snapshot_errors_total": self._snapshot_errors_total,
+                "loop_crash_count": self._loop_crash_count,
             }
 
     def run_cleanup_once(self, *, dry_run: bool = False) -> dict[str, object]:
@@ -103,6 +105,16 @@ class AgentMaintenanceSchedulerService:
         return snapshot.model_dump(mode="json")
 
     def _loop(self) -> None:
+        try:
+            self._run_loop()
+        except Exception:  # noqa: BLE001 — поток не должен умирать при любом исключении
+            import logging
+            _logger = logging.getLogger("termit.maintenance")
+            _logger.exception("Maintenance loop crashed — поток будет пересоздан health-check'ом")
+            with self._lock:
+                self._loop_crash_count += 1
+
+    def _run_loop(self) -> None:
         next_cleanup = 0.0
         next_snapshot = 0.0
         while not self._stop.is_set():

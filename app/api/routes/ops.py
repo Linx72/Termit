@@ -275,6 +275,20 @@ async def agent_runs_maintenance_status(
     return scheduler.status()
 
 
+@router.post("/agent-runs/maintenance/restart")
+async def agent_runs_maintenance_restart(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    scheduler: AgentMaintenanceSchedulerService = Depends(get_agent_maintenance_scheduler_service),
+) -> dict[str, object]:
+    if settings.auth_enabled:
+        caller_role = getattr(request.state, "api_role", "viewer")
+        if caller_role != "admin":
+            raise HTTPException(status_code=403, detail="Admin role required.")
+    scheduler.start()
+    return scheduler.status()
+
+
 @router.post("/agent-runs/maintenance/cleanup-now", response_model=AgentRunsCleanupResponse)
 async def agent_runs_maintenance_cleanup_now(
     payload: AgentRunsCleanupRequest,

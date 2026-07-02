@@ -206,5 +206,6 @@ async def healthz() -> HealthzResponse:
         providers_status_cb=chat.providers_status,
         agent_workers_cb=agent_service.queue_metrics,
         maintenance_status_cb=maintenance.status,
+        maintenance_restart_cb=maintenance.start,
         local_runtime_status_cb=local_runtime.status,
     )

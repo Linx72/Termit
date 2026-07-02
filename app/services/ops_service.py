@@ -45,6 +45,7 @@ class OpsService:
         providers_status_cb=None,
         agent_workers_cb=None,
         maintenance_status_cb=None,
+        maintenance_restart_cb=None,
         local_runtime_status_cb=None,
     ) -> HealthzResponse:
         import time
@@ -66,7 +67,9 @@ class OpsService:
 
         if maintenance_status_cb is not None:
             started = time.perf_counter()
-            dependencies.append(self._check_maintenance_scheduler(maintenance_status_cb, started))
+            dependencies.append(self._check_maintenance_scheduler(
+                maintenance_status_cb, started, restart_cb=maintenance_restart_cb,
+            ))
 
         if local_runtime_status_cb is not None:
             started = time.perf_counter()
@@ -171,7 +174,7 @@ class OpsService:
         )
 
     @staticmethod
-    def _check_maintenance_scheduler(maintenance_status_cb, started: float) -> HealthzDependency:
+    def _check_maintenance_scheduler(maintenance_status_cb, started: float, restart_cb=None) -> HealthzDependency:
         import time
 
         status_payload = maintenance_status_cb()
@@ -188,6 +191,12 @@ class OpsService:
         cleanup_errors = int(status_payload.get("cleanup_errors_total", 0))
         snapshot_errors = int(status_payload.get("snapshot_errors_total", 0))
         if not thread_alive:
+            # Пытаемся авторестартовать поток
+            if restart_cb is not None:
+                try:
+                    restart_cb()
+                except Exception:
+                    pass
             return HealthzDependency(
                 name="agent_maintenance",
                 status="degraded",
