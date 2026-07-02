@@ -85,11 +85,13 @@ def evaluate_agent_health(
     if isinstance(by_state, dict):
         failed_count = int(by_state.get("failed", 0))
 
-    terminal = 0
+    # Dead-letter denominator: считаем только completed + failed
+    # (cancelled — действия пользователя, не исходы системы)
+    completed_count = 0
     if isinstance(by_state, dict):
-        for state in ("completed", "failed", "cancelled"):
-            terminal += int(by_state.get(state, 0))
-    dead_letter_rate = failed_count / max(1, terminal)
+        completed_count = int(by_state.get("completed", 0))
+    terminal_for_dl = failed_count + completed_count
+    dead_letter_rate = failed_count / max(1, terminal_for_dl)
     worker_ratio = alive_workers / max(1, worker_count)
 
     if queue_util >= thresholds.queue_utilization_percent:
