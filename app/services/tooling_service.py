@@ -52,11 +52,15 @@ class ToolingService:
         if not target.is_dir():
             raise ToolingError(f"Path is not a directory: {payload.path}")
 
-        files = [
-            str(path.relative_to(self.root))
-            for path in sorted(target.rglob(payload.pattern))
-            if path.is_file()
-        ]
+        files = []
+        for path in sorted(target.rglob(payload.pattern)):
+            if not path.is_file():
+                continue
+            try:
+                rel = str(path.relative_to(self.root))
+            except ValueError:
+                rel = str(path)
+            files.append(rel)
         return ListFilesResponse(root=str(self.root), path=payload.path, files=files)
 
     def read_file(self, payload: ReadFileRequest) -> ReadFileResponse:

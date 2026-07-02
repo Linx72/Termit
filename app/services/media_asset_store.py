@@ -82,7 +82,10 @@ class MediaAssetStore:
         file_path = file_path.resolve()
         root = self._root.resolve()
         width, height = _png_dimensions(file_path) if mime == "image/png" else (0, 0)
-        rel = file_path.relative_to(root).as_posix()
+        try:
+            rel = file_path.relative_to(root).as_posix()
+        except ValueError:
+            rel = file_path.as_posix()
         record = MediaAssetRecord(
             asset_id=asset_id or f"asset_{uuid4().hex[:12]}",
             project_id=_slug(project_id),

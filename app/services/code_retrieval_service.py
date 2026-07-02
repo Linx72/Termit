@@ -322,7 +322,10 @@ class CodeRetrievalService:
         return files
 
     def _chunk_file(self, file_path: Path) -> list[CodeChunk]:
-        rel_path = str(file_path.relative_to(self.root))
+        try:
+            rel_path = str(file_path.relative_to(self.root))
+        except ValueError:
+            rel_path = str(file_path)
         try:
             text = file_path.read_text(encoding="utf-8", errors="replace")
         except OSError:

@@ -48,7 +48,10 @@ class SymbolIndexService:
         imports_by_file: dict[str, list[str]] = {}
         call_edges: list[CallEdge] = []
         for file_path in self._iter_files():
-            rel = str(file_path.relative_to(self.root)).replace("\\", "/")
+            try:
+                rel = str(file_path.relative_to(self.root)).replace("\\", "/")
+            except ValueError:
+                continue
             if file_path.suffix == ".py":
                 file_symbols, imports, edges = self._index_python(file_path, rel)
             elif file_path.suffix.lower() in self._JS_SUFFIX:
@@ -201,7 +204,10 @@ class SymbolIndexService:
     def _module_path_index(self) -> dict[str, list[str]]:
         mapping: dict[str, list[str]] = {}
         for file_path in self._iter_files():
-            rel = str(file_path.relative_to(self.root)).replace("\\", "/")
+            try:
+                rel = str(file_path.relative_to(self.root)).replace("\\", "/")
+            except ValueError:
+                continue
             if file_path.suffix != ".py":
                 continue
             module = rel[:-3].replace("/", ".")

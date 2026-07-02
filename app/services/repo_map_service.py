@@ -60,7 +60,10 @@ class RepoMapService:
         key_files: list[str] = []
 
         for path in self._walk(scan_root):
-            rel = str(path.relative_to(self.root)).replace("\\", "/")
+            try:
+                rel = str(path.relative_to(self.root)).replace("\\", "/")
+            except ValueError:
+                continue
             if prefix and not rel.startswith(prefix):
                 continue
             if any(part in self._SKIP_DIRS for part in path.parts):
