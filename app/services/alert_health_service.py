@@ -71,6 +71,7 @@ def evaluate_agent_health(
         by_state = metrics.by_state
         total_runs = metrics.total_runs
         verify_pass_rate = metrics.tool_loop_verify_pass_rate
+        verify_events = metrics.tool_loop_verify_passes + metrics.tool_loop_verify_failures
     else:
         queue_util = float(metrics.get("queue_utilization_percent", 0))
         worker_count = int(metrics.get("worker_count", 0))
@@ -78,6 +79,9 @@ def evaluate_agent_health(
         by_state = metrics.get("by_state", {})
         total_runs = int(metrics.get("total_runs", 0))
         verify_pass_rate = float(metrics.get("tool_loop_verify_pass_rate", 0.0))
+        verify_events = int(metrics.get("tool_loop_verify_passes", 0)) + int(
+            metrics.get("tool_loop_verify_failures", 0)
+        )
 
     warning_reasons: list[str] = []
     degraded_reasons: list[str] = []
@@ -132,12 +136,12 @@ def evaluate_agent_health(
             f"Some agent workers are down ({alive_workers}/{worker_count} alive)."
         )
 
-    if verify_pass_rate < thresholds.min_verify_pass_rate:
+    if verify_events > 0 and verify_pass_rate < thresholds.min_verify_pass_rate:
         degraded_reasons.append(
             f"Tool-loop verify pass rate is {verify_pass_rate:.2%} "
             f"(threshold {thresholds.min_verify_pass_rate:.2%})."
         )
-    elif verify_pass_rate < min(1.0, thresholds.min_verify_pass_rate + 0.10):
+    elif verify_events > 0 and verify_pass_rate < min(1.0, thresholds.min_verify_pass_rate + 0.10):
         warning_reasons.append(
             f"Tool-loop verify pass rate is near threshold: "
             f"{verify_pass_rate:.2%}/{thresholds.min_verify_pass_rate:.2%}."

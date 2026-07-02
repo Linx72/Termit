@@ -138,6 +138,8 @@ class AlertHealthServiceTests(unittest.TestCase):
             by_state={"completed": 10},
             active_runs=0,
             tool_loop_verify_pass_rate=0.55,
+            tool_loop_verify_passes=5,
+            tool_loop_verify_failures=5,
         )
         thresholds = AgentAlertThresholds(
             queue_utilization_percent=80.0,
