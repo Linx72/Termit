@@ -32,6 +32,15 @@ class ConfigParsingTests(unittest.TestCase):
         self.assertEqual(settings.degrade_empty_response_rate, 0.0)
         self.assertEqual(settings.degrade_fallback_rate, 1.0)
 
+    def test_agent_verify_timeout_seconds_from_env(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"TERMIT_AGENT_VERIFY_TIMEOUT_SECONDS": "180"},
+            clear=False,
+        ):
+            settings = get_settings()
+        self.assertEqual(settings.agent_verify_timeout_seconds, 180)
+
 
 if __name__ == "__main__":
     unittest.main()

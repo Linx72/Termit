@@ -234,6 +234,7 @@ def _build_agent_service() -> AgentService:
         patch_outcome_store=_build_patch_outcome_store(),
         verify_after_patch=settings.agent_verify_after_patch,
         verify_cmd=settings.agent_verify_cmd,
+        verify_timeout_seconds=settings.agent_verify_timeout_seconds,
         verify_max_retries=settings.agent_verify_max_retries,
         auto_confirm_risky_tools=settings.agent_auto_confirm_risky,
         guardrail_service=_build_guardrail_service(),

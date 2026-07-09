@@ -13,6 +13,14 @@ class ToolLoopMetricsTests(unittest.TestCase):
             classify_tool_loop_event("tool_loop_step", "Step 3: parse_error"),
             "tool_loop_parse_error",
         )
+        self.assertEqual(
+            classify_tool_loop_event("patch_verify", "Verify after patch: exit_code=0"),
+            "tool_loop_verify_pass",
+        )
+        self.assertEqual(
+            classify_tool_loop_event("patch_verify_failed", "Verify after patch: exit_code=1"),
+            "tool_loop_verify_failed",
+        )
 
     def test_aggregate_rates(self) -> None:
         rows = [

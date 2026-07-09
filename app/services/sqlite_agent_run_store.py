@@ -8,7 +8,11 @@ from threading import Lock
 from typing import Optional
 
 from app.domain.schemas import AgentRunEvent, AgentRunRecordResponse, AgentRunState
-from app.services.tool_loop_metrics import aggregate_tool_loop_events, empty_tool_loop_metrics
+from app.services.tool_loop_metrics import (
+    aggregate_tool_loop_events,
+    empty_tool_loop_metrics,
+    tool_loop_metric_event_filter_sql,
+)
 from app.services.mcp_usage_metrics import aggregate_mcp_usage_events, empty_mcp_usage_metrics
 
 
@@ -273,14 +277,14 @@ class SQLiteAgentRunStore:
                 datetime.now(timezone.utc) - timedelta(days=recent_days)
             ).isoformat()
         recent_run_ids: set[str] | None = None
+        tl_filter = tool_loop_metric_event_filter_sql("event_type")
         if recent_run_limit is not None and recent_run_limit > 0:
             with self._lock, closing(self._connect()) as conn:
                 run_rows = conn.execute(
-                    """
+                    f"""
                     SELECT run_id
                     FROM agent_run_events
-                    WHERE event_type LIKE 'tool_loop_%'
-                       OR event_type = 'verify_retry_scheduled'
+                    WHERE {tl_filter}
                     GROUP BY run_id
                     ORDER BY MAX(timestamp) DESC
                     LIMIT ?
@@ -297,30 +301,27 @@ class SQLiteAgentRunStore:
                     f"""
                     SELECT run_id, event_type, message
                     FROM agent_run_events
-                    WHERE (event_type LIKE 'tool_loop_%'
-                       OR event_type = 'verify_retry_scheduled')
+                    WHERE {tl_filter}
                       AND run_id IN ({placeholders})
                     """,
                     tuple(recent_run_ids),
                 ).fetchall()
             elif cutoff_iso:
                 event_rows = conn.execute(
-                    """
+                    f"""
                     SELECT run_id, event_type, message
                     FROM agent_run_events
-                    WHERE (event_type LIKE 'tool_loop_%'
-                       OR event_type = 'verify_retry_scheduled')
+                    WHERE {tl_filter}
                       AND timestamp >= ?
                     """,
                     (cutoff_iso,),
                 ).fetchall()
             else:
                 event_rows = conn.execute(
-                    """
+                    f"""
                     SELECT run_id, event_type, message
                     FROM agent_run_events
-                    WHERE event_type LIKE 'tool_loop_%'
-                       OR event_type = 'verify_retry_scheduled'
+                    WHERE {tl_filter}
                     """
                 ).fetchall()
             completed_rows = conn.execute(

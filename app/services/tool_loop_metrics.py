@@ -3,6 +3,15 @@ from __future__ import annotations
 from typing import Iterable
 
 
+def tool_loop_metric_event_filter_sql(column: str = "event_type") -> str:
+    """SQL-фильтр событий tool loop KPI (включая patch_verify после apply_patch)."""
+    return (
+        f"({column} LIKE 'tool_loop_%' "
+        f"OR {column} = 'verify_retry_scheduled' "
+        f"OR {column} IN ('patch_verify', 'patch_verify_failed'))"
+    )
+
+
 def build_tool_loop_metrics(
     *,
     tool_steps: int,
@@ -57,8 +66,14 @@ def classify_tool_loop_event(event_type: str, message: str) -> str | None:
         "tool_loop_final",
         "tool_loop_verify_pass",
         "tool_loop_verify_failed",
+        "patch_verify",
+        "patch_verify_failed",
         "verify_retry_scheduled",
     }:
+        if event_type == "patch_verify":
+            return "tool_loop_verify_pass"
+        if event_type == "patch_verify_failed":
+            return "tool_loop_verify_failed"
         return event_type
     if event_type != "tool_loop_step":
         return None

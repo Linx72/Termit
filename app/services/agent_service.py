@@ -173,6 +173,7 @@ class AgentService:
         patch_outcome_store: Optional[PatchOutcomeStore] = None,
         verify_after_patch: bool = False,
         verify_cmd: str = "",
+        verify_timeout_seconds: int = 120,
         verify_max_retries: int = 1,
         auto_confirm_risky_tools: bool = False,
         guardrail_service: Optional[GuardrailService] = None,
@@ -215,6 +216,7 @@ class AgentService:
         self._patch_outcomes = patch_outcome_store
         self._verify_after_patch = verify_after_patch
         self._verify_cmd = verify_cmd.strip()
+        self._verify_timeout_seconds = max(1, min(verify_timeout_seconds, 300))
         self._verify_max_retries = max(0, verify_max_retries)
         self._auto_confirm_risky_tools = auto_confirm_risky_tools
         self._guardrails = guardrail_service
@@ -1218,6 +1220,7 @@ class AgentService:
                         path=".",
                         dry_run=False,
                         confirmed=True,
+                        timeout_seconds=self._verify_timeout_seconds,
                     ),
                 )
             else:
@@ -1227,6 +1230,7 @@ class AgentService:
                         path=".",
                         dry_run=False,
                         confirmed=True,
+                        timeout_seconds=self._verify_timeout_seconds,
                     )
                 )
             detail = (result.stdout or result.stderr or "")[:500]
@@ -2157,6 +2161,7 @@ class AgentService:
                             path=".",
                             dry_run=False,
                             confirmed=True,
+                            timeout_seconds=self._verify_timeout_seconds,
                         ),
                     )
                 else:
@@ -2166,6 +2171,7 @@ class AgentService:
                             path=".",
                             dry_run=False,
                             confirmed=True,
+                            timeout_seconds=self._verify_timeout_seconds,
                         )
                     )
                 verify_msg = (
