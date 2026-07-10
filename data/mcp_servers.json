@@ -1,40 +1,47 @@
-{
-  "servers": [
-    {
-      "server_id": "termit-browser",
-      "name": "Termit Browser (Playwright)",
-      "transport": "stdio",
-      "command": "python3",
-      "args": ["scripts/mcp_termit_browser.py"],
-      "enabled": false,
-      "allowed_tools": ["browser_navigate", "browser_snapshot", "browser_click"],
-      "description": "Opt-in Playwright MCP bridge. pip install playwright && playwright install chromium. See docs/MCP_BROWSER_RU.md"
-    },
-    {
-      "name": "GitHub",
-      "transport": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "enabled": false,
-      "description": "Set GITHUB_PERSONAL_ACCESS_TOKEN. Use for PRs and CI after web-app build."
-    },
-    {
-      "server_id": "vercel-deploy",
-      "name": "Vercel (configure)",
-      "transport": "stdio",
-      "command": "echo",
-      "args": ["vercel-mcp-not-configured"],
-      "enabled": false,
-      "description": "Wire Vercel MCP or use: npx vercel deploy --prebuilt from execute_command."
-    },
-    {
-      "server_id": "netlify-deploy",
-      "name": "Netlify (configure)",
-      "transport": "stdio",
-      "command": "echo",
-      "args": ["netlify-mcp-not-configured"],
-      "enabled": false,
-      "description": "Wire Netlify MCP or CLI: netlify deploy --dir=dist"
-    }
-  ]
-}
+[
+  {
+    "server_id": "termit-browser",
+    "name": "Termit Browser (Playwright)",
+    "command": "python3",
+    "args": [
+      "scripts/mcp_termit_browser.py"
+    ],
+    "enabled": true,
+    "allowed_tools": [
+      "browser_navigate",
+      "browser_snapshot",
+      "browser_click"
+    ]
+  },
+  {
+    "server_id": "github",
+    "name": "GitHub",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-github"
+    ],
+    "enabled": false,
+    "allowed_tools": null
+  },
+  {
+    "server_id": "vercel-deploy",
+    "name": "Vercel (configure)",
+    "command": "echo",
+    "args": [
+      "vercel-mcp-not-configured"
+    ],
+    "enabled": false,
+    "allowed_tools": null
+  },
+  {
+    "server_id": "netlify-deploy",
+    "name": "Netlify (configure)",
+    "command": "echo",
+    "args": [
+      "netlify-mcp-not-configured"
+    ],
+    "enabled": false,
+    "allowed_tools": null
+  }
+]
