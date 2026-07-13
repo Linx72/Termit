@@ -447,8 +447,6 @@ class ToolingService:
             "touch",
             "rmdir",
             "ln",
-            "chmod",
-            "chown",
             "git",
             "npm",
             "npx",
