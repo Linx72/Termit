@@ -132,6 +132,35 @@ def build_loop_system_appendix(enabled_tools: list[str]) -> str:
         if "apply_patch" in allowed
         else ""
     )
+    dry_run_hint = (
+        "When applying patches to files outside the project source tree (e.g., config files in /etc, "
+        "dotfiles, or system paths), always run apply_patch with dry_run=true first to preview changes "
+        "before setting confirmed=true."
+        if "apply_patch" in allowed
+        else ""
+    )
+    path_heuristics = ""
+    if "read_file" in allowed:
+        path_heuristics += (
+            "\n- read_file: use path=<directory> and file=<filename> together. "
+            "Example: read_file with path='app/services' and file='agent_service.py'."
+        )
+    if "list_files" in allowed:
+        path_heuristics += (
+            "\n- list_files: path must be an existing directory inside the workspace root. "
+            "Use pattern='*.py' for Python files, '*' for all."
+        )
+    if "execute_command" in allowed:
+        path_heuristics += (
+            "\n- execute_command: path must be an existing directory. "
+            "Use dry_run=true for safe preview; confirmed=true to actually run. "
+            "Destructive commands (rm, sudo, kill) are blocked."
+        )
+    path_heuristic_block = (
+        f"\n\nPath and safety heuristics:{path_heuristics}"
+        if path_heuristics
+        else ""
+    )
     parts = [
         "\n\nYou may use tools to complete the task. Respond with a single JSON object only "
         "(no markdown unless inside strings).",
@@ -149,6 +178,10 @@ def build_loop_system_appendix(enabled_tools: list[str]) -> str:
         parts.extend(["", "Examples (follow this shape exactly):", examples_block])
     if notes_block:
         parts.extend(["", notes_block])
+    if path_heuristic_block:
+        parts.append(path_heuristic_block)
+    if dry_run_hint:
+        parts.extend(["", dry_run_hint])
     if verify_note:
         parts.extend(["", verify_note])
     if apply_patch_requirement:
